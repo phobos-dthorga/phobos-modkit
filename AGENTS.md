@@ -1,0 +1,85 @@
+# Phobos ModKit contributor instructions
+
+Standing rules for work in this repository, stated once in their current form. What each version delivered
+lives in `CHANGELOG.md`; designs live in `docs/`. Conventions follow phobos-rimworld and Phobos Scope,
+adapted to a tooling repository. The repository was created on 7 November 2026 at the owner's request.
+
+## Working with the owner
+
+- Author: Phobos A. D'thorga (phobosgekko).
+- Practical working slices over speculative frameworks. Explain what works, what was checked and what
+  remains uncertain. Never invent hour estimates.
+- A unit test or a run on a synthetic fixture is never a game test. Tools read what games wrote; they do
+  not show that a mod works in play.
+- Do not control the owner's mouse or keyboard. Never edit, replace or delete the owner's saves; read-only
+  copies for diagnosis are fine and are deleted afterwards.
+- Owner choices, agent defaults and agent choices are labelled as such in design records.
+
+## What belongs here: three layers
+
+| Layer | What it is | Where |
+| --- | --- | --- |
+| Core | Code with no game in it: paths, Steam, log grouping, XML indexing, assembly metadata, release tooling | here |
+| Game adapter | Public file-format knowledge for one game: log line formats, save schemas, mod metadata files | here, under `games/<game>/` |
+| Project policy | What one project's mods require: which data matters, its own checks, its disclaimer text | the game repository |
+
+- **Core never names a game.** A game's knowledge enters through an adapter or a data file.
+- **An adapter holds format facts, in our own words.** Facts learned by decompiling a game are summarised,
+  never copied; the decompile itself stays on the researcher's machine.
+- **Runtime mod libraries are out of scope.** Code that runs inside a game stays in that game's repository.
+- **Profiling is Phobos Scope's.** Measurement inside a running game belongs to
+  [Phobos Scope](https://github.com/phobos-dthorga/phobos-scope), not here.
+
+## Safety rules for every tool
+
+- **Read-only towards games.** Never write to an install, save or Workshop folder. Save tools copy the save to
+  a temporary folder first. The install helper is the one writer: only on request, never while the game
+  runs, and it backs up what it replaces.
+- **Never execute other authors' code.** Assemblies are read through their metadata
+  (`System.Reflection.Metadata`), never loaded. Never run another mod's scripts.
+- **Steam, read-only and slow.** Public, keyless pages and APIs only, with pacing and a cache. Never log in,
+  handle credentials, subscribe, upload, announce or change an item's visibility.
+- **Open logs for shared reading.** A game may hold its log open.
+- **Paths** come from one resolver: argument, then environment variable, then a local settings file, then
+  the platform default. Never hard-code a personal path.
+
+## Output
+
+- Deterministic: the same input gives the same output, in a stable order.
+- Two forms: JSON for programs and a short Markdown summary for people and agent sessions. The summary is
+  the point of the tool: counts, top items and differences, never raw dumps.
+- State every limit in the output itself (for example "patches not applied").
+
+## Languages
+
+- **Python** (`python/phobos_modkit/`): standard library only, Python 3.10 or newer, `unittest`. The default.
+- **Rust** (`crates/`): for large inputs where speed changes how the tool is used. Pinned toolchain, edition
+  2024, as Phobos Scope does.
+- **C#** (`dotnet/`): for .NET assembly metadata. .NET 10, no assembly loading.
+- A third-party dependency needs a stated reason and an entry in `THIRD_PARTY_NOTICES.md`.
+
+## Tests and fixtures
+
+- Fixtures are written by hand from format knowledge. Never commit a real save, log, assembly or another
+  author's file, or an excerpt of one.
+- Network and clock are passed in, so tests never reach Steam.
+
+## Consumers
+
+- Game repositories pin this repository as a git submodule at `external/phobos-modkit`.
+- A fix goes here first; the consumer then moves its pin. Never patch the submodule in place.
+- Consumers adopt a tool when they next touch the script it replaces, not in a sweep.
+- An incompatible change raises the major version and says what consumers must change.
+
+## Git, versions and documents
+
+- **Public, MIT** (owner, 7 November 2026). Never change the repository's visibility.
+- Commit and push directly to `main`; no pull requests unless the owner asks. Never force-push or rewrite
+  history. Several agent sessions may share a tree: commit explicit paths and leave others' work alone.
+- Versions: a fix raises the last number, new functionality the middle, an incompatible change the first.
+  Every change updates `CHANGELOG.md` in the same commit.
+- Never commit credentials, personal paths, game files, saves, logs, assemblies, decompiled code or other
+  authors' mod files.
+- Write plainly: answer first, short sentences, **bold** for must-dos, tables for comparisons. Diagrams are
+  Mermaid in the Markdown. Never use Figma.
+- Name the organisation or author behind a claim, with a link. Never invent a citation.

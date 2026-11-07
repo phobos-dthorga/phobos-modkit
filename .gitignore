@@ -1,0 +1,36 @@
+# Local research, caches, builds and machine configuration.
+/.local/
+/.tools/
+/artifacts/
+/dist/
+/target/
+**/bin/
+**/obj/
+*.local.json
+.env
+.env.*
+!.env.example
+
+# Game material is never committed: saves, logs, assemblies, dumps.
+*.log
+*.rws
+*.sav
+*.dll
+*.exe
+*.pdb
+*.dmp
+*.zip
+*.nupkg
+
+# Credentials.
+*.key
+*.pem
+*.pfx
+*.p12
+
+__pycache__/
+*.pyc
+.vs/
+.idea/
+.DS_Store
+Thumbs.db
