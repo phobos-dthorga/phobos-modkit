@@ -16,6 +16,7 @@ from ... import __version__
 from ... import cache as derived
 from ...cache import open_read_only, read_meta  # noqa: F401  (part of this module's interface)
 from ...native import require_tool
+from ...query import like  # noqa: F401  (part of this module's interface)
 
 SCHEMA = Path(__file__).with_name("save-schema.toml")
 SAVE_SUFFIX = ".rws"
@@ -107,9 +108,3 @@ def ensure(save, cache, indexer=None, environ=None, rebuild=False, run=subproces
         return index, None
     built = build(save, cache, indexer, environ, run, schema)
     return built.index, built
-
-
-def like(pattern):
-    """A SQL LIKE pattern from a user's text: * and ? are wildcards; % and _ (common in defNames) are literal."""
-    escaped = pattern.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return escaped.replace("*", "%").replace("?", "_")

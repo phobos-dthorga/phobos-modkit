@@ -14,9 +14,15 @@ def _rimworld_save(argv):
     return main(argv)
 
 
+def _rimworld_defs(argv):
+    from .games.rimworld.defs_cli import main
+    return main(argv)
+
+
 COMMANDS = {
     "rimworld-log": (_rimworld_log, "summarise a RimWorld Player.log and name the mods involved"),
     "rimworld-save": (_rimworld_save, "answer questions about a RimWorld save from a fast index"),
+    "rimworld-defs": (_rimworld_defs, "which active mods define and patch each RimWorld Def"),
 }
 
 

@@ -16,6 +16,7 @@ GAME = ("rimworldPath", "RIMWORLD_PATH")
 WORKSHOP = ("workshopPath", "RIMWORLD_WORKSHOP_PATH")
 LOGS = ("rimworldLogsPath", "RIMWORLD_LOGS_PATH")
 SAVES = ("rimworldSavesPath", "RIMWORLD_SAVES_PATH")
+CONFIG = ("rimworldConfigPath", "RIMWORLD_CONFIG_PATH")
 LOG_NAME = "Player.log"
 PREVIOUS_LOG_NAME = "Player-prev.log"
 
@@ -62,3 +63,8 @@ def logs_path(explicit=None, environ=None, settings_file=None):
 
 def saves_path(explicit=None, environ=None, settings_file=None):
     return resolve(*SAVES, default_user_data() / "Saves", explicit, environ, settings_file)
+
+
+def config_path(explicit=None, environ=None, settings_file=None):
+    """The folder holding ModsConfig.xml."""
+    return resolve(*CONFIG, default_user_data() / "Config", explicit, environ, settings_file)

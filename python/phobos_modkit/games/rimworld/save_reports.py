@@ -5,8 +5,8 @@ and say how many there were in all.
 """
 from __future__ import annotations
 
+from ...query import Filters, count as _count, like, rows as _rows
 from ...report import Report, Section, Table
-from .save import like
 
 TICKS_PER_DAY = 60000          # RimWorld: one in-game day
 TICKS_PER_YEAR = 60 * TICKS_PER_DAY
@@ -16,39 +16,6 @@ PLAYER_FACTION_PREFIX = "Player"  # the player's faction defs are PlayerColony, 
 def _section(heading, headers, rows, total=None):
     """A report section holding one table."""
     return Section(heading, [Table(headers, rows, total)])
-
-
-class Filters:
-    """WHERE clauses with parameters, built one filter at a time."""
-
-    def __init__(self):
-        self.clauses, self.params = [], []
-
-    def text(self, column_sql, value, *more_columns):
-        if value:
-            columns = (column_sql, *more_columns)
-            self.clauses.append("(" + " OR ".join(f"{c} LIKE ? ESCAPE '\\'" for c in columns) + ")")
-            self.params += [like(value)] * len(columns)
-
-    def equal(self, column_sql, value):
-        if value is not None:
-            self.clauses.append(f"{column_sql} = ?")
-            self.params.append(value)
-
-    def raw(self, clause):
-        self.clauses.append(clause)
-
-    @property
-    def where(self):
-        return (" WHERE " + " AND ".join(self.clauses)) if self.clauses else ""
-
-
-def _count(conn, sql, params=()):
-    return conn.execute(f"SELECT COUNT(*) FROM ({sql})", params).fetchone()[0]
-
-
-def _rows(conn, sql, params, top):
-    return [tuple(r) for r in conn.execute(f"{sql} LIMIT ?", (*params, top)).fetchall()]
 
 
 def summary(conn, top=10):

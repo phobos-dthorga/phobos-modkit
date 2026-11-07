@@ -88,8 +88,8 @@ gives each tool's design.
    [RimWorld save index](rimworld-save.md). Agent choice: the Rust program only builds the index; the reports are
    Python, sharing the log tool's command line and Markdown, and read the index with Python's own SQLite.
 4. The shared report model and derived-data cache. Done 7 Nov 2026 (0.3.0); see the table above.
-5. RimWorld's mod and Def index, written to SQLite in the cache like the save index, so a save's mod list and the
-   Defs those mods define can be joined in one query.
+5. RimWorld's mod and Def index, written to SQLite in the cache like the save index. Done 7 Nov 2026 (0.4.0); see
+   [RimWorld Def index](rimworld-defs.md).
 6. The assembly metadata reader, Workshop research, startup sessions, the readiness scan and release
    tooling, as the need arises.
 
