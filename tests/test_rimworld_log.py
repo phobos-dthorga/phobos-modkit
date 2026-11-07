@@ -91,6 +91,24 @@ class Layout17(unittest.TestCase):
         self.assertEqual(notices["finalizers"].data["harmonyIds"], ["example.rescue"])
 
 
+class RepeatedLoads(unittest.TestCase):
+    LOAD = ("2026-01-02 10:00:0{n}.000  INFO [Verse] Loading game from file Colony1 with mods:\n"
+            "  - Ludeon.RimWorld\n  - example.tools (incompatible version)\n{extra}")
+
+    def notices(self, *extras):
+        text = "".join(self.LOAD.format(n=n, extra=extra) for n, extra in enumerate(extras))
+        return [n.text for n in rimworld_log.parse(text).notices if n.kind == "save-loaded"]
+
+    def test_a_repeat_load_with_the_same_mods_is_short(self):
+        first, second = self.notices("", "")
+        self.assertIn('1 marked "incompatible version": example.tools.', first)
+        self.assertTrue(second.endswith("The same mods and marks as the load before."))
+
+    def test_a_changed_mod_list_is_listed_again(self):
+        first, second = self.notices("", "  - example.added\n")
+        self.assertIn('marked "incompatible version"', second)
+
+
 class Layout16(unittest.TestCase):
     def test_unity_layout_reads_without_levels(self):
         log = parse_fixture("player-1.6.log")

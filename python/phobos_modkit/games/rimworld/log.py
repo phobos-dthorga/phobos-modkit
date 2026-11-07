@@ -245,15 +245,20 @@ def _loads(entries):
 
 def _notices(entries):
     notices = []
+    previous_load = None
     for entry, save, mods, noted in _loads(entries):
         text = f"Save \"{save}\" loaded at {entry.time or 'line ' + str(entry.line)} with {len(mods):,} mods."
-        by_note = {}
-        for pid, note in noted:
-            by_note.setdefault(note, []).append(pid)
-        for note, pids in sorted(by_note.items(), key=lambda kv: -len(kv[1])):
-            listed = ", ".join(pids[:NOTED_SHOWN])
-            more = f" and {len(pids) - NOTED_SHOWN} more" if len(pids) > NOTED_SHOWN else ""
-            text += f" {len(pids):,} marked \"{note}\": {listed}{more}."
+        if previous_load is not None and previous_load == (mods, noted):
+            text += " The same mods and marks as the load before." if noted else " The same mods as the load before."
+        else:
+            by_note = {}
+            for pid, note in noted:
+                by_note.setdefault(note, []).append(pid)
+            for note, pids in sorted(by_note.items(), key=lambda kv: -len(kv[1])):
+                listed = ", ".join(pids[:NOTED_SHOWN])
+                more = f" and {len(pids) - NOTED_SHOWN} more" if len(pids) > NOTED_SHOWN else ""
+                text += f" {len(pids):,} marked \"{note}\": {listed}{more}."
+        previous_load = (mods, noted)
         notices.append(Notice("save-loaded", text, {"save": save, "line": entry.line, "time": entry.time,
                                                     "mods": len(mods), "noted": [list(n) for n in noted]}))
     stop = next((e for e in entries if e.category in ("Verse", "") and e.headline.startswith(MAX_MESSAGES)), None)

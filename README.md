@@ -6,7 +6,7 @@ questions in a short summary instead of a long read. One shared home for code th
 
 ## Read this first (gotchas)
 
-- **One tool is built so far: RimWorld log triage** (0.1.0, 7 Nov 2026). The rest are planned. See
+- **One tool is built so far: RimWorld log triage** (0.1.1, 7 Nov 2026). The rest are planned. See
   [RimWorld log triage](docs/rimworld-log.md).
 - **These tools never run inside a game.** They read files the game wrote. Runtime mod libraries (D'thorga
   Framework for RimWorld, PhobosLib for Project Zomboid and FS25, Phobos Framework for Ostranauts) stay in
@@ -37,7 +37,7 @@ in order of expected saving.
 
 | # | Tool | What it answers | Language | Status |
 | --- | --- | --- | --- | --- |
-| 1 | [Log triage](docs/rimworld-log.md) (RimWorld) | What went wrong this run, which mod it came from, what is new since last run | Python | Built: 0.1.0 |
+| 1 | [Log triage](docs/rimworld-log.md) (RimWorld) | What went wrong this run, which mod it came from, what is new since last run | Python | Built: 0.1.1 |
 | 2 | Save index and query | Where things are in a large XML save; what changed between two saves | Rust | Planned |
 | 3 | Mod and Def index (RimWorld) | Which mod defines or patches something, in the player's load order | Python | Planned |
 | 4 | Assembly metadata reader | Which mods patch a method; what constants a DLL holds; does a consumer still match its provider | C# | Planned |
