@@ -4,6 +4,12 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-07
+
+### Fixed
+
+- Cargo.lock now matches the crate's version. In 0.2.1 it still named 0.2.0, so every build with --locked (CI and --build-indexer) refused to start; **do not build v0.2.1**. A test now checks that the Python package, Cargo.toml and Cargo.lock name one version.
+
 ## [0.2.1] - 2026-11-07
 
 ### Fixed

@@ -6,7 +6,7 @@ questions in a short summary instead of a long read. One shared home for code th
 
 ## Read this first (gotchas)
 
-- **Two tools are built: RimWorld log triage and the RimWorld save index** (0.2.1, 7 Nov 2026). The rest are
+- **Two tools are built: RimWorld log triage and the RimWorld save index** (0.2.2, 7 Nov 2026). The rest are
   planned. See [log triage](docs/rimworld-log.md) and [the save index](docs/rimworld-save.md).
 - **The save index needs one Rust build:** add `--build-indexer` to its first command, with Rust from
   [rustup](https://rustup.rs). It builds outside the repository, so a cloud-synced clone does not upload hundreds
