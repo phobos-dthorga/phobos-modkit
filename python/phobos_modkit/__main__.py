@@ -19,10 +19,22 @@ def _rimworld_defs(argv):
     return main(argv)
 
 
+def _steam_workshop(argv):
+    from .steam.workshop_cli import main
+    return main(argv)
+
+
+def _rimworld_workshop(argv):
+    from .games.rimworld.workshop_cli import main
+    return main(argv)
+
+
 COMMANDS = {
     "rimworld-log": (_rimworld_log, "summarise a RimWorld Player.log and name the mods involved"),
     "rimworld-save": (_rimworld_save, "answer questions about a RimWorld save from a fast index"),
     "rimworld-defs": (_rimworld_defs, "which active mods define and patch each RimWorld Def"),
+    "rimworld-workshop": (_rimworld_workshop, "what players report about RimWorld mods on the Workshop lately"),
+    "steam-workshop": (_steam_workshop, "what players report about Workshop items lately, by ID or URL"),
 }
 
 

@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-07
+
+### Added
+
+- Workshop research (python -m phobos_modkit steam-workshop and rimworld-workshop): report, details, comments and sql over a SQLite cache of Steam's public item details (batched 100 at a time) and each item's newest comments. Per item it gives the update date, declared versions, subscribers, comments in the last 90 days, the uploader's last reply and the newest comments that mention problems. Comment requests go 8 s apart and back off 150 s once after HTTP 429, then stop and say so; anything fetched in the last 24 hours is reused; --offline never contacts Steam.
+- rimworld-workshop takes mods by name (with wildcards), package ID, Workshop ID or URL, flags comments that mention the game's version from ModsConfig.xml, and adds a versions report: every active Workshop mod that does not declare the game's version (about 10 s for 320 mods).
+- 20 tests with a fake Steam and hand-written fixtures in Steam's markup.
+
+### Compatibility and limits
+
+- Items whose uploader's profile is private show no comments to visitors who are not signed in; the report names them with Steam's reason. Only the uploader's own replies are recognised, not other team members'.
+- Checked against Steam on 7 November 2026.
+
 ## [0.4.0] - 2026-11-07
 
 ### Added

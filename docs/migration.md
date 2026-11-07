@@ -22,7 +22,7 @@ Found on 7 Nov 2026 in the owner's local clones; where copies are called identic
 | `generate_manifest.py`, `bump-version.sh` | several | Project Zomboid repositories | Core: version tooling, with Ostranauts' constants updater |
 | `package_mod.py`, `package_set.py`, `validate_mod.py` | 3 or 4 each, different | FS25 repositories | Core packaging; FS25's checks become an adapter |
 | `triage_log.py`, `measure_log.py` | 1 each | FS25_PhobosLib, FS25_BgaExtensions | Core log triage plus an FS25 adapter |
-| `pull-workshop.py`, `workshop-release-notes.py`, `update-constants.py` | 1 each | phobos-ostranauts | Core: Steam and release tooling |
+| `pull-workshop.py`, `workshop-release-notes.py`, `update-constants.py` | 1 each | phobos-ostranauts | Core: Steam and release tooling. `phobos_modkit.steam.workshop` now reads item details the same way, so `pull-workshop.py` can call it when next touched |
 | `apicheck.ps1` | 1 | phobos-rimworld (local research tools) | C# assembly metadata reader |
 | `Resolve-WrPaths.ps1`, `Resolve-WrGamePath.ps1` | 2 | the two Workers and Resources repositories | Core: path resolution; a Workers and Resources adapter |
 
