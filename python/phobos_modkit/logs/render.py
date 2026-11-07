@@ -4,11 +4,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from ..markdown import cell as _cell
 from .triage import clusters
 
 DEFAULT_LEVELS = ("FATAL", "ERROR", "WARN", "UNKNOWN")
 CLUSTERS_SHOWN = 10
-CELL_LIMIT = 140
 DETAIL_LINES = 60
 JSON_BODY_LINES = 80
 JSON_FORMAT = 1
@@ -32,11 +32,6 @@ def _keep(text):
 
 # ---- Shared formatting ----
 
-def _cell(text, limit=CELL_LIMIT):
-    text = " ".join(str(text).split())
-    if len(text) > limit:
-        text = text[:limit].rstrip() + "..."
-    return text.replace("|", "\\|")
 
 
 def _time_part(stamp):

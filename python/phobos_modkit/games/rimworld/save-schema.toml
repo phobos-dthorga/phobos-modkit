@@ -1,0 +1,337 @@
+# RimWorld save (.rws) schema for xml-index.
+#
+# Element paths were read from RimWorld 1.7.5000 saves (November 2026): a save is plain XML under <savegame>, with
+# <meta> (version and mod lists) and <game>. Things on a map are savegame/game/maps/li/things/thing; things held by
+# other things (inventories, worn apparel, equipment, containers, corpses, caravans) are the <li> items of an
+# <innerList>; world pawns are the <li> items of worldPawns/pawnsAlive, pawnsDead and pawnsMothballed. A thing's comps
+# write straight into its element, so <quality> and <forbidden> sit beside <def>.
+#
+# Each index records a hash of this file, so changing it makes older indexes rebuild on their next use.
+
+format = 1
+name = "rimworld-save"
+description = "RimWorld save: things, pawns, hediffs, traits, skills, factions, maps, mods and the game header"
+
+[[table]]
+name = "game"
+match = ["savegame"]
+[[table.column]]
+name = "game_version"
+path = "meta/gameVersion"
+[[table.column]]
+name = "ticks_game"
+path = "game/tickManager/ticksGame"
+type = "int"
+[[table.column]]
+name = "game_start_abs_tick"
+path = "game/tickManager/gameStartAbsTick"
+type = "int"
+[[table.column]]
+name = "starting_year"
+path = "game/tickManager/startingYear"
+type = "int"
+[[table.column]]
+name = "current_map"
+path = "game/currentMapIndex"
+type = "int"
+[[table.column]]
+name = "scenario"
+path = "game/scenario/name"
+[[table.column]]
+name = "play_seconds"
+path = "game/info/realPlayTimeInteracting"
+type = "real"
+
+# The save's three mod lists are parallel: the same position in each is the same mod.
+[[table]]
+name = "mod_id"
+match = ["savegame/meta/modIds/li"]
+[[table.column]]
+name = "position"
+index = true
+[[table.column]]
+name = "value"
+path = ""
+
+[[table]]
+name = "mod_name"
+match = ["savegame/meta/modNames/li"]
+[[table.column]]
+name = "position"
+index = true
+[[table.column]]
+name = "value"
+path = ""
+
+[[table]]
+name = "mod_steam_id"
+match = ["savegame/meta/modSteamIds/li"]
+[[table.column]]
+name = "position"
+index = true
+[[table.column]]
+name = "value"
+path = ""
+
+[[table]]
+name = "faction"
+match = ["savegame/game/world/factionManager/allFactions/li"]
+require = ["def"]
+[[table.column]]
+name = "load_id"
+path = "loadID"
+type = "int"
+[[table.column]]
+name = "def"
+path = "def"
+[[table.column]]
+name = "name"
+path = "name"
+[[table.column]]
+name = "leader"
+path = "leader"
+
+[[table]]
+name = "map"
+match = ["savegame/game/maps/li"]
+[[table.column]]
+name = "position"
+index = true
+[[table.column]]
+name = "unique_id"
+path = "uniqueID"
+type = "int"
+[[table.column]]
+name = "generator"
+path = "generatorDef"
+[[table.column]]
+name = "size"
+path = "mapInfo/size"
+type = "ivec3"
+[[table.column]]
+name = "world_object"
+path = "mapInfo/parent"
+
+[[table]]
+name = "thing"
+match = [
+    "savegame/game/maps/li/things/thing",
+    "**/innerList/li",
+    "savegame/game/world/worldPawns/*/li",
+    "**/occupants/li",
+    "**/thing",
+]
+# Things always carry a def and an id; references to things elsewhere in the save are bare text and are left out.
+require = ["def", "thing_id"]
+indexes = ["def", "holder", "thing_id"]
+[[table.column]]
+name = "def"
+path = "def"
+[[table.column]]
+name = "thing_id"
+path = "id"
+[[table.column]]
+name = "class"
+attr = "Class"
+[[table.column]]
+name = "stuff"
+path = "stuff"
+[[table.column]]
+name = "stack"
+path = "stackCount"
+type = "int"
+[[table.column]]
+name = "hit_points"
+path = "health"
+type = "int"
+[[table.column]]
+name = "quality"
+path = "quality"
+[[table.column]]
+name = "forbidden"
+path = "forbidden"
+type = "bool"
+[[table.column]]
+name = "map"
+path = "map"
+type = "int"
+[[table.column]]
+name = "pos"
+path = "pos"
+type = "ivec3"
+[[table.column]]
+name = "faction"
+path = "faction"
+[[table.column]]
+name = "spawned_tick"
+path = "spawnedTick"
+type = "int"
+[[table.column]]
+name = "holder"
+parent = "thing"
+
+# A pawn is a thing with a kind; its row shares the thing's id.
+[[table]]
+name = "pawn"
+match = [
+    "savegame/game/maps/li/things/thing",
+    "**/innerList/li",
+    "savegame/game/world/worldPawns/*/li",
+    "**/occupants/li",
+    "**/thing",
+]
+require = ["kind_def"]
+indexes = ["kind_def"]
+[[table.column]]
+name = "kind_def"
+path = "kindDef"
+[[table.column]]
+name = "gender"
+path = "gender"
+[[table.column]]
+name = "name_class"
+path = "name"
+attr = "Class"
+[[table.column]]
+name = "first"
+path = "name/first"
+[[table.column]]
+name = "nick"
+path = "name/nick"
+[[table.column]]
+name = "last"
+path = "name/last"
+[[table.column]]
+name = "single_name"
+path = "name/name"
+[[table.column]]
+name = "health_state"
+path = "healthTracker/healthState"
+[[table.column]]
+name = "age_biological_ticks"
+path = "ageTracker/ageBiologicalTicks"
+type = "int"
+[[table.column]]
+name = "childhood"
+path = "story/childhood"
+[[table.column]]
+name = "adulthood"
+path = "story/adulthood"
+
+[[table]]
+name = "hediff"
+match = ["**/healthTracker/hediffSet/hediffs/li"]
+require = ["def"]
+indexes = ["def", "pawn"]
+[[table.column]]
+name = "pawn"
+parent = "thing"
+[[table.column]]
+name = "def"
+path = "def"
+[[table.column]]
+name = "class"
+attr = "Class"
+[[table.column]]
+name = "load_id"
+path = "loadID"
+type = "int"
+[[table.column]]
+name = "severity"
+path = "severity"
+type = "real"
+[[table.column]]
+name = "age_ticks"
+path = "ageTicks"
+type = "int"
+[[table.column]]
+name = "part_body"
+path = "part/body"
+[[table.column]]
+name = "part_index"
+path = "part/index"
+type = "int"
+[[table.column]]
+name = "source"
+path = "source"
+
+[[table]]
+name = "trait"
+match = ["**/story/traits/allTraits/li"]
+require = ["def"]
+[[table.column]]
+name = "pawn"
+parent = "thing"
+[[table.column]]
+name = "def"
+path = "def"
+[[table.column]]
+name = "degree"
+path = "degree"
+type = "int"
+
+[[table]]
+name = "skill"
+match = ["**/skills/skills/li"]
+require = ["def"]
+[[table.column]]
+name = "pawn"
+parent = "thing"
+[[table.column]]
+name = "def"
+path = "def"
+[[table.column]]
+name = "level"
+path = "level"
+type = "int"
+[[table.column]]
+name = "passion"
+path = "passion"
+
+[[view]]
+name = "mods"
+sql = """
+SELECT i.position, i.value AS package_id, n.value AS name, s.value AS steam_id
+FROM mod_id i LEFT JOIN mod_name n USING (position) LEFT JOIN mod_steam_id s USING (position)
+"""
+
+# Where each thing is: the outermost thing holding it (itself when nothing does) and where that one sits.
+[[view]]
+name = "thing_place"
+sql = """
+WITH RECURSIVE up(id, top_id) AS (
+    SELECT id, id FROM thing WHERE holder IS NULL OR holder NOT IN (SELECT id FROM thing)
+    UNION ALL
+    SELECT t.id, up.top_id FROM thing t JOIN up ON t.holder = up.id
+)
+SELECT up.id, up.top_id,
+       up.id <> up.top_id AS held,
+       CASE
+           WHEN e.path = 'savegame/game/maps/li/things/thing' THEN 'map'
+           WHEN e.path LIKE 'savegame/game/world/worldPawns/pawnsAlive/%' THEN 'world pawn'
+           WHEN e.path LIKE 'savegame/game/world/worldPawns/pawnsDead/%' THEN 'dead world pawn'
+           WHEN e.path LIKE 'savegame/game/world/worldPawns/pawnsMothballed/%' THEN 'mothballed world pawn'
+           WHEN e.path LIKE 'savegame/game/world/worldObjects/%' THEN 'world object'
+           ELSE 'elsewhere'
+       END AS place,
+       top.map
+FROM up JOIN thing top ON top.id = up.top_id JOIN element_path e ON e.id = top.path_id
+"""
+
+[[view]]
+name = "pawn_view"
+sql = """
+SELECT p.id, t.thing_id, t.def AS race, p.kind_def,
+       CASE
+           WHEN p.nick IS NOT NULL THEN p.nick
+           WHEN p.first IS NOT NULL THEN TRIM(p.first || ' ' || COALESCE(p.last, ''))
+           ELSE p.single_name
+       END AS name,
+       p.gender, t.faction, f.name AS faction_name, f.def AS faction_def,
+       pl.place, pl.held, pl.map, t.pos_x, t.pos_z, p.health_state,
+       p.age_biological_ticks / 3600000 AS age_years
+FROM pawn p
+JOIN thing t ON t.id = p.id
+LEFT JOIN faction f ON t.faction = 'Faction_' || f.load_id
+LEFT JOIN thing_place pl ON pl.id = p.id
+"""

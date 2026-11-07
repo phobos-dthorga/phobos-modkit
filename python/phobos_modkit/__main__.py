@@ -9,8 +9,14 @@ def _rimworld_log(argv):
     return main(argv)
 
 
+def _rimworld_save(argv):
+    from .games.rimworld.save_cli import main
+    return main(argv)
+
+
 COMMANDS = {
     "rimworld-log": (_rimworld_log, "summarise a RimWorld Player.log and name the mods involved"),
+    "rimworld-save": (_rimworld_save, "answer questions about a RimWorld save from a fast index"),
 }
 
 

@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  python:
+  verify:
     strategy:
       fail-fast: false
       matrix:
@@ -19,11 +19,27 @@ jobs:
           - os: windows-latest
             python: python
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Run the Python tests
+      - name: Install the pinned Rust toolchain
         shell: bash
+        run: rustup show
+      - name: Check Rust formatting and lints
+        shell: bash
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked --all-targets -- -D warnings
+      - name: Run the Rust tests
+        shell: bash
+        run: cargo test --locked
+      - name: Build the Rust tools
+        shell: bash
+        run: cargo build --release --locked
+      - name: Run the Python tests, with the Rust tools required
+        shell: bash
+        env:
+          PHOBOS_REQUIRE_NATIVE: "1"
         run: |
           ${{ matrix.python }} --version
           ${{ matrix.python }} -W error::DeprecationWarning -m unittest discover -s tests -v

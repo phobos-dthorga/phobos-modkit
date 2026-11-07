@@ -4,6 +4,10 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import tempfile
+
+CACHE = ("modkitCachePath", "PHOBOS_MODKIT_CACHE")
+DEFAULT_CACHE = Path(tempfile.gettempdir()) / "phobos-modkit"
 
 
 def resolve(key, env_var, default, explicit=None, environ=None, settings_file=None):
@@ -25,3 +29,9 @@ def resolve(key, env_var, default, explicit=None, environ=None, settings_file=No
             if configured:
                 return Path(configured)
     return Path(default) if default is not None else None
+
+
+def cache_root(explicit=None, environ=None, settings_file=None):
+    """Where the kit keeps derived data such as save indexes. The default is under the system's temp folder,
+    which cloud-sync tools usually leave alone: indexes hold data from the user's saves."""
+    return resolve(*CACHE, DEFAULT_CACHE, explicit, environ, settings_file)

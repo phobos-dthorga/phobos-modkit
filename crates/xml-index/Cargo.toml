@@ -1,0 +1,17 @@
+[package]
+name = "xml-index"
+description = "Streams a large XML file once into a SQLite index, driven by a schema file"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Minor lines pinned on purpose: their APIs are the ones this code is written against.
+quick-xml = "0.37"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"

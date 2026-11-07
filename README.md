@@ -6,8 +6,10 @@ questions in a short summary instead of a long read. One shared home for code th
 
 ## Read this first (gotchas)
 
-- **One tool is built so far: RimWorld log triage** (0.1.1, 7 Nov 2026). The rest are planned. See
-  [RimWorld log triage](docs/rimworld-log.md).
+- **Two tools are built: RimWorld log triage and the RimWorld save index** (0.2.0, 7 Nov 2026). The rest are
+  planned. See [log triage](docs/rimworld-log.md) and [the save index](docs/rimworld-save.md).
+- **The save index needs one Rust build:** `cargo build --release --locked` here, with Rust from
+  [rustup](https://rustup.rs). Everything else is standard-library Python 3.10 or newer.
 - **These tools never run inside a game.** They read files the game wrote. Runtime mod libraries (D'thorga
   Framework for RimWorld, PhobosLib for Project Zomboid and FS25, Phobos Framework for Ostranauts) stay in
   their own repositories.
@@ -21,12 +23,12 @@ questions in a short summary instead of a long read. One shared home for code th
 
 ## Run a tool
 
-Python 3.10 or newer, standard library only; nothing to install.
-
 ```text
+cargo build --release --locked                 once, for the save index
 cd python
 python -m phobos_modkit rimworld-log           summarise RimWorld's Player.log against the run before
 python -m phobos_modkit rimworld-log --show ID one message in full
+python -m phobos_modkit rimworld-save          summarise the newest save; also pawns, things, hediffs, find, sql
 ```
 
 ## Tools
@@ -38,7 +40,7 @@ in order of expected saving.
 | # | Tool | What it answers | Language | Status |
 | --- | --- | --- | --- | --- |
 | 1 | [Log triage](docs/rimworld-log.md) (RimWorld) | What went wrong this run, which mod it came from, what is new since last run | Python | Built: 0.1.1 |
-| 2 | Save index and query | Where things are in a large XML save; what changed between two saves | Rust | Planned |
+| 2 | [Save index and query](docs/rimworld-save.md) (RimWorld) | Where things are in a large XML save; pawns, hediffs, holders; what changed between two saves (planned) | Rust engine, Python reports | Built: 0.2.0 (comparison and map grids to come) |
 | 3 | Mod and Def index (RimWorld) | Which mod defines or patches something, in the player's load order | Python | Planned |
 | 4 | Assembly metadata reader | Which mods patch a method; what constants a DLL holds; does a consumer still match its provider | C# | Planned |
 | 5 | Workshop research | What players report about a mod lately; supported versions; last update | Python | Planned |
@@ -63,8 +65,9 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/project-direction.md](docs/project-direction.md) | What belongs here, the three layers, languages, consumers |
 | [docs/migration.md](docs/migration.md) | Scripts copied across the Phobos repositories and where each one moves |
 | [docs/rimworld-log.md](docs/rimworld-log.md) | How to run RimWorld log triage and read its summary |
-| `python/phobos_modkit/` | Standard-library Python package: `logs/` (game-free triage), `games/rimworld/` (the adapter) |
-| `crates/` | Rust tools (planned) |
+| [docs/rimworld-save.md](docs/rimworld-save.md) | How to index a RimWorld save and ask it questions |
+| `python/phobos_modkit/` | Standard-library Python package: `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema) |
+| `crates/xml-index/` | Rust: streams any large XML file into SQLite, driven by a schema file; `cargo test` |
 | `dotnet/` | C# tools (planned) |
 | `fixtures/`, `tests/` | Hand-written test data and the tests: `python -m unittest discover -s tests` |
 

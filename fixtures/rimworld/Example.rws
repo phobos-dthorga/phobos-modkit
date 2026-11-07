@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="utf-8"?>
+<savegame>
+  <meta>
+    <gameVersion>1.7.9999 rev1</gameVersion>
+    <modIds>
+      <li>brrainz.harmony</li>
+      <li>ludeon.rimworld</li>
+      <li>example.widgets</li>
+    </modIds>
+    <modSteamIds>
+      <li>0</li>
+      <li>0</li>
+      <li>2222222222</li>
+    </modSteamIds>
+    <modNames>
+      <li>Harmony</li>
+      <li>Core</li>
+      <li>Example Widgets</li>
+    </modNames>
+  </meta>
+  <game>
+    <currentMapIndex>0</currentMapIndex>
+    <info>
+      <realPlayTimeInteracting>7200.5</realPlayTimeInteracting>
+    </info>
+    <tickManager>
+      <ticksGame>3720000</ticksGame>
+      <gameStartAbsTick>300000</gameStartAbsTick>
+      <startingYear>5500</startingYear>
+    </tickManager>
+    <scenario>
+      <name>Example Landing</name>
+    </scenario>
+    <world>
+      <factionManager>
+        <allFactions>
+          <li>
+            <def>PlayerColony</def>
+            <loadID>1</loadID>
+            <name>Example Colony</name>
+          </li>
+          <li>
+            <def>Pirate</def>
+            <loadID>2</loadID>
+            <name>Example Raiders</name>
+            <leader>Thing_Human300</leader>
+          </li>
+        </allFactions>
+      </factionManager>
+      <worldPawns>
+        <pawnsAlive>
+          <li>
+            <def>Human</def>
+            <id>Human300</id>
+            <faction>Faction_2</faction>
+            <kindDef>Pirate_Boss</kindDef>
+            <gender>Female</gender>
+            <name Class="NameTriple">
+              <first>Cora</first>
+              <last>Example</last>
+            </name>
+            <ageTracker>
+              <ageBiologicalTicks>144000000</ageBiologicalTicks>
+            </ageTracker>
+            <healthTracker>
+              <hediffSet>
+                <hediffs>
+                  <li Class="Hediff_Injury">
+                    <def>Scratch</def>
+                    <loadID>21</loadID>
+                    <ageTicks>120000</ageTicks>
+                    <severity>2</severity>
+                    <part>
+                      <body>Human</body>
+                      <index>3</index>
+                    </part>
+                  </li>
+                </hediffs>
+              </hediffSet>
+            </healthTracker>
+          </li>
+        </pawnsAlive>
+        <pawnsDead>
+          <li>
+            <def>Human</def>
+            <id>Human301</id>
+            <faction>Faction_2</faction>
+            <kindDef>Pirate</kindDef>
+            <name Class="NameSingle">
+              <name>Dov</name>
+            </name>
+            <healthTracker>
+              <healthState>Dead</healthState>
+            </healthTracker>
+          </li>
+        </pawnsDead>
+      </worldPawns>
+    </world>
+    <maps>
+      <li>
+        <uniqueID>0</uniqueID>
+        <generatorDef>Base_Player</generatorDef>
+        <mapInfo>
+          <size>(50, 1, 50)</size>
+          <parent>Settlement_1</parent>
+        </mapInfo>
+        <things>
+          <thing Class="ThingWithComps">
+            <def>Steel</def>
+            <id>Steel101</id>
+            <map>0</map>
+            <pos>(10, 0, 12)</pos>
+            <health>100</health>
+            <stackCount>75</stackCount>
+          </thing>
+          <thing Class="Pawn">
+            <def>Human</def>
+            <id>Human200</id>
+            <map>0</map>
+            <pos>(20, 0, 21)</pos>
+            <faction>Faction_1</faction>
+            <kindDef>Colonist</kindDef>
+            <gender>Female</gender>
+            <name Class="NameTriple">
+              <first>Ann</first>
+              <nick>Annie</nick>
+              <last>Example</last>
+            </name>
+            <ageTracker>
+              <ageBiologicalTicks>108000000</ageBiologicalTicks>
+            </ageTracker>
+            <story>
+              <childhood>Example_Childhood</childhood>
+              <adulthood>Example_Adulthood</adulthood>
+              <traits>
+                <allTraits>
+                  <li>
+                    <def>Kind</def>
+                  </li>
+                  <li>
+                    <def>Industriousness</def>
+                    <degree>2</degree>
+                  </li>
+                </allTraits>
+              </traits>
+            </story>
+            <skills>
+              <skills>
+                <li>
+                  <def>Shooting</def>
+                  <level>8</level>
+                  <passion>Major</passion>
+                </li>
+              </skills>
+            </skills>
+            <healthTracker>
+              <hediffSet>
+                <hediffs>
+                  <li Class="Hediff_Injury">
+                    <def>Gunshot</def>
+                    <loadID>11</loadID>
+                    <ageTicks>60000</ageTicks>
+                    <severity>4.5</severity>
+                    <part>
+                      <body>Human</body>
+                      <index>12</index>
+                    </part>
+                    <source>Gun_Revolver</source>
+                  </li>
+                  <li Class="HediffWithComps">
+                    <def>Example_Addiction</def>
+                    <loadID>12</loadID>
+                    <severity>0.75</severity>
+                  </li>
+                </hediffs>
+              </hediffSet>
+            </healthTracker>
+            <inventory>
+              <innerContainer>
+                <innerList>
+                  <li Class="ThingWithComps">
+                    <def>MealSimple</def>
+                    <id>MealSimple102</id>
+                    <stackCount>2</stackCount>
+                    <forbidden>True</forbidden>
+                  </li>
+                </innerList>
+              </innerContainer>
+            </inventory>
+            <apparel>
+              <wornApparel>
+                <innerList>
+                  <li Class="Apparel">
+                    <def>Apparel_Parka</def>
+                    <id>Apparel_Parka103</id>
+                    <stuff>Cloth</stuff>
+                    <health>140</health>
+                    <quality>Good</quality>
+                  </li>
+                </innerList>
+              </wornApparel>
+            </apparel>
+            <jobs>
+              <curJob>
+                <targetA>Thing_Steel101</targetA>
+                <thing>Thing_Steel101</thing>
+              </curJob>
+            </jobs>
+          </thing>
+          <thing Class="Corpse">
+            <def>Corpse_Human</def>
+            <id>Corpse_Human104</id>
+            <map>0</map>
+            <pos>(30, 0, 5)</pos>
+            <innerContainer>
+              <innerList>
+                <li Class="Pawn">
+                  <def>Human</def>
+                  <id>Human302</id>
+                  <faction>Faction_2</faction>
+                  <kindDef>Pirate</kindDef>
+                  <name Class="NameTriple">
+                    <first>Eli</first>
+                    <last>Example</last>
+                  </name>
+                  <healthTracker>
+                    <healthState>Dead</healthState>
+                  </healthTracker>
+                </li>
+              </innerList>
+            </innerContainer>
+          </thing>
+          <thing Class="Filth">
+            <def>Filth_Dirt</def>
+            <id>Filth_Dirt105</id>
+            <map>0</map>
+            <pos>(11, 0, 12)</pos>
+          </thing>
+          <thing Class="Building">
+            <def>ChunkA</def>
+            <id>ChunkA106</id>
+            <map>0</map>
+            <pos>(40, 0, 40)</pos>
+            <health>1250</health>
+            <faction>Faction_1</faction>
+          </thing>
+        </things>
+      </li>
+    </maps>
+  </game>
+</savegame>

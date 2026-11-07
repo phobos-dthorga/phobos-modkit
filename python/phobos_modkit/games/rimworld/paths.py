@@ -15,6 +15,7 @@ from .mods import default_workshop
 GAME = ("rimworldPath", "RIMWORLD_PATH")
 WORKSHOP = ("workshopPath", "RIMWORLD_WORKSHOP_PATH")
 LOGS = ("rimworldLogsPath", "RIMWORLD_LOGS_PATH")
+SAVES = ("rimworldSavesPath", "RIMWORLD_SAVES_PATH")
 LOG_NAME = "Player.log"
 PREVIOUS_LOG_NAME = "Player-prev.log"
 
@@ -57,3 +58,7 @@ def workshop_path(game, explicit=None, environ=None, settings_file=None):
 
 def logs_path(explicit=None, environ=None, settings_file=None):
     return resolve(*LOGS, default_logs(), explicit, environ, settings_file)
+
+
+def saves_path(explicit=None, environ=None, settings_file=None):
+    return resolve(*SAVES, default_user_data() / "Saves", explicit, environ, settings_file)
