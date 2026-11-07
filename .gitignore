@@ -13,6 +13,8 @@
 
 # Game material is never committed: saves, logs, assemblies, dumps.
 *.log
+# Hand-written test logs are the exception.
+!fixtures/**/*.log
 *.rws
 *.sav
 *.dll

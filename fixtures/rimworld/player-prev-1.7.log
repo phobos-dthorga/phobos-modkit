@@ -1,0 +1,15 @@
+=== Waylith log ===
+Started:   2026-01-01 09:00:00.000 +00:00
+Version:   1.7.9999.1
+Runtime:   .NET 10.0.0-example
+
+2026-01-01 09:00:03.000  WARN [Verse] Parsed 1.5 as int.
+    at .Verse.Log.Warning_Patch1(String text) [0xFFFFFFFF]
+2026-01-01 09:00:05.000  INFO [Verse] Loading game from file Colony1 with mods:
+  - brrainz.harmony
+  - Ludeon.RimWorld
+    at Verse.SavedGameLoaderNow.LoadGameFromSaveFileNow(String fileName) [0x30]
+2026-01-01 09:00:07.000 ERROR [Verse] Tried to register the same load ID twice: null, pathRelToParent=/codedPawn, parent=Thing_Example11111111
+    at .Verse.Log.Error_Patch3(String text) [0xFFFFFFFF]
+2026-01-01 09:00:08.000 ERROR [Verse] Example error that the next run no longer has.
+    at .Verse.Log.Error_Patch3(String text) [0xFFFFFFFF]

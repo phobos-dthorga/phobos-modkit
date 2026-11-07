@@ -1,0 +1,92 @@
+=== Waylith log ===
+Started:   2026-01-02 10:00:00.000 +00:00
+Version:   1.7.9999.1
+OS:        Example OS 1.0
+Runtime:   .NET 10.0.0-example
+Process:   pid 1234
+Log file:  C:\Users\tester\AppData\LocalLow\Ludeon Studios\RimWorld by Ludeon Studios\Logs\Player.log
+Command:   "C:\Games\RimWorld\RimWorld.dll"
+
+2026-01-02 10:00:01.000  INFO [VulkanStartup] Engine starting.
+    at Brutal.Logging.LogCategory.Info(LogString`1 message, String sourceMemberName, String sourceFilePath, Int32 sourceLineNumber) [0x0]
+    at RimWorldWaylith.Program.Main(String[] args) [0x1E9]
+2026-01-02 10:00:02.000 ERROR [Verse] [Example Patches - Start of stack trace]
+Verse.PatchOperationAdd(xpath="Defs/ThingDef[defName="Example_First"]"): Failed to find a node with the given xpath
+[End of stack trace]
+Source file: C:\Steam\steamapps\workshop\content\294100\1111111111\1.7\Patches\First.xml
+
+    at .Verse.Log.Error_Patch3(String text) [0xFFFFFFFF]
+    at XmlExtensions.ErrorManager.PrintErrors(String source, ModContentPack mod) [0x6A]
+2026-01-02 10:00:02.100 ERROR [Verse] [Example Patches - Start of stack trace]
+Verse.PatchOperationRemove(xpath="Defs/ThingDef[defName="Example_Second"]"): Failed to find a node with the given xpath
+[End of stack trace]
+Source file: C:\Steam\steamapps\workshop\content\294100\1111111111\1.7\Patches\Second.xml
+
+    at .Verse.Log.Error_Patch3(String text) [0xFFFFFFFF]
+    at XmlExtensions.ErrorManager.PrintErrors(String source, ModContentPack mod) [0x6A]
+2026-01-02 10:00:03.000  WARN [Verse] Parsed 5.5 as int.
+    at .Verse.Log.Warning_Patch1(String text) [0xFFFFFFFF]
+    at Verse.ParseHelper.ParseIntPermissive(String str) [0x21]
+2026-01-02 10:00:03.500  WARN [Verse] Parsed 7.25 as int.
+    at .Verse.Log.Warning_Patch1(String text) [0xFFFFFFFF]
+    at Verse.ParseHelper.ParseIntPermissive(String str) [0x21]
+2026-01-02 10:00:03.700  WARN [Verse] Could not read C:\Users\tester\AppData\LocalLow\Example\settings.xml | using defaults
+    at Brutal.Logging.LogCategory.Warning(LogString`1 message, String sourceMemberName, String sourceFilePath, Int32 sourceLineNumber) [0x0]
+    at Verse.Log.Warning(String text) [0x19]
+2026-01-02 10:00:04.000  INFO [Verse] [Example Tools] Ready.
+    at Brutal.Logging.LogCategory.Info(LogString`1 message, String sourceMemberName, String sourceFilePath, Int32 sourceLineNumber) [0x0]
+    at Verse.Log.Message(String text) [0x19]
+    at ExampleTools.Startup..cctor() [0x10]
+2026-01-02 10:00:04.500 ERROR [Verse] Exception loading def from file Example.xml: System.ArgumentException: Could not find type named Example.Missing
+[Ref A9A6B2C9]
+   at Verse.DirectXmlToObjectNew.ResolveTypeForNode(Type defaultType, XmlNode node) in Assembly-CSharp.dll:token 0x600267f+0x64
+
+Possible Matches:
+[Source: Example Local]
+[File: C:\Games\RimWorld\Mods\Example Local\Defs\Example.xml]
+
+    at .Verse.Log.Error_Patch3(String text) [0xFFFFFFFF]
+2026-01-02 10:00:05.000  INFO [Verse] Loading game from file Colony1 with mods:
+  - brrainz.harmony
+  - Ludeon.RimWorld
+  - example.tools (incompatible version)
+  - example.patches (incompatible version)
+  - example.widgets
+    at Brutal.Logging.LogCategory.Info(LogString`1 message, String sourceMemberName, String sourceFilePath, Int32 sourceLineNumber) [0x0]
+    at Verse.SavedGameLoaderNow.LoadGameFromSaveFileNow(String fileName) [0x30]
+2026-01-02 10:00:06.000 ERROR [Verse] Exception drawing ThingOverlay for Alice: System.NullReferenceException: Object reference not set to an instance of an object.
+[Ref 3ED61E44]
+   at RimWorld.Pawn_GuestTracker.get_SlaveIsSecure() in Assembly-CSharp.dll:token 0x600856c+0xa
+   at ExampleWidgets.Marks.Solve(Pawn pawn) in ExampleWidgets.dll:token 0x60000cc+0x12
+   at Verse.PawnUIOverlay.DrawPawnGUIOverlay_Patch5(PawnUIOverlay this)
+    - PREFIX example.widgets: Verse.PawnUIOverlay.DrawPawnGUIOverlay <- Boolean ExampleWidgets.Patch:Prefix()
+    - FINALIZER example.rescue: Verse.PawnUIOverlay.DrawPawnGUIOverlay <- Exception ExampleRescue.Patch:Finalizer(Exception __exception)
+    at .Verse.Log.Error_Patch3(String text) [0xFFFFFFFF]
+    at Verse.ThingOverlays.ThingOverlaysOnGUI(ThingOverlays this) [0x10]
+2026-01-02 10:00:06.016 ERROR [Verse] Exception drawing ThingOverlay for Bob: System.NullReferenceException: Object reference not set to an instance of an object.
+[Ref 3ED61E44]
+   at RimWorld.Pawn_GuestTracker.get_SlaveIsSecure() in Assembly-CSharp.dll:token 0x600856c+0xa
+   at ExampleWidgets.Marks.Solve(Pawn pawn) in ExampleWidgets.dll:token 0x60000cc+0x12
+   at Verse.PawnUIOverlay.DrawPawnGUIOverlay_Patch5(PawnUIOverlay this)
+    - PREFIX example.widgets: Verse.PawnUIOverlay.DrawPawnGUIOverlay <- Boolean ExampleWidgets.Patch:Prefix()
+    - FINALIZER example.rescue: Verse.PawnUIOverlay.DrawPawnGUIOverlay <- Exception ExampleRescue.Patch:Finalizer(Exception __exception)
+    at .Verse.Log.Error_Patch3(String text) [0xFFFFFFFF]
+    at Verse.ThingOverlays.ThingOverlaysOnGUI(ThingOverlays this) [0x10]
+2026-01-02 10:00:06.033 ERROR [Verse] Exception drawing ThingOverlay for Alice: System.NullReferenceException: Object reference not set to an instance of an object.
+[Ref 3ED61E44]
+   at RimWorld.Pawn_GuestTracker.get_SlaveIsSecure() in Assembly-CSharp.dll:token 0x600856c+0xa
+   at ExampleWidgets.Marks.Solve(Pawn pawn) in ExampleWidgets.dll:token 0x60000cc+0x12
+   at Verse.PawnUIOverlay.DrawPawnGUIOverlay_Patch5(PawnUIOverlay this)
+    - PREFIX example.widgets: Verse.PawnUIOverlay.DrawPawnGUIOverlay <- Boolean ExampleWidgets.Patch:Prefix()
+    - FINALIZER example.rescue: Verse.PawnUIOverlay.DrawPawnGUIOverlay <- Exception ExampleRescue.Patch:Finalizer(Exception __exception)
+    at .Verse.Log.Error_Patch3(String text) [0xFFFFFFFF]
+    at Verse.ThingOverlays.ThingOverlaysOnGUI(ThingOverlays this) [0x10]
+2026-01-02 10:00:07.000 ERROR [Verse] Tried to register the same load ID twice: null, pathRelToParent=/codedPawn, parent=Thing_Example12345678
+    at .Verse.Log.Error_Patch3(String text) [0xFFFFFFFF]
+2026-01-02 10:00:07.100 ERROR [Verse] Tried to register the same load ID twice: null, pathRelToParent=/codedPawn, parent=Thing_Example87654321
+    at .Verse.Log.Error_Patch3(String text) [0xFFFFFFFF]
+2026-01-02 10:00:08.000  WARN [Verse] Reached max messages limit. Stopping logging to avoid spam.
+    at Verse.Log.Warning(String text) [0x19]
+2026-01-02 10:00:09.000  WARN [NativeAllocationRuntime] TempJob allocation 0x1A2B (196608 bytes) has not been disposed after 4 frames.
+2026-01-02 10:00:09.016  WARN [NativeAllocationRuntime] TempJob allocation 0x1A2C (196608 bytes) has not been disposed after 4 frames.
+2026-01-02 10:00:10.000  WARN [NativeAllocationRuntime] Persistent allocation 0x1EBE3D037D8 (16384 bytes, align 8) was not freed before shutdown.

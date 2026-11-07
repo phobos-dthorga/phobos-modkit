@@ -67,10 +67,10 @@ The first consumer is phobos-rimworld; its
 gives each tool's design.
 
 1. These documents. Done 7 Nov 2026.
-2. Log triage, core and RimWorld adapter.
+2. Log triage, core and RimWorld adapter. Done 7 Nov 2026 (0.1.0); see [RimWorld log triage](rimworld-log.md).
 3. The save indexer's working slice, with RimWorld's schema.
 4. RimWorld's mod and Def index.
 5. The assembly metadata reader, Workshop research, startup sessions, the readiness scan and release
    tooling, as the need arises.
 
-Continuous integration arrives with the first tool, running its tests on Windows and Linux as Phobos Scope does.
+Continuous integration runs the tests on Windows and Linux, as Phobos Scope does.

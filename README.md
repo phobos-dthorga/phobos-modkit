@@ -6,8 +6,8 @@ questions in a short summary instead of a long read. One shared home for code th
 
 ## Read this first (gotchas)
 
-- **Nothing is built yet.** This repository holds its design documents only (7 Nov 2026). The first tool
-  will be log triage for RimWorld.
+- **One tool is built so far: RimWorld log triage** (0.1.0, 7 Nov 2026). The rest are planned. See
+  [RimWorld log triage](docs/rimworld-log.md).
 - **These tools never run inside a game.** They read files the game wrote. Runtime mod libraries (D'thorga
   Framework for RimWorld, PhobosLib for Project Zomboid and FS25, Phobos Framework for Ostranauts) stay in
   their own repositories.
@@ -19,22 +19,32 @@ questions in a short summary instead of a long read. One shared home for code th
 - **Nothing from the games is committed.** No game files, saves, logs, assemblies, decompiled code or other
   authors' mod files. Test fixtures are written by hand.
 
-## Planned tools
+## Run a tool
+
+Python 3.10 or newer, standard library only; nothing to install.
+
+```text
+cd python
+python -m phobos_modkit rimworld-log           summarise RimWorld's Player.log against the run before
+python -m phobos_modkit rimworld-log --show ID one message in full
+```
+
+## Tools
 
 Proposed on 7 Nov 2026 in phobos-rimworld's
 [analysis tooling record](https://github.com/phobos-dthorga/phobos-rimworld/blob/main/docs/development/analysis-tooling.md),
 in order of expected saving.
 
-| # | Tool | What it answers | Language |
-| --- | --- | --- | --- |
-| 1 | Log triage | What went wrong this run, which mod it came from, what is new since last run | Python |
-| 2 | Save index and query | Where things are in a large XML save; what changed between two saves | Rust |
-| 3 | Mod and Def index (RimWorld) | Which mod defines or patches something, in the player's load order | Python |
-| 4 | Assembly metadata reader | Which mods patch a method; what constants a DLL holds; does a consumer still match its provider | C# |
-| 5 | Workshop research | What players report about a mod lately; supported versions; last update | Python |
-| 6 | Startup sessions (RimWorld) | Load-time history and what changed between launches | Python |
-| 7 | Version readiness scan | Which mods declare the new game version, and which use risky techniques | Python |
-| 8 | Release tooling | Changelog checks, release notes, constants, doc links, layout rules | Python |
+| # | Tool | What it answers | Language | Status |
+| --- | --- | --- | --- | --- |
+| 1 | [Log triage](docs/rimworld-log.md) (RimWorld) | What went wrong this run, which mod it came from, what is new since last run | Python | Built: 0.1.0 |
+| 2 | Save index and query | Where things are in a large XML save; what changed between two saves | Rust | Planned |
+| 3 | Mod and Def index (RimWorld) | Which mod defines or patches something, in the player's load order | Python | Planned |
+| 4 | Assembly metadata reader | Which mods patch a method; what constants a DLL holds; does a consumer still match its provider | C# | Planned |
+| 5 | Workshop research | What players report about a mod lately; supported versions; last update | Python | Planned |
+| 6 | Startup sessions (RimWorld) | Load-time history and what changed between launches | Python | Planned |
+| 7 | Version readiness scan | Which mods declare the new game version, and which use risky techniques | Python | Planned |
+| 8 | Release tooling | Changelog checks, release notes, constants, doc links, layout rules | Python | Planned |
 
 ## How a repository uses it
 
@@ -52,10 +62,11 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | --- | --- |
 | [docs/project-direction.md](docs/project-direction.md) | What belongs here, the three layers, languages, consumers |
 | [docs/migration.md](docs/migration.md) | Scripts copied across the Phobos repositories and where each one moves |
-| `python/phobos_modkit/` | Standard-library Python package (planned) |
+| [docs/rimworld-log.md](docs/rimworld-log.md) | How to run RimWorld log triage and read its summary |
+| `python/phobos_modkit/` | Standard-library Python package: `logs/` (game-free triage), `games/rimworld/` (the adapter) |
 | `crates/` | Rust tools (planned) |
 | `dotnet/` | C# tools (planned) |
-| `fixtures/`, `tests/` | Hand-written test data and tests (planned) |
+| `fixtures/`, `tests/` | Hand-written test data and the tests: `python -m unittest discover -s tests` |
 
 ## Licence
 

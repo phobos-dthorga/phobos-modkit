@@ -1,0 +1,27 @@
+Mono path[0] = 'C:/Games/RimWorld/RimWorldWin64_Data/Managed'
+Initialize engine version: 2022.3.0f1
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+RimWorld 1.6.9999 rev1
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Exception ticking Thing_Example123456: System.NullReferenceException: Object reference not set to an instance of an object
+[Ref ABCDEF12]
+  at ExampleWidgets.CompExample.CompTick () [0x00000] in <00000000000000000000000000000000>:0
+  at Verse.ThingWithComps.Tick () [0x00000] in <00000000000000000000000000000000>:0
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+Verse.Log:Error (string)
+Verse.TickManager:DoSingleTick ()
+
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
+Exception ticking Thing_Example654321: System.NullReferenceException: Object reference not set to an instance of an object
+[Ref ABCDEF12]
+  at ExampleWidgets.CompExample.CompTick () [0x00000] in <00000000000000000000000000000000>:0
+  at Verse.ThingWithComps.Tick () [0x00000] in <00000000000000000000000000000000>:0
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+Verse.Log:Error (string)
+Verse.TickManager:DoSingleTick ()
+
+(Filename: C:\buildslave\unity\build\Runtime/Export/Debug/Debug.bindings.h Line: 39)
+
