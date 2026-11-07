@@ -20,7 +20,12 @@ about a second and a half; later questions take well under a second until the sa
 - **Grids name their Defs through the Def index** of the installed mods (see [the Def index](rimworld-defs.md)),
   built on first use. A save made with other mods may show some cells as `#number`; `--no-names` skips the mods.
 - **`diff` compares by ID.** Things are matched by their ID and hediffs by their load ID, both kept for life; a
-  thing destroyed and rebuilt is a different thing.
+  thing destroyed and rebuilt is a different thing. World objects are matched by their ID too, and component values
+  by component class, map and path; narrow the component sections with `--component`, as tick counters change in
+  every save.
+- **A mod's saved state is readable** through `components`: every value with text inside the game's, the world's
+  and each map's components, with its path inside the component. A mod that keeps its state elsewhere (in a thing's
+  comp, a Def, its own file) is not covered.
 - Checked against RimWorld 1.7.5000 saves (November 2026).
 
 ## Run it
@@ -35,7 +40,10 @@ python -m phobos_modkit rimworld-save schema --under savegame/game/maps/li --dep
 python -m phobos_modkit rimworld-save grid --map 0                   every grid layer of a map, counted
 python -m phobos_modkit rimworld-save grid --kind gas --render       one layer, with a text picture
 python -m phobos_modkit rimworld-save grid --at 137,266              every layer at one cell, and what stands there
+python -m phobos_modkit rimworld-save world --faction "Ryūmon*"     one faction's settlements and sites
+python -m phobos_modkit rimworld-save components --class "*RimPacts*" --path "defendMission/*"
 python -m phobos_modkit rimworld-save diff Autosave-12               what changed since an earlier save
+python -m phobos_modkit rimworld-save diff PG2 --component "*RimPacts*"   the same, one mod's state only
 python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP BY def"
 ```
 
@@ -48,8 +56,10 @@ python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP
 | `pawns` | Name, ID, race, kind, faction, place, map and position, age, health state, how many hediffs | `--faction` (`player` or a name), `--name`, `--kind`, `--place` |
 | `hediffs` | Hediffs counted by def, or one pawn's in full with body part, severity, age and source | `--pawn`, `--def` |
 | `find ID` | A thing by its ID, with every thing holding it out to the map or world | |
+| `world` | World objects counted by def and faction, or listed with ID, name, faction and tile | `--def`, `--faction`, `--name` |
+| `components` | The game's, the world's and maps' components with how many values each holds, or the values inside them with their paths | `--class`, `--path`, `--value`, `--map` |
 | `grid` | A map's layers counted: terrain, foundations (bridges and the like), roofs, each gas, fog, snow, pollution and deep resources; one layer in full with a text picture (north up); or every layer at one cell with the things standing there | `--map`, `--kind`, `--render`, `--gas`, `--columns`, `--at X,Z`, `--area X1,Z1,X2,Z2`, `--no-names` |
-| `diff OTHER` | What changed since another save: counts, things that appeared and went by def, stacks that grew or shrank, pawns that moved, arrived or left, and pawns' hediffs gained, lost, worse or better | `--faction` (`player` by default, `any`, or a faction) |
+| `diff OTHER` | What changed since another save: counts, things that appeared and went by def, stacks that grew or shrank, pawns that moved, arrived or left, pawns' hediffs gained, lost, worse or better, world objects that changed faction, appeared or went, and component values that changed and lists that grew or shrank | `--faction` (`player` by default, `any`, or a faction), `--component` |
 | `sql QUERY` | Any query; the index is opened read-only, so nothing can change it | |
 
 Every report takes `--save NAME` (default: the newest save), `--saves`, `--cache`, `--index FILE` (read an index
@@ -70,6 +80,9 @@ directly), `--rebuild`, `--top N`, `--json` and `--no-redact`. Filters ignore ca
 | `thing_place` (view) | For each thing, the outermost thing holding it, whether it is held, its place and map |
 | `pawn_view` (view) | Pawns with display name, race, faction name, place, map, position and age in years |
 | `map_grid` | Each map's grids as the save holds them (base64 text), with the grid's element and owner |
+| `world_object` | Every world object (settlements, sites, caravans, destroyed settlements): def, class, ID, tile, faction, name |
+| `component`, `component_value` | The game's, the world's and each map's components (class, position, map), and every value with text inside one (its tag, place among same-named siblings and text); `element_path` gives its full path |
+| `world_object_view`, `component_view` (views) | World objects with their faction's name and def; component values with the component's class, scope, map and the path inside the component |
 | `element_path` | Every element path in the save and how often it occurs |
 | `meta` | The source save's name, size and time, the schema's hash, the indexer's version |
 
@@ -102,4 +115,6 @@ one. That tie order is approximated, so names whose number moved are marked `(?)
 | Any report afterwards | about 0.6 s, mostly starting Python |
 | Decode all ten grids of a 325 by 325 map | 0.02 s |
 | `diff` of two indexed saves, two in-game days apart | about 4 s |
+| Index PG3 (365 to 420 MB, 11.3 million elements, with 1.08 million component values; 8 Nov 2026) | 3.5 s |
+| `diff` with `--component` of two such saves | about 6 s |
 | The same save read once by Python's own XML reader, for comparison | 7.6 s |

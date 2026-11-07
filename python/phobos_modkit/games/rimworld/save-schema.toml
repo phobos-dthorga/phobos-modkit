@@ -365,3 +365,92 @@ JOIN thing t ON t.id = p.id
 LEFT JOIN faction f ON t.faction = 'Faction_' || f.load_id
 LEFT JOIN thing_place pl ON pl.id = p.id
 """
+
+# World objects: settlements, sites, caravans, destroyed settlements and the like. A world object keeps its ID for
+# life, so the same ID in two saves is the same object; its faction is a reference such as Faction_12.
+[[table]]
+name = "world_object"
+match = ["savegame/game/world/worldObjects/worldObjects/li"]
+require = ["def"]
+indexes = ["object_id", "faction"]
+[[table.column]]
+name = "def"
+path = "def"
+[[table.column]]
+name = "class"
+attr = "Class"
+[[table.column]]
+name = "object_id"
+path = "ID"
+type = "int"
+[[table.column]]
+name = "tile"
+path = "tile"
+[[table.column]]
+name = "faction"
+path = "faction"
+[[table.column]]
+name = "name"
+path = "nameInt"
+
+# Components: the game's, the world's and each map's (their Class is the component's C# type, often a mod's).
+# Every value inside one with text of its own is a component_value row; containers without text are left out, and the
+# row's element path (through path_id) says where in the component it sits.
+[[table]]
+name = "component"
+match = ["savegame/game/components/li", "savegame/game/world/components/li", "savegame/game/maps/li/components/li"]
+[[table.column]]
+name = "class"
+attr = "Class"
+[[table.column]]
+name = "position"
+index = true
+[[table.column]]
+name = "map"
+parent = "map"
+
+[[table]]
+name = "component_value"
+match = [
+    "savegame/game/components/li/**",
+    "savegame/game/world/components/li/**",
+    "savegame/game/maps/li/components/li/**",
+]
+require = ["value"]
+indexes = ["component"]
+[[table.column]]
+name = "component"
+parent = "component"
+[[table.column]]
+name = "tag"
+tag = "self"
+[[table.column]]
+name = "position"
+index = true
+[[table.column]]
+name = "value"
+path = ""
+
+[[view]]
+name = "world_object_view"
+sql = """
+SELECT w.id, w.object_id, w.def, w.class, w.name, w.tile, w.faction, f.name AS faction_name, f.def AS faction_def
+FROM world_object w
+LEFT JOIN faction f ON w.faction = 'Faction_' || f.load_id
+"""
+
+# A component's values with the component's class, its map's position (none for the game's and the world's) and the
+# path inside the component, such as spectate/attacker.
+[[view]]
+name = "component_view"
+sql = """
+SELECT v.id, c.id AS component_id, c.class AS component,
+       CASE WHEN ce.path LIKE 'savegame/game/maps/%' THEN 'map'
+            WHEN ce.path LIKE 'savegame/game/world/%' THEN 'world' ELSE 'game' END AS scope,
+       m.position AS map, SUBSTR(e.path, LENGTH(ce.path) + 2) AS path, v.path_id, v.position, v.value
+FROM component_value v
+JOIN component c ON c.id = v.component
+JOIN element_path e ON e.id = v.path_id
+JOIN element_path ce ON ce.id = c.path_id
+LEFT JOIN map m ON m.id = c.map
+"""

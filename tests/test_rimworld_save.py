@@ -200,6 +200,25 @@ class Reports(Folders):
         self.assertEqual([r[0] for r in section.table.rows], ["Apparel_Parka103", "Human200"])
         self.assertIn("No thing has that ID", render_markdown(reports.find(self.conn, "Nothing1")))
 
+    def test_world_objects_counted_and_listed(self):
+        counted = self.rows(reports.world(self.conn))
+        self.assertIn(("Settlement", "Example Raiders", 1), counted)
+        listed = self.rows(reports.world(self.conn, faction="Example Raiders"))
+        self.assertEqual([(r[0], r[2]) for r in listed], [(3, None), (2, "Raider Camp")])
+        self.assertEqual(self.rows(reports.world(self.conn, def_="Example.*"))[0][1], "Example_Site")
+
+    def test_components_and_their_values(self):
+        listed = {r[0]: r for r in self.rows(reports.components(self.conn))}
+        self.assertEqual(listed["Example.WorldComponent_Wars"][1:], ("world", None, 5))
+        self.assertEqual(listed["Example.MapComponent_Alarm"][1:], ("map", 0, 1))
+        values = self.rows(reports.components(self.conn, cls="*Wars"))
+        self.assertEqual([(r[2], r[3]) for r in values], [("warActive", "True"), ("battle/attacker", "Faction_2"),
+                                                           ("battle/stage", "3"), ("history/li/tick", "100"),
+                                                           ("history/li/tick", "200")])
+        self.assertEqual(self.rows(reports.components(self.conn, value="Faction_2"))[0][2], "battle/attacker")
+        self.assertEqual(self.rows(reports.components(self.conn, path="armed", map_=0))[0][0],
+                         "Example.MapComponent_Alarm")
+
     def test_schema_paths_with_counts(self):
         rows = self.rows(reports.schema(self.conn, under="savegame/meta", depth=1))
         self.assertIn((1, "savegame/meta/modIds"), rows)
@@ -230,7 +249,8 @@ class Command(Folders):
         self.assertIn("reused", self.run_main("pawns")[1])
 
     def test_each_report_runs(self):
-        for args in (["schema"], ["things", "--list", "--held"], ["pawns", "--faction", "player"],
+        for args in (["schema"], ["things", "--list", "--held"], ["pawns", "--faction", "player"], ["world"],
+                     ["world", "--name", "Raider*"], ["components"], ["components", "--class", "*Alarm"],
                      ["hediffs", "--pawn", "Annie"], ["find", "ChunkA*"], ["sql", "SELECT 1"], ["index"]):
             code, text = self.run_main(*args)
             self.assertEqual(code, EXIT_OK, args)

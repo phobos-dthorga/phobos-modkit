@@ -9,6 +9,8 @@
     python -m phobos_modkit rimworld-save grid --map 0                every grid layer of a map, counted
     python -m phobos_modkit rimworld-save grid --kind gas --render    one layer, with a text picture
     python -m phobos_modkit rimworld-save grid --at 120,85            every layer at one cell, and what stands there
+    python -m phobos_modkit rimworld-save world --faction "Example*"   one faction's settlements and sites
+    python -m phobos_modkit rimworld-save components --class "*Wars*"  a mod's saved state, value by value
     python -m phobos_modkit rimworld-save diff Autosave-3             what changed since another save
     python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP BY def"
 
@@ -37,7 +39,8 @@ from . import save_maps
 from . import save_reports as reports
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
-REPORTS = ("summary", "index", "schema", "things", "pawns", "hediffs", "find", "grid", "diff", "sql")
+REPORTS = ("summary", "index", "schema", "things", "pawns", "hediffs", "find", "world", "components", "grid", "diff",
+           "sql")
 
 
 def _parser():
@@ -83,6 +86,16 @@ def _parser():
     h.add_argument("--def", dest="def_", help="hediff def; * and ? are wildcards")
     f = sub.add_parser("find", parents=[common], help="a thing by its ID, with what holds it")
     f.add_argument("thing_id", help="e.g. ChunkA8061017; * and ? are wildcards")
+    o = sub.add_parser("world", parents=[common], help="world objects: settlements, sites, caravans, by faction")
+    o.add_argument("--def", dest="def_", help="world object def or class, e.g. Settlement; * and ? are wildcards")
+    o.add_argument("--faction", help="a faction's name or def")
+    o.add_argument("--name", help="a world object's name")
+    k = sub.add_parser("components", parents=[common], help="the game's, world's and maps' components (mods' saved "
+                                                           "state) and the values inside them")
+    k.add_argument("--class", dest="cls", help="component class, e.g. *RimPacts*; lists its values")
+    k.add_argument("--path", help="path inside the component, e.g. spectate/*")
+    k.add_argument("--value", help="a value, e.g. Faction_12")
+    k.add_argument("--map", type=int, help="map position, for map components")
     g = sub.add_parser("grid", parents=[common], help="a map's grids: terrain, roofs, gas, fog, snow, pollution, "
                                                      "deep resources")
     g.add_argument("--map", type=int, help="map position (default: the map the save was on)")
@@ -101,6 +114,7 @@ def _parser():
     d.add_argument("other", help="the save to compare with (a name or path), usually an earlier one")
     d.add_argument("--faction", default="player", help="whose pawns and hediffs to compare: player (default), any, "
                                                        "or a faction's name or def")
+    d.add_argument("--component", help="compare only components whose class matches, e.g. *RimPacts*")
     q = sub.add_parser("sql", parents=[common], help="any read-only SQL query over the index")
     q.add_argument("query")
     return p
@@ -151,7 +165,7 @@ def _report(conn, args, environ=None, settings_file=None, other=None):
     if args.report == "diff":
         other_index, other_name, this_name = other
         return save_diff.diff(conn, Path(other_index).resolve().as_uri() + "?mode=ro", other_name, this_name,
-                              args.faction, top)
+                              args.faction, top, args.component)
     if args.report in ("summary", "index"):
         return reports.summary(conn, top=min(top, 10) if args.report == "summary" else 10)
     if args.report == "schema":
@@ -164,6 +178,10 @@ def _report(conn, args, environ=None, settings_file=None, other=None):
         return reports.hediffs(conn, args.pawn, args.def_, top)
     if args.report == "find":
         return reports.find(conn, args.thing_id, top)
+    if args.report == "world":
+        return reports.world(conn, args.def_, args.faction, args.name, top)
+    if args.report == "components":
+        return reports.components(conn, args.cls, args.path, args.value, args.map, top)
     return reports.sql(conn, args.query, top)
 
 

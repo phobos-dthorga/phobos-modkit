@@ -170,6 +170,60 @@ def find(conn, thing_id, top=20):
     return report
 
 
+def world(conn, def_=None, faction=None, name=None, top=50):
+    """World objects (settlements, sites, caravans): counted by def and faction, or listed when filtered."""
+    f = Filters()
+    f.text("w.def", def_, "w.class")
+    f.text("w.faction_name", faction, "w.faction_def", "w.faction")
+    f.text("w.name", name)
+    report = Report("World objects")
+    if def_ or faction or name:
+        sql = f"""SELECT w.object_id, w.def, w.name, w.faction_name, w.tile FROM world_object_view w{f.where}
+                  ORDER BY w.faction_name IS NULL, w.faction_name, w.name, w.object_id"""
+        headers = ["ID", "Def", "Name", "Faction", "Tile"]
+    else:
+        sql = """SELECT w.def, w.faction_name, COUNT(*) FROM world_object_view w
+                 GROUP BY w.def, w.faction_name ORDER BY COUNT(*) DESC, w.def, w.faction_name"""
+        headers = ["Def", "Faction", "World objects"]
+        report.lines.append("Filter with --def, --faction or --name to list them.")
+    report.sections.append(_section("World objects", headers, _rows(conn, sql, f.params, top),
+                                   _count(conn, sql, f.params)))
+    return report
+
+
+def components(conn, cls=None, path=None, value=None, map_=None, top=50):
+    """The game's, the world's and maps' components (often mods' saved state), or the values inside them.
+
+    Without --class, --path or --value it lists the components with how many values each holds; with one it lists
+    the values, each with its path inside its component.
+    """
+    report = Report("Components")
+    if cls or path or value:
+        f = Filters()
+        f.text("v.component", cls)
+        f.text("v.path", path)
+        f.text("v.value", value)
+        f.equal("v.map", map_)
+        sql = f"""SELECT v.component, v.map, v.path, v.value FROM component_view v{f.where}
+                  ORDER BY v.component, v.map IS NOT NULL, v.map, v.id"""
+        report.lines.append("Values in save order. A list's items share a path; containers without text of their own "
+                            "are left out.")
+        report.sections.append(_section("Values", ["Component", "Map", "Path", "Value"],
+                                       _rows(conn, sql, f.params, top), _count(conn, sql, f.params)))
+        return report
+    f = Filters()
+    f.equal("m.position", map_)
+    sql = f"""SELECT c.class, CASE WHEN e.path LIKE 'savegame/game/maps/%' THEN 'map'
+                                   WHEN e.path LIKE 'savegame/game/world/%' THEN 'world' ELSE 'game' END,
+                     m.position, (SELECT COUNT(*) FROM component_value v WHERE v.component = c.id) AS n
+              FROM component c JOIN element_path e ON e.id = c.path_id LEFT JOIN map m ON m.id = c.map{f.where}
+              ORDER BY n DESC, c.class, m.position"""
+    report.lines.append("Pass --class (with * wildcards), --path or --value to see the values.")
+    report.sections.append(_section("Components", ["Class", "Scope", "Map", "Values"],
+                                   _rows(conn, sql, f.params, top), _count(conn, sql, f.params)))
+    return report
+
+
 def sql(conn, query, top=100):
     """Any read-only query; the index cannot be changed through this connection."""
     cursor = conn.execute(query)
@@ -177,7 +231,8 @@ def sql(conn, query, top=100):
     rows = [tuple(r) for r in cursor.fetchmany(top + 1)]
     report = Report("Query")
     report.lines.append("Tables: game, mod_id, mod_name, mod_steam_id, faction, map, map_grid, thing, pawn, hediff, "
-                        "trait, skill, element_path, meta. Views: mods, thing_place, pawn_view.")
+                        "trait, skill, world_object, component, component_value, element_path, meta. Views: mods, "
+                        "thing_place, pawn_view, world_object_view, component_view.")
     if len(rows) > top:
         report.lines.append(f"Only the first {top:,} rows are shown; raise --top to see more.")
     report.sections.append(_section("Result", headers, rows[:top]))

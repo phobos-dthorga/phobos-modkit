@@ -5,6 +5,7 @@ life, so one in both saves is the same thing; a hediff keeps its load ID. Times 
 """
 from __future__ import annotations
 
+from ...query import like
 from ...report import Report, Table
 from .save_reports import PLAYER_FACTION_PREFIX, TICKS_PER_DAY
 
@@ -17,15 +18,15 @@ def _faction_clause(alias, faction):
     return f"({alias}.faction_name LIKE ? OR {alias}.faction_def LIKE ?)", (faction, faction)
 
 
-def diff(conn, before_uri, before_name, after_name, faction="player", top=30):
+def diff(conn, before_uri, before_name, after_name, faction="player", top=30, component=None):
     conn.execute("ATTACH DATABASE ? AS before", (before_uri,))
     try:
-        return _diff(conn, before_name, after_name, faction, top)
+        return _diff(conn, before_name, after_name, faction, top, component)
     finally:
         conn.execute("DETACH DATABASE before")
 
 
-def _diff(conn, before_name, after_name, faction, top):
+def _diff(conn, before_name, after_name, faction, top, component=None):
     one = lambda sql, params=(): conn.execute(sql, params).fetchone()[0]
     rows = lambda sql, params=(): [tuple(r) for r in conn.execute(sql, params).fetchall()]
     report = Report(f"{after_name} against {before_name}")
@@ -101,4 +102,67 @@ def _diff(conn, before_name, after_name, faction, top):
         ["Pawn", "Change", "Hediff", "Part index", f"Severity in {before_name}", f"Severity in {after_name}"],
         changes[:top], len(changes)))
     report.lines.append("Hediffs of pawns missing from either save are not compared; see the pawn table for them.")
+    _world_objects(report, rows, before_name, after_name, top)
+    _components(report, rows, before_name, after_name, top, component)
     return report
+
+
+def _world_objects(report, rows, before_name, after_name, top):
+    """Settlements and other world objects that changed hands, appeared or went, matched by their lifelong ID."""
+    view = """SELECT w.object_id, w.def, w.name, w.faction, f.name AS faction_name
+              FROM {db}.world_object w LEFT JOIN {db}.faction f ON w.faction = 'Faction_' || f.load_id"""
+    changed = rows(f"""
+        WITH a AS ({view.format(db="main")}), b AS ({view.format(db="before")})
+        SELECT a.object_id, a.def, COALESCE(a.name, b.name), COALESCE(b.faction_name, b.faction),
+               COALESCE(a.faction_name, a.faction)
+        FROM a JOIN b ON b.object_id = a.object_id WHERE a.faction IS NOT b.faction
+        ORDER BY 4, 5, 3, 1""")
+    report.section("World objects whose faction changed", Table(
+        ["ID", "Def", "Name", f"Faction in {before_name}", f"Faction in {after_name}"], changed[:top], len(changed)))
+    came = rows(f"""
+        WITH a AS ({view.format(db="main")}), b AS ({view.format(db="before")})
+        SELECT 'appeared', a.object_id, a.def, a.name, COALESCE(a.faction_name, a.faction) FROM a
+            WHERE NOT EXISTS (SELECT 1 FROM b WHERE b.object_id = a.object_id)
+        UNION ALL
+        SELECT 'went', b.object_id, b.def, b.name, COALESCE(b.faction_name, b.faction) FROM b
+            WHERE NOT EXISTS (SELECT 1 FROM a WHERE a.object_id = b.object_id)
+        ORDER BY 1, 3, 2""")
+    report.section("World objects that appeared or went", Table(["Change", "ID", "Def", "Name", "Faction"],
+                                                                came[:top], len(came)))
+
+
+def _components(report, rows, before_name, after_name, top, component=None):
+    """Values inside the game's, the world's and maps' components (often mods' saved state) that changed.
+
+    A value is matched by its component's class, the map's position and its path inside the component. Where a path
+    occurs once in both saves its value is compared; where it occurs more often (a list), only the count is.
+    """
+    only = "WHERE c.class LIKE ? ESCAPE '\\'" if component else ""
+    keyed = """SELECT c.class AS component, m.position AS map, e.path, COUNT(*) AS n, MIN(v.value) AS value
+               FROM {db}.component_value v JOIN {db}.component c ON c.id = v.component
+               JOIN {db}.element_path e ON e.id = v.path_id LEFT JOIN {db}.map m ON m.id = c.map
+               {only} GROUP BY c.class, m.position, e.path"""
+    joined = f"""
+        WITH a AS ({keyed.format(db="main", only=only)}), b AS ({keyed.format(db="before", only=only)})
+        SELECT a.component, a.map, a.path, b.n, a.n, b.value, a.value
+        FROM a JOIN b ON b.component IS a.component AND b.map IS a.map AND b.path = a.path"""
+    found = rows(joined, (like(component),) * 2 if component else ())
+    values = [(c, m, _inner(p), bv, av) for c, m, p, bn, an, bv, av in found if bn == 1 and an == 1 and bv != av]
+    values.sort(key=lambda r: (r[0] or "", -1 if r[1] is None else r[1], r[2]))
+    report.section("Component values that changed", Table(
+        ["Component", "Map", "Path", before_name, after_name], values[:top], len(values)))
+    lists = [(c, m, _inner(p), bn, an, f"{an - bn:+,}") for c, m, p, bn, an, _, _ in found
+             if (bn > 1 or an > 1) and bn != an]
+    lists.sort(key=lambda r: (-abs(r[4] - r[3]), r[0] or "", r[2]))
+    report.section("Component lists that grew or shrank", Table(
+        ["Component", "Map", "Path", before_name, after_name, "Change"], lists[:top], len(lists)))
+    report.lines.append("Component values are matched by component class, map and path; values only in one save "
+                        "are not listed." + (f" Only components matching {component} are compared." if component
+                                             else " Narrow them with --component."))
+
+
+def _inner(path):
+    """A component value's path inside its component: savegame/game/world/components/li/a/b becomes a/b."""
+    marker = "/components/li/"
+    at = path.find(marker)
+    return path[at + len(marker):] if at >= 0 else path

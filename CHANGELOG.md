@@ -4,6 +4,23 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-08
+
+### Added
+
+- rimworld-save world: world objects (settlements, sites, caravans) counted by def and faction, or listed with ID, name, faction and tile.
+- rimworld-save components: the game's, the world's and each map's components with their value counts, or every value with text inside them with its path in the component, so a mod's saved state (a diplomacy mod's wars and battles, for example) can be read without opening the save.
+- rimworld-save diff now lists world objects that changed faction, appeared or went (by ID), component values that changed and component lists that grew or shrank; --component narrows those sections to matching component classes.
+- The RimWorld save schema gains the world_object, component and component_value tables and the world_object_view and component_view views. 3 new tests and a larger fixture save.
+
+### Changed
+
+- The save schema changed, so indexes rebuild on their next use. An index is larger and slower to build: about 1.1 million more rows and 3.5 s instead of about 2 s on the owner's 11-million-element save.
+
+### Compatibility and limits
+
+- Component values are matched between saves by class, map position and path, so items of a list are compared only by count. State a mod keeps outside components is not covered.
+
 ### Changed
 
 - AGENTS.md now holds the rules learned while building the first tools: run every check before a commit and gate the commit on their exit codes; a version bump changes the package, Cargo.toml and Cargo.lock together, and pushed tags are never moved; set CARGO_TARGET_DIR outside the repository when developing; a tool's first change in a consumer adds that consumer's AGENTS.md rule; report filters go through phobos_modkit.query. CONTRIBUTING.md says how to run the checks. Documents only; no tool changed.

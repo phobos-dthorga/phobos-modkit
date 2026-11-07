@@ -183,15 +183,35 @@ class Diff(SaveIndex):
         text = text[:meal_start] + text[meal_end:]
         text = text.replace("<severity>4.5</severity>", "<severity>2</severity>")
         text = text.replace("<def>Example_Addiction</def>", "<def>Example_Bruise</def>")
+        text = text.replace("<faction>Faction_2</faction>\n            <nameInt>Raider Camp",
+                            "<faction>Faction_1</faction>\n            <nameInt>Raider Camp")
+        text = text.replace("<warActive>True</warActive>", "<warActive>False</warActive>")
+        text = text.replace("<li>\n              <tick>200</tick>\n            </li>",
+                            "<li>\n              <tick>200</tick>\n            </li>\n            <li>\n"
+                            "              <tick>300</tick>\n            </li>")
+        site_start = text.index('<li Class="Example.Site">')
+        text = text[:site_start] + text[text.index("</li>", site_start) + len("</li>"):]
         after = self.index("After.rws", text)
         with closing(saves.open_read_only(after)) as conn:
             report = save_diff.diff(conn, Path(before).resolve().as_uri() + "?mode=ro", "Before", "After")
+            alarm_only = save_diff.diff(conn, Path(before).resolve().as_uri() + "?mode=ro", "Before", "After",
+                                        component="*Alarm")
         self.assertIn("After is 2.0 in-game days after Before.", report.lines[0])
         tables = {s.heading: s.table.rows for s in report.sections}
         self.assertEqual(tables["Things that went, by def"], [("MealSimple", 1)])
         self.assertEqual(tables["Stacks that grew or shrank, by def"], [("Steel", "-15", 1)])
         hediffs = sorted((r[1], r[2]) for r in tables["Hediffs of the player's pawns gained, lost or changed"])
         self.assertEqual(hediffs, [("better", "Gunshot"), ("gained", "Example_Bruise"), ("lost", "Example_Addiction")])
+        self.assertEqual(tables["World objects whose faction changed"],
+                         [(2, "Settlement", "Raider Camp", "Example Raiders", "Example Colony")])
+        self.assertEqual(tables["World objects that appeared or went"],
+                         [("went", 3, "Example_Site", None, "Example Raiders")])
+        self.assertEqual(tables["Component values that changed"],
+                         [("Example.WorldComponent_Wars", None, "warActive", "True", "False")])
+        self.assertEqual(tables["Component lists that grew or shrank"],
+                         [("Example.WorldComponent_Wars", None, "history/li/tick", 2, 3, "+1")])
+        narrowed = {s.heading: s.table.rows for s in alarm_only.sections}
+        self.assertEqual(narrowed["Component values that changed"], [])
 
 
 @needs_indexer

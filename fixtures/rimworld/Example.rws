@@ -95,6 +95,47 @@
           </li>
         </pawnsDead>
       </worldPawns>
+      <worldObjects>
+        <worldObjects>
+          <li Class="Settlement">
+            <def>Settlement</def>
+            <ID>1</ID>
+            <tile>120,0</tile>
+            <faction>Faction_1</faction>
+            <nameInt>Example Home</nameInt>
+          </li>
+          <li Class="Settlement">
+            <def>Settlement</def>
+            <ID>2</ID>
+            <tile>130,0</tile>
+            <faction>Faction_2</faction>
+            <nameInt>Raider Camp</nameInt>
+          </li>
+          <li Class="Example.Site">
+            <def>Example_Site</def>
+            <ID>3</ID>
+            <tile>140,0</tile>
+            <faction>Faction_2</faction>
+          </li>
+        </worldObjects>
+      </worldObjects>
+      <components>
+        <li Class="Example.WorldComponent_Wars">
+          <warActive>True</warActive>
+          <battle>
+            <attacker>Faction_2</attacker>
+            <stage>3</stage>
+          </battle>
+          <history>
+            <li>
+              <tick>100</tick>
+            </li>
+            <li>
+              <tick>200</tick>
+            </li>
+          </history>
+        </li>
+      </components>
     </world>
     <maps>
       <li>
@@ -126,6 +167,11 @@
             <arr>IAAAAAAAAAA=</arr>
           </grid>
         </pollutionGrid>
+        <components>
+          <li Class="Example.MapComponent_Alarm">
+            <armed>True</armed>
+          </li>
+        </components>
         <deepResourceGrid>
           <defGridDeflate>Y2DABL+bGegGAA==</defGridDeflate>
           <countGridDeflate>Y2DABDqMDHQDAA==</countGridDeflate>
