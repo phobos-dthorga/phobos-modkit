@@ -21,6 +21,7 @@ from phobos_modkit import native
 from phobos_modkit.games.rimworld import save as saves
 from phobos_modkit.games.rimworld import save_reports as reports
 from phobos_modkit.games.rimworld.save_cli import EXIT_OK, EXIT_USAGE, main
+from phobos_modkit.report import render_markdown
 
 FIXTURE = FIXTURES / "rimworld" / "Example.rws"
 INDEXER = native.tool_path("xml-index")
@@ -28,6 +29,8 @@ HAVE_INDEXER = INDEXER.is_file()
 if not HAVE_INDEXER and os.environ.get("PHOBOS_REQUIRE_NATIVE") == "1":
     raise RuntimeError(f"PHOBOS_REQUIRE_NATIVE=1 but {INDEXER} is not built")
 needs_indexer = unittest.skipUnless(HAVE_INDEXER, "xml-index is not built (cargo build --release)")
+# Command tests see no real environment, only the indexer the tests found.
+ONLY_INDEXER = {"PHOBOS_XML_INDEX": str(INDEXER)}
 
 
 class Folders(unittest.TestCase):
@@ -161,11 +164,11 @@ class Reports(Folders):
         super().tearDown()
 
     def rows(self, report, section=0):
-        return report.sections[section].rows
+        return report.sections[section].table.rows
 
     def test_summary(self):
         report = reports.summary(self.conn)
-        text = report.to_markdown()
+        text = render_markdown(report)
         self.assertIn('scenario "Example Landing". 62 in-game days (1.0 years)', text)
         self.assertIn("2 hours of play", text)
         self.assertEqual(self.rows(report, 0), [(0, "Base_Player", "50 x 50", 5, 1)])
@@ -194,8 +197,8 @@ class Reports(Folders):
 
     def test_find_walks_the_holders(self):
         (section,) = reports.find(self.conn, "Apparel_Parka103").sections
-        self.assertEqual([r[0] for r in section.rows], ["Apparel_Parka103", "Human200"])
-        self.assertIn("No thing has that ID", reports.find(self.conn, "Nothing1").to_markdown())
+        self.assertEqual([r[0] for r in section.table.rows], ["Apparel_Parka103", "Human200"])
+        self.assertIn("No thing has that ID", render_markdown(reports.find(self.conn, "Nothing1")))
 
     def test_schema_paths_with_counts(self):
         rows = self.rows(reports.schema(self.conn, under="savegame/meta", depth=1))
@@ -208,7 +211,7 @@ class Reports(Folders):
             reports.sql(self.conn, "DELETE FROM thing")
 
     def test_tables_say_when_rows_were_cut(self):
-        text = reports.things(self.conn, top=2).to_markdown()
+        text = render_markdown(reports.things(self.conn, top=2))
         self.assertIn("Showing 2 of", text)
 
 
@@ -216,7 +219,7 @@ class Reports(Folders):
 class Command(Folders):
     def run_main(self, *args):
         out = io.StringIO()
-        code = main([*args, "--saves", str(self.saves), "--cache", str(self.cache)], environ={}, out=out)
+        code = main([*args, "--saves", str(self.saves), "--cache", str(self.cache)], environ=ONLY_INDEXER, out=out)
         return code, out.getvalue()
 
     def test_first_run_builds_and_the_next_reuses(self):
@@ -236,7 +239,7 @@ class Command(Folders):
     def test_json_and_reading_an_index_directly(self):
         code, text = self.run_main("pawns", "--json")
         data = json.loads(text)
-        self.assertEqual(data["report"]["sections"][0]["headers"][0], "Name")
+        self.assertEqual(data["report"]["sections"][0]["blocks"][0]["headers"][0], "Name")
         out = io.StringIO()
         index = self.cache / saves.CACHE_FOLDER / "Example.sqlite"
         self.assertEqual(main(["things", "--index", str(index)], environ={}, out=out), EXIT_OK)

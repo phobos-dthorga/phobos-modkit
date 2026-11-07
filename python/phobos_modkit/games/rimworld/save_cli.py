@@ -21,9 +21,9 @@ from pathlib import Path
 import sqlite3
 import sys
 
-from ...logs.render import home_redactor
+from ... import cache as derived
 from ...native import ToolMissing, build_tools
-from ...paths import cache_root
+from ...report import home_redactor, keep, render_json, render_markdown
 from . import paths
 from . import save as saves
 from . import save_reports as reports
@@ -104,7 +104,7 @@ def main(argv=None, settings_file=None, environ=None, out=None):
         argv.insert(0, "summary")
     args = _parser().parse_args(argv)
     settings_file = args.settings or settings_file
-    redact = (lambda text: text) if args.no_redact else home_redactor()
+    redact = keep if args.no_redact else home_redactor()
 
     try:
         if args.build_indexer:
@@ -118,7 +118,7 @@ def main(argv=None, settings_file=None, environ=None, out=None):
         else:
             folder = paths.saves_path(args.saves, environ, settings_file)
             save = saves.find_save(folder, args.save)
-            cache = cache_root(args.cache, environ, settings_file) / saves.CACHE_FOLDER
+            cache = derived.folder(saves.CACHE_FOLDER, args.cache, environ, settings_file)
             index, built = saves.ensure(save, cache, args.indexer, environ, args.rebuild or args.report == "index")
             source = save.name
         with closing(saves.open_read_only(index)) as conn:
@@ -139,8 +139,9 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     report.lines.insert(0, provenance)
 
     if args.json:
-        data = {"save": source, "index": redact(str(index)), "built": built is not None, "report": report.to_json()}
+        data = {"save": source, "index": redact(str(index)), "built": built is not None,
+                "report": render_json(report, redact)}
         out.write(json.dumps(data, indent=1, ensure_ascii=False, default=str) + "\n")
     else:
-        out.write(redact(report.to_markdown()) + "\n")
+        out.write(render_markdown(report, redact) + "\n")
     return EXIT_OK

@@ -51,6 +51,22 @@ most worth sharing, and keeping it beside the core keeps the core honest about w
 | Rust | The save indexer | Saves of about 300 MB are read on every question in Python (7.6 s per pass on a high-end PC); index once, query many needs a fast reader; one self-contained program |
 | C# | The assembly metadata reader | .NET's `System.Reflection.Metadata` reads assemblies without loading them, which keeps the rule against running other authors' code |
 
+## Shared frameworks inside the kit (7 Nov 2026)
+
+Agreed with the owner on 7 November 2026, after two tools had shown what repeats. Agent proposal, owner's go-ahead.
+
+| Framework | Module | What it gives every tool | Status |
+| --- | --- | --- | --- |
+| Report model | `phobos_modkit.report` | One way to build a report (paragraphs, bullets, tables, code) and render it as Markdown or JSON, with redaction applied to every piece of text and table cut-offs stated | Built (0.3.0); log triage and the save index use it |
+| Derived-data cache | `phobos_modkit.cache` | The cache folder, provenance stamps and hashes, a staleness check, frozen copies of files another program may be writing, removal of read-only files | Built (0.3.0); the save index uses it |
+| SQLite substrate | convention, in AGENTS.md | Every derived file is SQLite with a `meta` provenance table, so tools can read one another's data with ATTACH | Adopted; the mod and Def index is designed to it |
+| Game adapter contract | not built | Generic commands (`log`, `save`) with a game option, each game registering its adapter, instead of commands named by game | **Waits for a second game adapter** (FS25 log triage is the likely first); building it for one game would guess at the shape |
+
+Not adopted, and why: outside Python frameworks (click, pandas, rich) would break the standard-library rule that
+lets every Phobos repository run the kit with nothing installed; clap for Rust is not worth it for one command;
+sharing code with Phobos Scope would need a third repository for no present gain, since its reports are HTML for
+people and the kit's are Markdown for agents.
+
 ## How consumers use it
 
 - A pinned git submodule at `external/phobos-modkit`, as phobos-ostranauts pins Phobos Scope.
@@ -71,8 +87,10 @@ gives each tool's design.
 3. The save indexer's working slice, with RimWorld's schema. Done 7 Nov 2026 (0.2.0); see
    [RimWorld save index](rimworld-save.md). Agent choice: the Rust program only builds the index; the reports are
    Python, sharing the log tool's command line and Markdown, and read the index with Python's own SQLite.
-4. RimWorld's mod and Def index.
-5. The assembly metadata reader, Workshop research, startup sessions, the readiness scan and release
+4. The shared report model and derived-data cache. Done 7 Nov 2026 (0.3.0); see the table above.
+5. RimWorld's mod and Def index, written to SQLite in the cache like the save index, so a save's mod list and the
+   Defs those mods define can be joined in one query.
+6. The assembly metadata reader, Workshop research, startup sessions, the readiness scan and release
    tooling, as the need arises.
 
 Continuous integration runs the tests on Windows and Linux, as Phobos Scope does.

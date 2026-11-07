@@ -49,6 +49,20 @@ adapted to a tooling repository. The repository was created on 7 November 2026 a
 - Two forms: JSON for programs and a short Markdown summary for people and agent sessions. The summary is
   the point of the tool: counts, top items and differences, never raw dumps.
 - State every limit in the output itself (for example "patches not applied").
+- **Every report goes through `phobos_modkit.report`** (owner agreed, 7 November 2026): build a `Report` of
+  paragraphs, bullets, tables and code blocks and render it with `render_markdown` or `render_json`, which apply
+  redaction everywhere. Never hand-write Markdown in a tool. A tool may add its own richer JSON data export, as
+  log triage's is.
+
+## Derived data
+
+- **Derived data is SQLite with a `meta` table of provenance** (owner agreed, 7 November 2026): indexes, caches
+  and fetched pages live in the kit's cache folder (`phobos_modkit.cache.folder`), outside any cloud-synced
+  repository, and record what they were built from (`source`, `source_size`, `source_mtime_ns`, `schema_sha`,
+  `kit_version` and the like). Use `phobos_modkit.cache` to stamp, check and rebuild them, and its
+  `frozen_copy` to read a file another program may be writing. One SQLite substrate lets a question that
+  crosses tools be a single query, with ATTACH.
+- Rust tools build outside the repository too (`phobos_modkit.native.build_dir`).
 
 ## Languages
 

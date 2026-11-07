@@ -1,37 +1,25 @@
-"""Reports as a short Markdown summary for people and agent sessions, or as complete JSON for programs."""
+"""Log reports: a short Markdown summary built on the kit's report model, or complete JSON for programs.
+
+The Markdown goes through phobos_modkit.report, like every tool's. The JSON is this tool's own data export (format
+1), richer than a report: every group with its lines, evidence and first message.
+"""
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
-from ..markdown import cell as _cell
+from ..report import Bullets, Code, Report, Table, home_redactor, keep as _keep, render_markdown
 from .triage import clusters
+
+__all__ = ["DEFAULT_LEVELS", "group_detail", "home_redactor", "summary_report", "to_json", "to_markdown"]
 
 DEFAULT_LEVELS = ("FATAL", "ERROR", "WARN", "UNKNOWN")
 CLUSTERS_SHOWN = 10
+CHANGES_SHOWN = 10
 DETAIL_LINES = 60
 JSON_BODY_LINES = 80
 JSON_FORMAT = 1
-
-
-# ---- Privacy ----
-
-def home_redactor(home=None):
-    """A function that replaces the user's home folder with ~ in any text, whichever slashes the text uses."""
-    home = str(Path.home() if home is None else home).rstrip("\\/")
-    if len(home) < 3:
-        return lambda text: text
-    variants = {home, home.replace("\\", "/"), home.replace("/", "\\")}
-    pattern = re.compile("|".join(re.escape(v) for v in sorted(variants, key=len, reverse=True)), re.IGNORECASE)
-    return lambda text: pattern.sub("~", text)
-
-
-def _keep(text):
-    return text
-
-
-# ---- Shared formatting ----
-
+POINTS_AT_WIDTH = 100
+EXCEPTION_WIDTH = 160
 
 
 def _time_part(stamp):
@@ -67,113 +55,106 @@ def _points_at(group, limit=3):
     return "; ".join(shown)
 
 
-# ---- Markdown ----
+# ---- The summary ----
 
-def to_markdown(report, top=20, levels=DEFAULT_LEVELS, redact=None):
-    """A summary short enough to read whole: notices, counts, the top signatures and what changed."""
-    redact = redact or _keep
+def summary_report(report, top=20, levels=DEFAULT_LEVELS):
+    """The summary as a Report: notices, counts, the top signatures, shared exceptions and what changed."""
     log = report.log
-    out = [f"# Log triage: {log.name}", ""]
+    out = Report(f"Log triage: {log.name}")
     header = log.header
     summary = " ".join(header[k] for k in ("game", "version") if header.get(k))
     if header.get("started"):
         summary += f", started {header['started']}" if summary else f"Started {header['started']}"
-    out.append(f"{summary + '. ' if summary else ''}{log.line_total:,} lines, {len(log.entries):,} messages "
-               f"({log.layout} layout).")
+    out.lines.append(f"{summary + '. ' if summary else ''}{log.line_total:,} lines, {len(log.entries):,} messages "
+                     f"({log.layout} layout).")
     if report.comparison is not None:
-        out.append(f"Compared with {report.comparison.previous_name}.")
-    out.append("")
+        out.lines.append(f"Compared with {report.comparison.previous_name}.")
 
     if log.notices:
-        out += ["## Notices", ""]
-        out += [f"- {redact(n.text)}" for n in log.notices]
-        out.append("")
+        out.section("Notices", Bullets([n.text for n in log.notices]))
 
-    out += ["## Counts", "", "| Level | Messages | Signatures |", "| --- | --- | --- |"]
-    for level, (entries, signatures) in report.level_counts().items():
-        out.append(f"| {level} | {entries:,} | {signatures:,} |")
-    out.append("")
+    counts = out.section("Counts", Table(["Level", "Messages", "Signatures"],
+                                         [(level, e, s) for level, (e, s) in report.level_counts().items()]))
 
     shown = [g for g in report.groups if g.level in levels]
     if shown:
-        out += [f"## Signatures ({', '.join(l for l in levels if any(g.level == l for g in shown))}): "
-                f"top {min(top, len(shown))} of {len(shown)}", "",
-                "| ID | Count | Level | First seen | Message | Points at |", "| --- | --- | --- | --- | --- | --- |"]
-        for g in shown[:top]:
-            out.append(f"| {g.id} | {g.count:,} | {g.level} | {_where(g.first_time, g.first_line)} | "
-                       f"{_cell(redact(g.example.headline))} | {_cell(redact(_points_at(g)), 100)} |")
-        out.append("")
-        shared = [c for c in clusters(shown)][:CLUSTERS_SHOWN]
+        listed = ", ".join(l for l in levels if any(g.level == l for g in shown))
+        out.section(f"Signatures ({listed}): top {min(top, len(shown))} of {len(shown)}", Table(
+            ["ID", "Count", "Level", "First seen", "Message", "Points at"],
+            [(g.id, g.count, g.level, _where(g.first_time, g.first_line), g.example.headline, _points_at(g))
+             for g in shown[:top]],
+            widths={5: POINTS_AT_WIDTH}))
+        shared = clusters(shown)[:CLUSTERS_SHOWN]
         if shared:
-            out += ["## One exception, several messages", "",
-                    "These signatures' first messages share one exception trace, so each row is most likely one "
-                    "problem worded several ways.", "",
-                    "| Signatures | Messages | Exception | Points at |", "| --- | --- | --- | --- |"]
-            for c in shared:
-                ids = ", ".join(g.id for g in c.groups[:6]) + (f" (+{len(c.groups) - 6})" if len(c.groups) > 6 else "")
-                out.append(f"| {ids} | {c.count:,} | {_cell(redact(c.fingerprint), 160)} | "
-                           f"{_cell(redact(_points_at(c.groups[0])), 100)} |")
-            out.append("")
+            out.section("One exception, several messages",
+                        "These signatures' first messages share one exception trace, so each row is most likely one "
+                        "problem worded several ways.",
+                        Table(["Signatures", "Messages", "Exception", "Points at"],
+                              [(", ".join(g.id for g in c.groups[:6]) +
+                                (f" (+{len(c.groups) - 6})" if len(c.groups) > 6 else ""),
+                                c.count, c.fingerprint, _points_at(c.groups[0])) for c in shared],
+                              widths={2: EXCEPTION_WIDTH, 3: POINTS_AT_WIDTH}))
     else:
-        out += [f"No messages at the levels shown ({', '.join(levels)}).", ""]
+        counts.blocks.append(f"No messages at the levels shown ({', '.join(levels)}).")
 
     comparison = report.comparison
     if comparison is not None:
         pick = lambda changes: [c for c in changes if c.group.level in levels]
         new, gone, changed = pick(comparison.new), pick(comparison.gone), pick(comparison.changed)
-        out += [f"## Compared with {comparison.previous_name}", "",
-                f"{len(new):,} new, {len(gone):,} gone and {len(changed):,} changed signatures at the levels shown.",
-                ""]
+        out.section(f"Compared with {comparison.previous_name}",
+                    f"{len(new):,} new, {len(gone):,} gone and {len(changed):,} changed signatures at the levels "
+                    f"shown.")
         for title, changes in (("New", new), ("Gone", gone), ("Changed", changed)):
-            if not changes:
-                continue
-            out += [f"### {title}", "", "| ID | Before | Now | Level | Message |", "| --- | --- | --- | --- | --- |"]
-            for c in changes[:min(top, 10)]:
-                out.append(f"| {c.group.id} | {c.previous:,} | {c.current:,} | {c.group.level} | "
-                           f"{_cell(redact(c.group.example.headline))} |")
-            out.append("")
+            if changes:
+                out.section(title, Table(["ID", "Before", "Now", "Level", "Message"],
+                                         [(c.group.id, c.previous, c.current, c.group.level, c.group.example.headline)
+                                          for c in changes[:min(top, CHANGES_SHOWN)]]), level=3)
 
-    out += ["## Reading this", ""]
-    out.append("- Mods under \"Points at\" are named from evidence in the log: source lines, file paths, assemblies "
-               "and namespaces in exception traces, the code that wrote the message, and Harmony patches on the "
-               "stack. A mod named there was involved; it is not necessarily at fault.")
-    out.append("- Messages that differ only in numbers, IDs and codes share a signature. Show one in full with "
-               "`--show <ID>`.")
-    out += [f"- {redact(limit)}" for limit in log.limits]
-    out.append("")
-    return "\n".join(out)
+    out.section("Reading this", Bullets([
+        "Mods under \"Points at\" are named from evidence in the log: source lines, file paths, assemblies and "
+        "namespaces in exception traces, the code that wrote the message, and Harmony patches on the stack. A mod "
+        "named there was involved; it is not necessarily at fault.",
+        "Messages that differ only in numbers, IDs and codes share a signature. Show one in full with `--show <ID>`.",
+        *log.limits]))
+    return out
 
 
-def group_detail(report, group, max_lines=DETAIL_LINES, redact=None):
-    """One signature in full: its first message as written, its evidence and where else it occurs."""
-    redact = redact or _keep
+def to_markdown(report, top=20, levels=DEFAULT_LEVELS, redact=None):
+    """The summary, short enough to read whole."""
+    return render_markdown(summary_report(report, top, levels), redact)
+
+
+def detail_report(report, group, max_lines=DETAIL_LINES):
+    """One signature in full as a Report: its first message as written, its evidence and where else it occurs."""
     entry = group.example
-    out = [f"# Signature {group.id}", "",
-           f"{group.level}{' [' + group.category + ']' if group.category else ''}, {group.count:,} times, first at "
-           f"{_where(group.first_time, group.first_line)}, last at {_where(group.last_time, group.last_line)}.", "",
-           f"Signature: {redact(group.signature)}", ""]
+    out = Report(f"Signature {group.id}")
+    out.blocks.append(f"{group.level}{' [' + group.category + ']' if group.category else ''}, {group.count:,} times, "
+                      f"first at {_where(group.first_time, group.first_line)}, last at "
+                      f"{_where(group.last_time, group.last_line)}.")
+    out.blocks.append(f"Signature: {group.signature}")
     if entry.fingerprint:
-        out += [f"Exception: {redact(entry.fingerprint)}", ""]
+        out.blocks.append(f"Exception: {entry.fingerprint}")
         siblings = [g.id for g in report.groups
                     if g is not group and g.level == group.level and g.example is not None
                     and g.example.fingerprint == entry.fingerprint]
         if siblings:
-            out += [f"The same exception also starts: {', '.join(siblings[:20])}.", ""]
-    out += ["## First occurrence", "", "```text", redact(entry.headline)]
-    body = entry.body[:max_lines]
-    out += [redact(line) for line in body]
+            out.blocks.append(f"The same exception also starts: {', '.join(siblings[:20])}.")
+    lines = [entry.headline, *entry.body[:max_lines]]
     if len(entry.body) > max_lines:
-        out.append(f"... {len(entry.body) - max_lines:,} more lines")
-    out += ["```", ""]
+        lines.append(f"... {len(entry.body) - max_lines:,} more lines")
+    last = out.section("First occurrence", Code(lines))
     if group.evidence:
-        out += ["## Evidence", "", "| Kind | Clue | Mod | Messages |", "| --- | --- | --- | --- |"]
-        for evidence, count in sorted(group.evidence.items(), key=lambda item: (item[0].rank, -item[1])):
-            out.append(f"| {evidence.kind} | {_cell(redact(evidence.value))} | {_cell(evidence.mod or '')} | "
-                       f"{count:,} |")
-        out.append("")
+        last = out.section("Evidence", Table(
+            ["Kind", "Clue", "Mod", "Messages"],
+            [(e.kind, e.value, e.mod or "", n)
+             for e, n in sorted(group.evidence.items(), key=lambda item: (item[0].rank, -item[1]))]))
     more = "" if group.count <= len(group.lines) else f" (the first {len(group.lines)} of {group.count:,})"
-    out += [f"Lines{more}: " + ", ".join(str(n) for n in group.lines), ""]
-    return "\n".join(out)
+    last.blocks.append(f"Lines{more}: " + ", ".join(str(n) for n in group.lines))
+    return out
+
+
+def group_detail(report, group, max_lines=DETAIL_LINES, redact=None):
+    return render_markdown(detail_report(report, group, max_lines), redact)
 
 
 # ---- JSON ----
