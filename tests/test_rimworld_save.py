@@ -171,7 +171,7 @@ class Reports(Folders):
         text = render_markdown(report)
         self.assertIn('scenario "Example Landing". 62 in-game days (1.0 years)', text)
         self.assertIn("2 hours of play", text)
-        self.assertEqual(self.rows(report, 0), [(0, "Base_Player", "50 x 50", 5, 1)])
+        self.assertEqual(self.rows(report, 0), [(0, "Base_Player", "8 x 8", 5, 1)])
         self.assertEqual(self.rows(report, 2), [("Human", 1)])
 
     def test_things_by_def_and_listed(self):

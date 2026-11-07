@@ -4,6 +4,25 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-07
+
+### Added
+
+- rimworld-save grid: a map's layers counted (terrain, foundations, roofs, each gas, fog, snow, pollution, deep resources), one layer in full with a text picture, or every layer at one cell with the things standing there; --area limits the counts to a rectangle. Grids are decoded as the 1.7 game code writes them, and Defs are named through the Def index; a 325 by 325 map's ten grids decode in 0.02 s.
+- rimworld-save diff: what changed since another save, matched by thing ID and hediff load ID: counts, things that appeared and went by def, stacks that grew or shrank, pawns that moved, arrived or left, and pawns' hediffs gained, lost, worse or better (the player's by default).
+- The Def index now adds the Defs the game makes in code for stone floors and carpets, with their source (333 on the owner's install), so terrain on the owner's maps is named for 98 to 99 percent of cells instead of 70. show says such a Def has no XML of its own.
+- xml-index: a column can hold an element's own tag or its parent's (tag = "self" or "parent"). The RimWorld schema gains a map_grid table.
+- 19 Python tests for grids, hashing, comparison and game-made Defs, and 3 Rust tests.
+
+### Changed
+
+- The save index's schema and the Def index's format changed, so both rebuild on their next use.
+
+### Compatibility and limits
+
+- A Def's number follows the game's short-hash rule; when names tie, the game's string order is approximated and such names are marked (?). Defs from other generators (blueprints, frames, meat, corpses, techprints, mods' own) are not named.
+- Sand depth, temperatures and terrain colours are not decoded yet.
+
 ## [0.5.0] - 2026-11-07
 
 ### Added

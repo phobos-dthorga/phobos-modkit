@@ -37,6 +37,7 @@ fn every_table_holds_what_the_fixture_has() {
         ("hediff", 3),
         ("trait", 2),
         ("skill", 1),
+        ("map_grid", 8),
     ] {
         assert_eq!(count(&conn, &format!("SELECT COUNT(*) FROM {table}")), expected, "{table}");
     }
@@ -96,6 +97,17 @@ fn hediffs_belong_to_their_pawn() {
         ),
         1
     );
+}
+
+#[test]
+fn grids_are_labelled_with_their_map_and_owner() {
+    let conn = indexed();
+    let mut statement =
+        conn.prepare("SELECT g.owner, g.element FROM map_grid g JOIN map m ON m.id = g.map ORDER BY g.id").unwrap();
+    let grids: Vec<(String, String)> =
+        statement.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().map(Result::unwrap).collect();
+    assert_eq!(grids[0], ("terrainGrid".into(), "topGridDeflate".into()));
+    assert!(grids.contains(&("grid".into(), "arr".into())), "pollution's plain arr is indexed too");
 }
 
 #[test]

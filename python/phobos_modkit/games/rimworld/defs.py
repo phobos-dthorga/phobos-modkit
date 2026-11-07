@@ -4,7 +4,8 @@ The index holds every top-level Def the active mods' load folders hold (as writt
 applied) and every patch operation with an xpath. For each Def type and name it marks the definition the game keeps:
 in the 1.7 DefDatabase a later mod's Def replaces an earlier mod's with the same type and name, and a second Def of
 that name inside one mod is skipped (summarised from the game code, November 2026). Abstract Defs and Defs whose
-MayRequire is not met never load. For ParentName, a child takes the same-Named parent from the latest mod at or
+MayRequire is not met never load. Defs the game makes in code from other Defs (stone floors, carpets) are added as
+rows marked `implied` (phobos_modkit.games.rimworld.implied). For ParentName, a child takes the same-Named parent from the latest mod at or
 before its own in load order (the game's XmlInheritance); `registers` marks the nodes that can be parents.
 
 Provenance (phobos_modkit.cache): ModsConfig.xml, Steam's Workshop manifest and the game's Version.txt by size and
@@ -25,12 +26,13 @@ import xml.etree.ElementTree as ET
 
 from ... import __version__
 from ... import cache as derived
+from . import implied as generated
 from .loading import bare_id, load_folders, may_load, may_register_parent, read_mods_config, resolve_active, xml_files
 from .mods import ModIndex, default_roots
 
 CACHE_FOLDER = "rimworld-defs"
 INDEX_NAME = "defs.sqlite"
-INDEX_FORMAT = "2"   # raise when the tables change
+INDEX_FORMAT = "3"   # raise when the tables change
 MANIFEST_NAME = "appworkshop_294100.acf"
 DEF_NAME_IN_XPATH = re.compile(r"""defName\s*=\s*["']([^"']+)["']""")
 DEF_TYPE_IN_XPATH = re.compile(r"^/?Defs/([A-Za-z_*][\w.]*)")
@@ -43,7 +45,8 @@ CREATE TABLE def (id INTEGER PRIMARY KEY, mod_position INTEGER NOT NULL, def_typ
                   name TEXT, parent TEXT, abstract INTEGER NOT NULL, class TEXT, label TEXT, may_require TEXT,
                   may_require_any TEXT, loads INTEGER NOT NULL, wins INTEGER NOT NULL DEFAULT 0,
                   registers INTEGER NOT NULL,
-                  load_folder TEXT NOT NULL, file TEXT NOT NULL, element_index INTEGER NOT NULL);
+                  load_folder TEXT NOT NULL, file TEXT NOT NULL, element_index INTEGER NOT NULL,
+                  implied INTEGER NOT NULL DEFAULT 0, made_from TEXT);
 CREATE TABLE patch (id INTEGER PRIMARY KEY, mod_position INTEGER NOT NULL, operation TEXT, xpath TEXT NOT NULL,
                     def_type TEXT, find_mods TEXT, may_require TEXT, load_folder TEXT NOT NULL, file TEXT NOT NULL);
 CREATE TABLE patch_target (patch_id INTEGER NOT NULL, def_name TEXT NOT NULL);
@@ -99,6 +102,7 @@ class Built:
     patches: int
     problems: int
     seconds: float
+    implied: int = 0
 
 
 def index_path(cache):
@@ -182,6 +186,7 @@ def build(install, cache, scan=None):
     partial = index.with_suffix(".partial")
     derived.remove(partial)
     counts = {"defs": 0, "patches": 0, "problems": 0}
+    facts = generated.Facts()
     with closing(sqlite3.connect(partial)) as conn:
         conn.executescript("PRAGMA journal_mode = OFF; PRAGMA synchronous = OFF;" + TABLES)
 
@@ -217,6 +222,7 @@ def build(install, cache, scan=None):
                     def_name = _text(element, "defName")
                     loads = int(not abstract and def_name is not None and may_load(element, active_bare))
                     registers = int(bool(element.get("Name")) and may_register_parent(element, active_bare))
+                    facts.add((a.position, rel(folder), path, position), element, registers)
                     rows.append((a.position, element.tag, def_name, element.get("Name"), element.get("ParentName"),
                                  int(abstract), element.get("Class"), _text(element, "label"),
                                  element.get("MayRequire"), element.get("MayRequireAnyOf"), loads, registers,
@@ -244,14 +250,20 @@ def build(install, cache, scan=None):
                           str(mod.folder), ", ".join(rel(f) or "(root)" for f in folders), defs, patches))
             counts["defs"] += defs
             counts["patches"] += patches
-        conn.executescript(WINNERS + ";" + INDEXES)
+        conn.executescript(WINNERS)
+        made = generated.generate(conn, facts)
+        conn.executemany("INSERT INTO def (mod_position, def_type, def_name, abstract, loads, registers, load_folder, "
+                         "file, element_index, implied, made_from) VALUES (?, ?, ?, 0, 1, 0, '', ?, -1, 1, ?)",
+                         [(position, def_type, name, f"(made by the game from {source})", source)
+                          for def_type, name, position, source in made])
+        conn.executescript("UPDATE def SET wins = 0;" + WINNERS + ";" + INDEXES)
         derived.write_meta(conn, {**meta, "game_version": version, "game_version_full": full_version,
                                   "source": "ModsConfig.xml", "active_mods": len(active)})
         conn.commit()
     derived.remove(index)
     os.replace(partial, index)
     return Built(index, len(active), counts["defs"], counts["patches"], counts["problems"],
-                 time.monotonic() - started)
+                 time.monotonic() - started, len(made))
 
 
 def ensure(install, cache, rebuild=False, scan=None):

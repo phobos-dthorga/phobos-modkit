@@ -101,9 +101,35 @@
         <uniqueID>0</uniqueID>
         <generatorDef>Base_Player</generatorDef>
         <mapInfo>
-          <size>(50, 1, 50)</size>
+          <size>(8, 1, 8)</size>
           <parent>Settlement_1</parent>
         </mapInfo>
+        <terrainGrid>
+          <topGridDeflate>W9i2kCK4LIgyCAA=</topGridDeflate>
+        </terrainGrid>
+        <roofGrid>
+          <roofsDeflate>4xXhFWFAArx05gMA</roofsDeflate>
+        </roofGrid>
+        <gasGrid>
+          <gasDensityDeflate>Y2CgI2ggrOQ/A30BAA==</gasDensityDeflate>
+          <cycleIndexDiffusion>0</cycleIndexDiffusion>
+        </gasGrid>
+        <fogGrid>
+          <fogGridDeflate>Y2AAgf//AQ==</fogGridDeflate>
+        </fogGrid>
+        <snowGrid>
+          <depthGridDeflate>Y2hgGFAAAA==</depthGridDeflate>
+        </snowGrid>
+        <pollutionGrid>
+          <grid>
+            <trueCount>1</trueCount>
+            <arr>IAAAAAAAAAA=</arr>
+          </grid>
+        </pollutionGrid>
+        <deepResourceGrid>
+          <defGridDeflate>Y2DABL+bGegGAA==</defGridDeflate>
+          <countGridDeflate>Y2DABDqMDHQDAA==</countGridDeflate>
+        </deepResourceGrid>
         <things>
           <thing Class="ThingWithComps">
             <def>Steel</def>

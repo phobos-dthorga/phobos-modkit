@@ -59,6 +59,7 @@ Summarised in our own words from the RimWorld 1.7 game code (November 2026):
 | MayRequire: every listed mod active; MayRequireAnyOf: at least one. IDs compared without case or `_steam` | LoadedModManager |
 | A later mod's Def replaces an earlier mod's Def of the same type and name; a second one inside one mod is skipped with an error | DefDatabase |
 | `Abstract="true"` Defs (in any letter case) never load | DirectXmlToObjectNew |
+| Each natural rock ThingDef (not a resource rock) makes `<rock>_Rough` unless it names a naturalTerrain, `<rock>_RoughHewn` unless it names a leaveTerrain, and `<rock>_Smooth` when either is missing; each TerrainTemplateDef makes a carpet per Structure ColorDef. The index adds these as rows marked `implied`, with `made_from` saying what from | TerrainDefGenerator_Stone, TerrainDefGenerator_Carpet |
 | A Def with a Name can be a parent when its MayRequire is met; a second one with that Name in the same mod is refused. A child takes its ParentName from the latest mod at or before its own in load order, never from a later mod | XmlInheritance |
 
 `show` follows these parent rules, so the chain it prints is the one the game uses. It does not merge the chain
@@ -71,6 +72,7 @@ into one Def; read it bottom up.
 | `mod` | Each active mod in load order, installed or not, with its folders and counts |
 | `def` | Every top-level Def element in the loaded files: type, defName, Name, ParentName, abstract, class, label, MayRequire, whether it loads (`loads`), whether the game keeps it (`wins`), and its file |
 | `patch`, `patch_target` | Every patch element with an xpath, and each defName its xpath names |
+| `def` rows with `implied` | Defs the game makes in code: stone floors and carpets (333 on the owner's install). Other generators (blueprints, frames, meat, corpses, techprints, mods' own) are not covered |
 | `problem` | Active mods not installed, files no load folder loads because another shadows them, and unreadable XML |
 | `def_view`, `patch_view` | The same with the mod's name |
 | `meta` | Provenance: the game version, file stamps, the local mods' fingerprint, the kit's version |

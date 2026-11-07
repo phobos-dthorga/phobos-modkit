@@ -176,8 +176,8 @@ def sql(conn, query, top=100):
     headers = [d[0] for d in cursor.description or []]
     rows = [tuple(r) for r in cursor.fetchmany(top + 1)]
     report = Report("Query")
-    report.lines.append("Tables: game, mod_id, mod_name, mod_steam_id, faction, map, thing, pawn, hediff, trait, "
-                        "skill, element_path, meta. Views: mods, thing_place, pawn_view.")
+    report.lines.append("Tables: game, mod_id, mod_name, mod_steam_id, faction, map, map_grid, thing, pawn, hediff, "
+                        "trait, skill, element_path, meta. Views: mods, thing_place, pawn_view.")
     if len(rows) > top:
         report.lines.append(f"Only the first {top:,} rows are shown; raise --top to see more.")
     report.sections.append(_section("Result", headers, rows[:top]))

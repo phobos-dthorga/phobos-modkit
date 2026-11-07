@@ -17,6 +17,10 @@ about a second and a half; later questions take well under a second until the sa
 - **Options go after the report's name**: `rimworld-save pawns --save PG1`, not `rimworld-save --save PG1 pawns`.
 - **Patches and mods are not applied.** The index holds what the save file says, nothing more: a def's name, never
   its label, and a body part's index, never its name.
+- **Grids name their Defs through the Def index** of the installed mods (see [the Def index](rimworld-defs.md)),
+  built on first use. A save made with other mods may show some cells as `#number`; `--no-names` skips the mods.
+- **`diff` compares by ID.** Things are matched by their ID and hediffs by their load ID, both kept for life; a
+  thing destroyed and rebuilt is a different thing.
 - Checked against RimWorld 1.7.5000 saves (November 2026).
 
 ## Run it
@@ -28,6 +32,10 @@ python -m phobos_modkit rimworld-save things --def "Chunk*" --list
 python -m phobos_modkit rimworld-save hediffs --pawn Abbeson
 python -m phobos_modkit rimworld-save find ChunkA8061017       one thing and what holds it
 python -m phobos_modkit rimworld-save schema --under savegame/game/maps/li --depth 1
+python -m phobos_modkit rimworld-save grid --map 0                   every grid layer of a map, counted
+python -m phobos_modkit rimworld-save grid --kind gas --render       one layer, with a text picture
+python -m phobos_modkit rimworld-save grid --at 137,266              every layer at one cell, and what stands there
+python -m phobos_modkit rimworld-save diff Autosave-12               what changed since an earlier save
 python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP BY def"
 ```
 
@@ -40,6 +48,8 @@ python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP
 | `pawns` | Name, ID, race, kind, faction, place, map and position, age, health state, how many hediffs | `--faction` (`player` or a name), `--name`, `--kind`, `--place` |
 | `hediffs` | Hediffs counted by def, or one pawn's in full with body part, severity, age and source | `--pawn`, `--def` |
 | `find ID` | A thing by its ID, with every thing holding it out to the map or world | |
+| `grid` | A map's layers counted: terrain, foundations (bridges and the like), roofs, each gas, fog, snow, pollution and deep resources; one layer in full with a text picture (north up); or every layer at one cell with the things standing there | `--map`, `--kind`, `--render`, `--gas`, `--columns`, `--at X,Z`, `--area X1,Z1,X2,Z2`, `--no-names` |
+| `diff OTHER` | What changed since another save: counts, things that appeared and went by def, stacks that grew or shrank, pawns that moved, arrived or left, and pawns' hediffs gained, lost, worse or better | `--faction` (`player` by default, `any`, or a faction) |
 | `sql QUERY` | Any query; the index is opened read-only, so nothing can change it | |
 
 Every report takes `--save NAME` (default: the newest save), `--saves`, `--cache`, `--index FILE` (read an index
@@ -59,11 +69,30 @@ directly), `--rebuild`, `--top N`, `--json` and `--no-redact`. Filters ignore ca
 | `hediff`, `trait`, `skill` | Each belongs to a pawn by its `id` |
 | `thing_place` (view) | For each thing, the outermost thing holding it, whether it is held, its place and map |
 | `pawn_view` (view) | Pawns with display name, race, faction name, place, map, position and age in years |
+| `map_grid` | Each map's grids as the save holds them (base64 text), with the grid's element and owner |
 | `element_path` | Every element path in the save and how often it occurs |
 | `meta` | The source save's name, size and time, the schema's hash, the indexer's version |
 
 The schema is `python/phobos_modkit/games/rimworld/save-schema.toml`. Adding a table or column there is all it
 takes to index more; changing the file makes older indexes rebuild on their next use.
+
+## How the grids are stored
+
+Summarised in our own words from the RimWorld 1.7 game code (November 2026):
+
+| Layer | Stored as |
+| --- | --- |
+| Terrain (top, under, foundation), roofs, deep resources | A 16-bit Def number per cell; 0 is none |
+| Deep resource counts | A 16-bit count per cell |
+| Gas | A 32-bit number per cell: blind smoke, toxic gas, rot stink and deadlife dust as one byte each (0 to 255), lowest first |
+| Snow | A 16-bit fraction of full depth per cell |
+| Fog, pollution | One bit per cell, lowest bit first |
+
+Every grid is base64, of raw deflate when that is smaller (the element name then ends in "Deflate"); cells run row by
+row from the south-west corner (index = z times width plus x). A Def's number is the game's StableStringHash of its
+defName, modulo 65535; when two Defs of one type share a number, the later in defName order moves to the next free
+one. That tie order is approximated, so names whose number moved are marked `(?)`. Terrain the game makes in code
+(rough, hewn and smooth stone; carpets) is named through the Def index's game-made rows.
 
 ## How fast (7 Nov 2026, on the owner's high-end PC)
 
@@ -71,4 +100,6 @@ takes to index more; changing the file makes older indexes rebuild on their next
 | --- | --- |
 | Index PG2 (308 MB, 8.2 million elements; 84,608 things, 990 pawns, 9,110 hediffs) | 1.4 s, plus about 1 s to copy |
 | Any report afterwards | about 0.6 s, mostly starting Python |
+| Decode all ten grids of a 325 by 325 map | 0.02 s |
+| `diff` of two indexed saves, two in-game days apart | about 4 s |
 | The same save read once by Python's own XML reader, for comparison | 7.6 s |

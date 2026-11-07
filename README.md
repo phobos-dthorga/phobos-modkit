@@ -6,7 +6,7 @@ questions in a short summary instead of a long read. One shared home for code th
 
 ## Read this first (gotchas)
 
-- **Four tools are built: RimWorld log triage, save index, Def index and Workshop research** (0.5.0, 7 Nov
+- **Four tools are built: RimWorld log triage, save index, Def index and Workshop research** (0.6.0, 7 Nov
   2026). The rest are planned. See [log triage](docs/rimworld-log.md), [the save index](docs/rimworld-save.md),
   [the Def index](docs/rimworld-defs.md) and [Workshop research](docs/workshop.md).
 - **The save index needs one Rust build:** add `--build-indexer` to its first command, with Rust from
@@ -44,7 +44,7 @@ in order of expected saving.
 | # | Tool | What it answers | Language | Status |
 | --- | --- | --- | --- | --- |
 | 1 | [Log triage](docs/rimworld-log.md) (RimWorld) | What went wrong this run, which mod it came from, what is new since last run | Python | Built: 0.1.1 |
-| 2 | [Save index and query](docs/rimworld-save.md) (RimWorld) | Where things are in a large XML save; pawns, hediffs, holders; what changed between two saves (planned) | Rust engine, Python reports | Built: 0.2.0 (comparison and map grids to come) |
+| 2 | [Save index and query](docs/rimworld-save.md) (RimWorld) | Where things are in a large XML save; pawns, hediffs, holders; map grids; what changed between two saves | Rust engine, Python reports | Built: 0.6.0, with map grids and save comparison |
 | 3 | [Mod and Def index](docs/rimworld-defs.md) (RimWorld) | Which mod defines or patches something, in the player's load order, and which definition the game keeps | Python | Built: 0.4.0 |
 | 4 | Assembly metadata reader | Which mods patch a method; what constants a DLL holds; does a consumer still match its provider | C# | Planned |
 | 5 | [Workshop research](docs/workshop.md) | What players report about a mod lately; supported versions; last update | Python | Built: 0.5.0 |

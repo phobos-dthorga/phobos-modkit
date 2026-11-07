@@ -28,6 +28,8 @@ enum Source {
     Attr(String),
     Parent(usize),
     Index,
+    /// The matched element's own tag (false) or its parent's (true).
+    Tag(bool),
 }
 
 #[derive(Debug)]
@@ -161,6 +163,8 @@ fn compile(schema: &Schema) -> Result<Vec<Table>, String> {
                 Source::Parent(position(parent).expect("validated"))
             } else if c.index {
                 Source::Index
+            } else if let Some(tag) = &c.tag {
+                Source::Tag(tag == "parent")
             } else {
                 let path = c.path.as_deref().unwrap_or("").trim_matches('/').to_string();
                 deepest = deepest.max(if path.is_empty() { 0 } else { path.split('/').count() });
@@ -379,6 +383,8 @@ pub fn build<R: BufRead>(
                         row[c] = match &column.source {
                             Source::Index => Some(sibling.to_string()),
                             Source::Parent(p) => opens.iter().rev().find(|o| o.table == *p).map(|o| o.id.to_string()),
+                            Source::Tag(false) => Some(paths.names[name as usize].clone()),
+                            Source::Tag(true) => stack.last().map(|f| paths.names[f.name as usize].clone()),
                             _ => None,
                         };
                     }
@@ -535,6 +541,12 @@ mod tests {
         [[table.column]]
         name = "package_id"
         path = ""
+        [[table.column]]
+        name = "own_tag"
+        tag = "self"
+        [[table.column]]
+        name = "list_tag"
+        tag = "parent"
 
         [[view]]
         name = "held"
@@ -661,6 +673,19 @@ mod tests {
             vec![text("Human"), text("MealSimple"), text("Wall"), text("Filth_Dirt")]
         );
         assert!(ids.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    #[test]
+    fn tag_columns_name_the_element_and_its_parent() {
+        let (conn, _) = build_test(XML);
+        let tags = rows(&conn, "SELECT DISTINCT own_tag, list_tag FROM mod");
+        assert_eq!(tags, vec![vec![text("li"), text("mods")]]);
+    }
+
+    #[test]
+    fn a_tag_column_must_say_self_or_parent() {
+        let bad = SCHEMA.replace("tag = \"parent\"", "tag = \"grandparent\"");
+        assert!(Schema::parse(&bad).unwrap_err().contains("tag is"));
     }
 
     #[test]

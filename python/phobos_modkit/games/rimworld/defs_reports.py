@@ -34,7 +34,9 @@ def summary(conn, top=10):
                         f"mods" + (f", {missing:,} of them not installed" if missing else "") + ".")
     report.lines.append(f"{loading:,} Defs load; {replaced:,} more are replaced by a later mod's Def of the same type "
                         f"and name, {unmet:,} wait for a MayRequire mod that is not active, and {abstract:,} are "
-                        f"abstract parents. {one('SELECT COUNT(*) FROM patch'):,} patch operations.")
+                        f"abstract parents. {one('SELECT COUNT(*) FROM patch'):,} patch operations. "
+                        f"{one('SELECT COUNT(*) FROM def WHERE implied'):,} of the Defs are made by the game in code "
+                        f"(stone floors and carpets); their File says what from.")
     report.lines.append(AS_WRITTEN)
     report.section(f"Def types (top {top})", Table(["Type", "Defs that load"], _rows(conn, """
         SELECT def_type, COUNT(*) FROM def WHERE wins GROUP BY def_type ORDER BY COUNT(*) DESC, def_type""", (), top),
@@ -127,6 +129,8 @@ def _xml_block(conn, row_id):
                                  m.folder, d.load_folder, d.file, d.element_index, d.mod_position
                           FROM def d JOIN mod m ON m.position = d.mod_position WHERE d.id = ?""", (row_id,)).fetchone()
     def_type, shown, parent, mod_name, folder, load_folder, file, element_index, position = row
+    if element_index < 0:
+        return position, None, [f"{def_type} {shown}, from {mod_name}: {file.strip('()')}; it has no XML of its own."]
     text = element_xml(folder, load_folder, file, element_index)
     where = f"{def_type} {shown}, from {mod_name} ({(load_folder + '/') if load_folder else ''}{file})"
     if text is None:

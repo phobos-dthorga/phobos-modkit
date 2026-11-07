@@ -21,6 +21,9 @@
 //! [[table.column]]
 //! name = "position"
 //! index = true                                       # place among same-named siblings, from 0
+//! [[table.column]]
+//! name = "kind"
+//! tag = "parent"                                     # the element's own tag ("self") or its parent's ("parent")
 //!
 //! [[view]]
 //! name = "big_things"
@@ -75,6 +78,8 @@ pub struct ColumnSpec {
     pub parent: Option<String>,
     #[serde(default)]
     pub index: bool,
+    #[serde(default)]
+    pub tag: Option<String>,
     #[serde(default, rename = "type")]
     pub kind: Option<String>,
 }
@@ -142,9 +147,13 @@ impl Schema {
                 }
                 let sources = usize::from(column.path.is_some() || column.attr.is_some())
                     + usize::from(column.parent.is_some())
-                    + usize::from(column.index);
+                    + usize::from(column.index)
+                    + usize::from(column.tag.is_some());
                 if sources != 1 {
-                    return Err(format!("{label} needs exactly one of path/attr, parent or index"));
+                    return Err(format!("{label} needs exactly one of path/attr, parent, index or tag"));
+                }
+                if !matches!(column.tag.as_deref(), None | Some("self" | "parent")) {
+                    return Err(format!("{label}: tag is \"self\" or \"parent\""));
                 }
                 if let Some(parent) = &column.parent {
                     if !self.tables.iter().any(|t| &t.name == parent) {
@@ -157,7 +166,9 @@ impl Schema {
                     None | Some("text" | "int" | "real" | "bool" | "ivec3") => {}
                     Some(other) => return Err(format!("{label} has an unknown type \"{other}\"")),
                 }
-                if column.kind.as_deref() == Some("ivec3") && (column.parent.is_some() || column.index) {
+                if column.kind.as_deref() == Some("ivec3")
+                    && (column.parent.is_some() || column.index || column.tag.is_some())
+                {
                     return Err(format!("{label}: ivec3 reads text, so it needs path or attr"));
                 }
             }

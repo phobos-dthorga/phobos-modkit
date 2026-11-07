@@ -113,7 +113,8 @@ def main(argv=None, settings_file=None, environ=None, out=None):
 
     if built is not None:
         provenance = (f"Index of the active mods, built now in {built.seconds:.1f} s ({built.mods:,} mods, "
-                      f"{built.defs:,} Defs, {built.patches:,} patch operations, {built.problems:,} problems).")
+                      f"{built.defs:,} Defs and {built.implied:,} the game makes in code, {built.patches:,} patch "
+                      f"operations, {built.problems:,} problems).")
     else:
         provenance = "Index of the active mods, reused: the mod list, the Workshop, the game and local mods are unchanged."
     report.lines.insert(0, provenance)

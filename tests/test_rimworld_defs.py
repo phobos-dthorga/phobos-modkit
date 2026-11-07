@@ -53,6 +53,17 @@ def fake_install(root):
               '<ThingDef ParentName="BaseGun"><defName>Gun_A</defName><label>gun a</label></ThingDef>',
               "<ThingDef><defName>Steel</defName><label>steel</label></ThingDef>",
               '<ThingDef Name="SharedBase" Abstract="True"><label>core base</label></ThingDef>')
+    defs_file(core / "Defs" / "Rocks.xml",
+              '<ThingDef Name="RockBase" Abstract="True"><building><isNaturalRock>true</isNaturalRock></building>'
+              '</ThingDef>',
+              '<ThingDef ParentName="RockBase"><defName>Granite</defName></ThingDef>',
+              '<ThingDef ParentName="RockBase"><defName>MineableSteel</defName>'
+              '<building><isResourceRock>true</isResourceRock></building></ThingDef>',
+              '<ThingDef ParentName="RockBase"><defName>Marble</defName>'
+              '<building><naturalTerrain>Soil</naturalTerrain></building></ThingDef>',
+              "<TerrainTemplateDef><defName>Carpet</defName></TerrainTemplateDef>",
+              "<ColorDef><defName>Structure_Red</defName><colorType>Structure</colorType></ColorDef>",
+              "<ColorDef><defName>Ideo_Blue</defName><colorType>Ideo</colorType></ColorDef>")
 
     widgets = workshop / "2222222222"
     about(widgets, "example.widgets", "Example Widgets")
@@ -194,6 +205,22 @@ class Building(Install):
         self.assertEqual(targets, [("Steel",), ("Gun_A",), ("Steel",)])
 
 
+class GameMadeDefs(Install):
+    def test_stone_floors_and_carpets_the_game_makes(self):
+        made = self.query("SELECT def_type, def_name, made_from FROM def WHERE implied ORDER BY def_name")
+        self.assertEqual([n for _, n, _ in made], ["CarpetRed", "Granite_Rough", "Granite_RoughHewn",
+                                                   "Granite_Smooth", "Marble_RoughHewn", "Marble_Smooth"])
+        self.assertEqual({t for t, _, _ in made}, {"TerrainDef"})
+        self.assertEqual(made[0][2], "TerrainTemplateDef Carpet and ColorDef Structure_Red")
+
+    def test_game_made_defs_load_and_have_no_xml(self):
+        index, _ = self.built()
+        with closing(derived.open_read_only(index)) as conn:
+            self.assertEqual(conn.execute("SELECT wins FROM def WHERE def_name = 'Granite_Smooth'").fetchone(), (1,))
+            text = render_markdown(reports.show(conn, "Granite_Smooth"))
+        self.assertIn("made by the game from ThingDef Granite; it has no XML of its own", text)
+
+
 class Staleness(Install):
     def test_reused_until_the_mod_list_a_local_mod_or_the_workshop_changes(self):
         self.assertIsNotNone(self.built()[1])
@@ -260,8 +287,10 @@ class Reports(Install):
                              .table.rows), 1)
         self.assertEqual(reports.mods(self.conn).sections[0].table.rows[3][1], "(not installed)")
         self.assertEqual(reports.sql(self.conn, "SELECT COUNT(*) FROM def WHERE wins").sections[0].table.rows,
-                         [(10,)])  # Steel; RootThing, NeedsCore, Dup, WidgetGun, GatedChild; ShadowWinner,
-        #                                         Gun_A, LocalGun, TieIn
+                         [(22,)])
+        # Core: Steel, Granite, MineableSteel, Marble, Carpet, Structure_Red, Ideo_Blue; Widgets: RootThing, NeedsCore,
+        # Dup, WidgetGun, GatedChild; Local: ShadowWinner, Gun_A, LocalGun, TieIn; made by the game: CarpetRed and
+        # Granite's three stone floors and Marble's two.
         with self.assertRaises(sqlite3.OperationalError):
             reports.sql(self.conn, "DELETE FROM def")
 

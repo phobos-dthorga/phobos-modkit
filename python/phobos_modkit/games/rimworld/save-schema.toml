@@ -288,6 +288,36 @@ type = "int"
 name = "passion"
 path = "passion"
 
+# Map grids: one row per grid, its base64 text kept as written (phobos_modkit.games.rimworld.grids decodes it). The
+# game writes "<name>Deflate" when deflating makes the data smaller, else "<name>" (read from the 1.7 game code).
+[[table]]
+name = "map_grid"
+match = [
+    "savegame/game/maps/li/terrainGrid/topGridDeflate", "savegame/game/maps/li/terrainGrid/topGrid",
+    "savegame/game/maps/li/terrainGrid/underGridDeflate", "savegame/game/maps/li/terrainGrid/underGrid",
+    "savegame/game/maps/li/terrainGrid/foundationGridDeflate", "savegame/game/maps/li/terrainGrid/foundationGrid",
+    "savegame/game/maps/li/roofGrid/roofsDeflate", "savegame/game/maps/li/roofGrid/roofs",
+    "savegame/game/maps/li/gasGrid/gasDensityDeflate", "savegame/game/maps/li/gasGrid/gasDensity",
+    "savegame/game/maps/li/fogGrid/fogGridDeflate", "savegame/game/maps/li/fogGrid/fogGrid",
+    "savegame/game/maps/li/snowGrid/depthGridDeflate", "savegame/game/maps/li/snowGrid/depthGrid",
+    "savegame/game/maps/li/pollutionGrid/grid/arrDeflate", "savegame/game/maps/li/pollutionGrid/grid/arr",
+    "savegame/game/maps/li/deepResourceGrid/defGridDeflate", "savegame/game/maps/li/deepResourceGrid/defGrid",
+    "savegame/game/maps/li/deepResourceGrid/countGridDeflate", "savegame/game/maps/li/deepResourceGrid/countGrid",
+]
+require = ["data"]
+[[table.column]]
+name = "map"
+parent = "map"
+[[table.column]]
+name = "element"
+tag = "self"
+[[table.column]]
+name = "owner"
+tag = "parent"
+[[table.column]]
+name = "data"
+path = ""
+
 [[view]]
 name = "mods"
 sql = """

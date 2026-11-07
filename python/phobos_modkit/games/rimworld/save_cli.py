@@ -6,6 +6,10 @@
     python -m phobos_modkit rimworld-save hediffs --pawn Abbeson
     python -m phobos_modkit rimworld-save find ChunkA8061017       one thing and what holds it
     python -m phobos_modkit rimworld-save schema --under savegame/game/maps/li --depth 1
+    python -m phobos_modkit rimworld-save grid --map 0                every grid layer of a map, counted
+    python -m phobos_modkit rimworld-save grid --kind gas --render    one layer, with a text picture
+    python -m phobos_modkit rimworld-save grid --at 120,85            every layer at one cell, and what stands there
+    python -m phobos_modkit rimworld-save diff Autosave-3             what changed since another save
     python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP BY def"
 
 The first question about a save indexes a frozen copy of it (about a second and a half for 300 MB with the
@@ -24,12 +28,16 @@ import sys
 from ... import cache as derived
 from ...native import ToolMissing, build_tools
 from ...report import home_redactor, keep, render_json, render_markdown
+from . import defs as def_index
+from . import grids
 from . import paths
 from . import save as saves
+from . import save_diff
+from . import save_maps
 from . import save_reports as reports
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
-REPORTS = ("summary", "index", "schema", "things", "pawns", "hediffs", "find", "sql")
+REPORTS = ("summary", "index", "schema", "things", "pawns", "hediffs", "find", "grid", "diff", "sql")
 
 
 def _parser():
@@ -75,13 +83,75 @@ def _parser():
     h.add_argument("--def", dest="def_", help="hediff def; * and ? are wildcards")
     f = sub.add_parser("find", parents=[common], help="a thing by its ID, with what holds it")
     f.add_argument("thing_id", help="e.g. ChunkA8061017; * and ? are wildcards")
+    g = sub.add_parser("grid", parents=[common], help="a map's grids: terrain, roofs, gas, fog, snow, pollution, "
+                                                     "deep resources")
+    g.add_argument("--map", type=int, help="map position (default: the map the save was on)")
+    g.add_argument("--kind", choices=sorted(grids.KINDS), help="one layer in full")
+    g.add_argument("--render", action="store_true", help="with --kind: a text picture of the layer, north up")
+    g.add_argument("--gas", choices=[n for n, _ in grids.GAS_TYPES], help="with --kind gas --render: one gas only")
+    g.add_argument("--columns", type=int, default=100, help="width of the picture in characters (default 100)")
+    g.add_argument("--at", metavar="X,Z", help="every layer at one cell, and the things standing there")
+    g.add_argument("--area", metavar="X1,Z1,X2,Z2", help="count only cells inside this rectangle")
+    for option, text in (("--game", "the RimWorld folder, for naming terrain and roofs"),
+                         ("--workshop", "the Workshop content folder, for naming"),
+                         ("--config", "the folder holding ModsConfig.xml, for naming")):
+        g.add_argument(option, help=text)
+    g.add_argument("--no-names", action="store_true", help="show Defs as numbers; do not read the installed mods")
+    d = sub.add_parser("diff", parents=[common], help="what changed between this save and another")
+    d.add_argument("other", help="the save to compare with (a name or path), usually an earlier one")
+    d.add_argument("--faction", default="player", help="whose pawns and hediffs to compare: player (default), any, "
+                                                       "or a faction's name or def")
     q = sub.add_parser("sql", parents=[common], help="any read-only SQL query over the index")
     q.add_argument("query")
     return p
 
 
-def _report(conn, args):
+def _numbers(text, count, option):
+    try:
+        values = tuple(int(v) for v in text.split(","))
+    except ValueError:
+        values = ()
+    if len(values) != count:
+        raise saves.SaveError(f"{option} takes {count} whole numbers separated by commas, such as "
+                              + ",".join(str(10 * (i + 1)) for i in range(count)) + ".")
+    return values
+
+
+def _names(args, environ, settings_file):
+    """Def names for grids from the Def index of the installed game, or none (with the reason)."""
+    if args.no_names:
+        return grids.Names(), None
+    try:
+        game = paths.game_path(args.game, environ, settings_file)
+        install = def_index.Install(game, paths.workshop_path(game, args.workshop, environ, settings_file),
+                                    paths.config_path(args.config, environ, settings_file))
+        index, _ = def_index.ensure(install, derived.folder(def_index.CACHE_FOLDER, args.cache, environ, settings_file))
+    except (def_index.DefsError, OSError) as problem:
+        return grids.Names(), f"Defs are shown as numbers: the installed mods could not be read ({problem})."
+    return grids.Names(derived.open_read_only(index)), None
+
+
+def _report(conn, args, environ=None, settings_file=None, other=None):
     top = args.top
+    if args.report == "grid":
+        names, note = _names(args, environ, settings_file)
+        try:
+            report = save_maps.grid(conn, args.map, args.kind, names, args.render,
+                                    _numbers(args.at, 2, "--at") if args.at else None,
+                                    _numbers(args.area, 4, "--area") if args.area else None,
+                                    args.gas, args.columns, top)
+        except grids.GridError as problem:
+            raise saves.SaveError(str(problem)) from None
+        finally:
+            if names.conn is not None:
+                names.conn.close()
+        if note:
+            report.lines.append(note)
+        return report
+    if args.report == "diff":
+        other_index, other_name, this_name = other
+        return save_diff.diff(conn, Path(other_index).resolve().as_uri() + "?mode=ro", other_name, this_name,
+                              args.faction, top)
     if args.report in ("summary", "index"):
         return reports.summary(conn, top=min(top, 10) if args.report == "summary" else 10)
     if args.report == "schema":
@@ -121,8 +191,15 @@ def main(argv=None, settings_file=None, environ=None, out=None):
             cache = derived.folder(saves.CACHE_FOLDER, args.cache, environ, settings_file)
             index, built = saves.ensure(save, cache, args.indexer, environ, args.rebuild or args.report == "index")
             source = save.name
+        other = None
+        if args.report == "diff":
+            folder = paths.saves_path(args.saves, environ, settings_file)
+            other_save = saves.find_save(folder, args.other)
+            cache = derived.folder(saves.CACHE_FOLDER, args.cache, environ, settings_file)
+            other_index, _ = saves.ensure(other_save, cache, args.indexer, environ, args.rebuild)
+            other = (other_index, other_save.name, source)
         with closing(saves.open_read_only(index)) as conn:
-            report = _report(conn, args)
+            report = _report(conn, args, environ, settings_file, other)
     except (saves.SaveError, ToolMissing) as problem:
         print(redact(str(problem)), file=sys.stderr)
         return EXIT_USAGE
