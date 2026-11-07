@@ -6,8 +6,10 @@ about a second and a half; later questions take well under a second until the sa
 
 ## Read this first (gotchas)
 
-- **Build the indexer once.** It is a Rust program: `cargo build --release --locked` in this repository, or add
-  `--build-indexer` to any command. Rust comes from [rustup](https://rustup.rs).
+- **Build the indexer once:** add `--build-indexer` to any command. It is a Rust program (Rust comes from
+  [rustup](https://rustup.rs)), built into `%LOCALAPPDATA%\phobos-modkit\target` on Windows or
+  `~/.cache/phobos-modkit/target` elsewhere, never into a repository that might be cloud-synced.
+  `PHOBOS_MODKIT_BUILD` chooses another folder; a `cargo build --release` in this repository is found too.
 - **The save is only ever read.** Each index is built from a copy, deleted straight afterwards, because the game
   may write the save while it is being read. If the save changes during the copy, the command says so; run it again.
 - **Indexes hold data from your saves**, so they live under the system's temp folder by default, which cloud-sync

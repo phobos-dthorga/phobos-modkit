@@ -6,10 +6,11 @@ questions in a short summary instead of a long read. One shared home for code th
 
 ## Read this first (gotchas)
 
-- **Two tools are built: RimWorld log triage and the RimWorld save index** (0.2.0, 7 Nov 2026). The rest are
+- **Two tools are built: RimWorld log triage and the RimWorld save index** (0.2.1, 7 Nov 2026). The rest are
   planned. See [log triage](docs/rimworld-log.md) and [the save index](docs/rimworld-save.md).
-- **The save index needs one Rust build:** `cargo build --release --locked` here, with Rust from
-  [rustup](https://rustup.rs). Everything else is standard-library Python 3.10 or newer.
+- **The save index needs one Rust build:** add `--build-indexer` to its first command, with Rust from
+  [rustup](https://rustup.rs). It builds outside the repository, so a cloud-synced clone does not upload hundreds
+  of megabytes. Everything else is standard-library Python 3.10 or newer.
 - **These tools never run inside a game.** They read files the game wrote. Runtime mod libraries (D'thorga
   Framework for RimWorld, PhobosLib for Project Zomboid and FS25, Phobos Framework for Ostranauts) stay in
   their own repositories.
@@ -24,8 +25,8 @@ questions in a short summary instead of a long read. One shared home for code th
 ## Run a tool
 
 ```text
-cargo build --release --locked                 once, for the save index
 cd python
+python -m phobos_modkit rimworld-save --build-indexer   once: builds the save indexer
 python -m phobos_modkit rimworld-log           summarise RimWorld's Player.log against the run before
 python -m phobos_modkit rimworld-log --show ID one message in full
 python -m phobos_modkit rimworld-save          summarise the newest save; also pawns, things, hediffs, find, sql

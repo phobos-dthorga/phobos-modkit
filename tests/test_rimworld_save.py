@@ -89,8 +89,19 @@ class Tools(unittest.TestCase):
             return SimpleNamespace(returncode=101)
 
         with self.assertRaisesRegex(native.ToolMissing, "exit code 101"):
-            native.build_tools(run=run)
+            native.build_tools(environ={"PHOBOS_MODKIT_BUILD": "build-here"}, run=run)
         self.assertEqual(calls[0][:4], ["cargo", "build", "--release", "--locked"])
+        self.assertEqual(calls[0][-2:], ["--target-dir", "build-here"])
+
+    def test_builds_go_outside_the_repository(self):
+        self.assertEqual(native.build_dir({"LOCALAPPDATA": "L"}, "win32"), Path("L") / "phobos-modkit" / "target")
+        self.assertEqual(native.build_dir({}, "linux", home="h"), Path("h") / ".cache" / "phobos-modkit" / "target")
+        self.assertEqual(native.build_dir({"PHOBOS_MODKIT_BUILD": "b", "LOCALAPPDATA": "L"}, "win32"), Path("b"))
+        with tempfile.TemporaryDirectory() as tmp:
+            built = Path(tmp) / "release" / native.program_name("xml-index")
+            built.parent.mkdir(parents=True)
+            built.write_bytes(b"")
+            self.assertEqual(native.tool_path("xml-index", environ={"PHOBOS_MODKIT_BUILD": tmp}), built)
 
 
 class FailedBuilds(Folders):
