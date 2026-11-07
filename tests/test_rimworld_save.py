@@ -206,6 +206,10 @@ class Reports(Folders):
         listed = self.rows(reports.world(self.conn, faction="Example Raiders"))
         self.assertEqual([(r[0], r[2]) for r in listed], [(3, None), (2, "Raider Camp")])
         self.assertEqual(self.rows(reports.world(self.conn, def_="Example.*"))[0][1], "Example_Site")
+        camp = reports.world(self.conn, object_id=2)
+        self.assertIn("Raider Camp, faction Example Raiders, tile 130,0", camp.lines[0])
+        self.assertIn(("nameInt", "Raider Camp"), self.rows(camp))
+        self.assertIn("No world object", reports.world(self.conn, object_id=99).lines[0])
 
     def test_components_and_their_values(self):
         listed = {r[0]: r for r in self.rows(reports.components(self.conn))}
@@ -250,7 +254,7 @@ class Command(Folders):
 
     def test_each_report_runs(self):
         for args in (["schema"], ["things", "--list", "--held"], ["pawns", "--faction", "player"], ["world"],
-                     ["world", "--name", "Raider*"], ["components"], ["components", "--class", "*Alarm"],
+                     ["world", "--name", "Raider*"], ["world", "--id", "3"], ["components"], ["components", "--class", "*Alarm"],
                      ["hediffs", "--pawn", "Annie"], ["find", "ChunkA*"], ["sql", "SELECT 1"], ["index"]):
             code, text = self.run_main(*args)
             self.assertEqual(code, EXIT_OK, args)

@@ -170,8 +170,22 @@ def find(conn, thing_id, top=20):
     return report
 
 
-def world(conn, def_=None, faction=None, name=None, top=50):
-    """World objects (settlements, sites, caravans): counted by def and faction, or listed when filtered."""
+def world(conn, def_=None, faction=None, name=None, top=50, object_id=None):
+    """World objects (settlements, sites, caravans): counted by def and faction, listed when filtered, or one object's
+    values in full with --id."""
+    if object_id is not None:
+        report = Report(f"World object {object_id}")
+        head = conn.execute("SELECT def, class, name, faction_name, tile FROM world_object_view WHERE object_id = ?",
+                            (object_id,)).fetchone()
+        if head is None:
+            report.lines.append("No world object has that ID; world lists them with their IDs.")
+            return report
+        report.lines.append(f"{head[0]} ({head[1] or 'no class'}), {head[2] or 'unnamed'}, faction "
+                            f"{head[3] or 'none'}, tile {head[4]}.")
+        sql = "SELECT path, value FROM world_object_value_view WHERE object_id = ? ORDER BY id"
+        report.sections.append(_section("Values", ["Path", "Value"], _rows(conn, sql, (object_id,), top),
+                                       _count(conn, sql, (object_id,))))
+        return report
     f = Filters()
     f.text("w.def", def_, "w.class")
     f.text("w.faction_name", faction, "w.faction_def", "w.faction")
@@ -231,8 +245,9 @@ def sql(conn, query, top=100):
     rows = [tuple(r) for r in cursor.fetchmany(top + 1)]
     report = Report("Query")
     report.lines.append("Tables: game, mod_id, mod_name, mod_steam_id, faction, map, map_grid, thing, pawn, hediff, "
-                        "trait, skill, world_object, component, component_value, element_path, meta. Views: mods, "
-                        "thing_place, pawn_view, world_object_view, component_view.")
+                        "trait, skill, world_object, world_object_value, component, component_value, element_path, "
+                        "meta. Views: mods, thing_place, pawn_view, world_object_view, world_object_value_view, "
+                        "component_view.")
     if len(rows) > top:
         report.lines.append(f"Only the first {top:,} rows are shown; raise --top to see more.")
     report.sections.append(_section("Result", headers, rows[:top]))

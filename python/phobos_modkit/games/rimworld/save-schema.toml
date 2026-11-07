@@ -393,6 +393,26 @@ path = "faction"
 name = "name"
 path = "nameInt"
 
+# Every value with text inside a world object (an aircraft's flight path, a site's parts, a settlement's trader), with its
+# path inside the object through path_id.
+[[table]]
+name = "world_object_value"
+match = ["savegame/game/world/worldObjects/worldObjects/li/**"]
+require = ["value"]
+indexes = ["world_object"]
+[[table.column]]
+name = "world_object"
+parent = "world_object"
+[[table.column]]
+name = "tag"
+tag = "self"
+[[table.column]]
+name = "position"
+index = true
+[[table.column]]
+name = "value"
+path = ""
+
 # Components: the game's, the world's and each map's (their Class is the component's C# type, often a mod's).
 # Every value inside one with text of its own is a component_value row; containers without text are left out, and the
 # row's element path (through path_id) says where in the component it sits.
@@ -437,6 +457,16 @@ sql = """
 SELECT w.id, w.object_id, w.def, w.class, w.name, w.tile, w.faction, f.name AS faction_name, f.def AS faction_def
 FROM world_object w
 LEFT JOIN faction f ON w.faction = 'Faction_' || f.load_id
+"""
+
+[[view]]
+name = "world_object_value_view"
+sql = """
+SELECT v.id, w.object_id, w.def, w.name, SUBSTR(e.path, LENGTH(we.path) + 2) AS path, v.path_id, v.position, v.value
+FROM world_object_value v
+JOIN world_object w ON w.id = v.world_object
+JOIN element_path e ON e.id = v.path_id
+JOIN element_path we ON we.id = w.path_id
 """
 
 # A component's values with the component's class, its map's position (none for the game's and the world's) and the

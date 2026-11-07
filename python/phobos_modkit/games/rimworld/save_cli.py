@@ -90,6 +90,7 @@ def _parser():
     o.add_argument("--def", dest="def_", help="world object def or class, e.g. Settlement; * and ? are wildcards")
     o.add_argument("--faction", help="a faction's name or def")
     o.add_argument("--name", help="a world object's name")
+    o.add_argument("--id", type=int, help="one world object's values in full, by its ID")
     k = sub.add_parser("components", parents=[common], help="the game's, world's and maps' components (mods' saved "
                                                            "state) and the values inside them")
     k.add_argument("--class", dest="cls", help="component class, e.g. *RimPacts*; lists its values")
@@ -179,7 +180,7 @@ def _report(conn, args, environ=None, settings_file=None, other=None):
     if args.report == "find":
         return reports.find(conn, args.thing_id, top)
     if args.report == "world":
-        return reports.world(conn, args.def_, args.faction, args.name, top)
+        return reports.world(conn, args.def_, args.faction, args.name, top, args.id)
     if args.report == "components":
         return reports.components(conn, args.cls, args.path, args.value, args.map, top)
     return reports.sql(conn, args.query, top)

@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-08
+
+### Added
+
+- rimworld-save world --id: one world object's values in full, such as an aircraft's flight path and destination or a site's parts. The save schema gains the world_object_value table and world_object_value_view.
+
+### Changed
+
+- The save schema changed, so indexes rebuild on their next use (about 70,000 more rows on the owner's save).
+
 ## [0.7.0] - 2026-11-08
 
 ### Added
