@@ -4,6 +4,10 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+### Fixed
+
+- The version test added in 0.2.2 could not be loaded, so the v0.2.2 tag's test run fails. Tests only: the tools in v0.2.2 are unchanged and build and run correctly.
+
 ## [0.2.2] - 2026-11-07
 
 ### Fixed
