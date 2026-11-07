@@ -53,6 +53,9 @@ adapted to a tooling repository. The repository was created on 7 November 2026 a
   paragraphs, bullets, tables and code blocks and render it with `render_markdown` or `render_json`, which apply
   redaction everywhere. Never hand-write Markdown in a tool. A tool may add its own richer JSON data export, as
   log triage's is.
+- **Report filters and capped queries go through `phobos_modkit.query`**: `like` for users' wildcards (`*` and `?`,
+  with `%` and `_` literal), `Filters` for WHERE clauses with parameters, `count` and `rows` for tables cut at
+  `--top`. Never build SQL from a user's text by hand.
 
 ## Derived data
 
@@ -62,7 +65,10 @@ adapted to a tooling repository. The repository was created on 7 November 2026 a
   `kit_version` and the like). Use `phobos_modkit.cache` to stamp, check and rebuild them, and its
   `frozen_copy` to read a file another program may be writing. One SQLite substrate lets a question that
   crosses tools be a single query, with ATTACH.
-- Rust tools build outside the repository too (`phobos_modkit.native.build_dir`).
+- Rust tools build outside the repository too (`phobos_modkit.native.build_dir`). **When developing, set
+  `CARGO_TARGET_DIR` to that folder** (`%LOCALAPPDATA%\phobos-modkit\target` on Windows,
+  `~/.cache/phobos-modkit/target` elsewhere) before any `cargo` command: a plain `cargo build` writes hundreds of
+  megabytes into `target/` here, and a cloud-synced clone uploads them (526 MB did, 7 November 2026).
 
 ## Languages
 
@@ -75,14 +81,31 @@ adapted to a tooling repository. The repository was created on 7 November 2026 a
 ## Tests and fixtures
 
 - Fixtures are written by hand from format knowledge. Never commit a real save, log, assembly or another
-  author's file, or an excerpt of one.
+  author's file, or an excerpt of one. Say in `fixtures/README.md` what each fixture follows and how faithful it is.
 - Network and clock are passed in, so tests never reach Steam.
+- **Before every commit, run every check, and commit only when all pass**, gated on their exit codes in the same
+  command (`&&` or an `if`), never on reading the output. A commit chained after a step that may have failed is how
+  the v0.2.2 tag came to carry a broken test (7 November 2026). The checks, which CI repeats on Windows and Linux:
+
+  ```text
+  cargo fmt --all -- --check
+  cargo clippy --locked --all-targets -- -D warnings
+  cargo test --locked
+  cargo build --release --locked
+  PHOBOS_REQUIRE_NATIVE=1 python -W error -m unittest discover -s tests
+  ```
+
+  Run the Python tests on the oldest supported Python too when syntax or the standard library is involved, for
+  example `uv run --no-project --python 3.10 python -m unittest discover -s tests`.
 
 ## Consumers
 
 - Game repositories pin this repository as a git submodule at `external/phobos-modkit`.
 - A fix goes here first; the consumer then moves its pin. Never patch the submodule in place.
 - Consumers adopt a tool when they next touch the script it replaces, not in a sweep.
+- **A tool's first change in a consumer repository adds a rule to that repository's AGENTS.md**, in the same
+  commit: which script to run, for what, before reading the raw material by hand. Without the rule, sessions keep
+  reading the raw files and the tool saves nothing. Later features of the tool update that rule.
 - An incompatible change raises the major version and says what consumers must change.
 
 ## Git, versions and documents
@@ -92,6 +115,10 @@ adapted to a tooling repository. The repository was created on 7 November 2026 a
   history. Several agent sessions may share a tree: commit explicit paths and leave others' work alone.
 - Versions: a fix raises the last number, new functionality the middle, an incompatible change the first.
   Every change updates `CHANGELOG.md` in the same commit.
+- **A version bump changes three files together**: `python/phobos_modkit/__init__.py`, the workspace version in
+  `Cargo.toml`, and `Cargo.lock` through `cargo update --offline --workspace`. A lock file left behind makes every
+  `--locked` build refuse to start, as v0.2.1's did; `tests/test_versions.py` checks the three agree. Tag each
+  release `vX.Y.Z` and push the tag; never move a pushed tag, release a fixed version instead.
 - Never commit credentials, personal paths, game files, saves, logs, assemblies, decompiled code or other
   authors' mod files.
 - Write plainly: answer first, short sentences, **bold** for must-dos, tables for comparisons. Diagrams are
