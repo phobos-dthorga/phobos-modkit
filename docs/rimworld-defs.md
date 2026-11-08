@@ -36,7 +36,7 @@ python -m phobos_modkit rimworld-defs sql "SELECT def_type, COUNT(*) FROM def WH
 | `index` | Indexes the mods again now, then the summary | |
 | `mods` | Active mods in load order: package ID, source, Workshop ID, Defs, patch operations, load folders | `--name` |
 | `who NAME` | Every definition of a defName or abstract Name, with its fate (kept, replaced by a later mod, abstract parent, MayRequire not met), and every patch whose xpath names it | |
-| `show NAME` | The kept definition's XML as its file holds it now, then each ParentName up the chain | `--type` |
+| `show NAME` | The kept definition's XML as its file holds it now, then each ParentName up the chain, each cut at 80 lines unless `--lines` says otherwise (0 for all) | `--type`, `--lines` |
 | `list` | Kept Defs by type, mod, name or parent; `--all` adds replaced, abstract and unloaded ones | `--type`, `--mod`, `--name`, `--parent`, `--all` |
 | `patches` | Patch operations in load order, with the mods any PatchOperationFindMod around them names | `--target`, `--mod`, `--type`, `--operation` |
 | `sql QUERY` | Any query; the index is opened read-only | |

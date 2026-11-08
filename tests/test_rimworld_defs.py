@@ -266,6 +266,14 @@ class Reports(Install):
         self.assertIn("<thingClass>ThingWithComps</thingClass>", text)
         self.assertIn("No Def or abstract parent has that name", render_markdown(reports.show(self.conn, "Nope")))
 
+    def test_show_cuts_long_xml_at_the_line_limit_unless_it_is_zero(self):
+        cut = render_markdown(reports.show(self.conn, "Gun_A", max_lines=1))
+        self.assertIn("more lines (raise --lines, or 0 for all)", cut)
+        self.assertNotIn("<label>better gun a</label>", cut)
+        whole = render_markdown(reports.show(self.conn, "Gun_A", max_lines=0))
+        self.assertIn("<label>better gun a</label>", whole)
+        self.assertNotIn("more lines", whole)
+
     def test_parents_come_from_the_latest_mod_at_or_before_the_child(self):
         widget = render_markdown(reports.show(self.conn, "WidgetGun"))
         self.assertIn("<label>core base</label>", widget)

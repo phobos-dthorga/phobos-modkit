@@ -4,6 +4,12 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-09
+
+### Added
+
+- rimworld-defs show --lines N: how many XML lines each Def and parent shows before it is cut (default 80, as before; 0 shows every line). A long VehicleDef's parts list was cut off at 80 lines with no way to see the rest (phobos-rimworld, 9 November 2026). The cut line now names the option.
+
 ## [0.8.0] - 2026-11-08
 
 ### Added

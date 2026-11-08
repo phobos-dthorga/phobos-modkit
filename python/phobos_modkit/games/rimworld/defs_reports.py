@@ -123,8 +123,9 @@ def list_defs(conn, def_type=None, mod=None, name=None, parent=None, include_all
     return report
 
 
-def _xml_block(conn, row_id):
-    """(the Def's load position, its ParentName, report blocks showing its XML as its file holds it now)."""
+def _xml_block(conn, row_id, max_lines=XML_LINES):
+    """(the Def's load position, its ParentName, report blocks showing its XML as its file holds it now, cut at
+    max_lines unless that is 0)."""
     row = conn.execute("""SELECT d.def_type, COALESCE(d.def_name, d.name), d.parent, COALESCE(m.name, m.listed_id),
                                  m.folder, d.load_folder, d.file, d.element_index, d.mod_position
                           FROM def d JOIN mod m ON m.position = d.mod_position WHERE d.id = ?""", (row_id,)).fetchone()
@@ -136,13 +137,14 @@ def _xml_block(conn, row_id):
     if text is None:
         return position, parent, [f"{where}: the file no longer holds this Def; rebuild the index with --rebuild."]
     lines = text.splitlines()
-    if len(lines) > XML_LINES:
-        lines = lines[:XML_LINES] + [f"... {len(lines) - XML_LINES:,} more lines"]
+    if max_lines and len(lines) > max_lines:
+        lines = lines[:max_lines] + [f"... {len(lines) - max_lines:,} more lines (raise --lines, or 0 for all)"]
     return position, parent, [f"{where}:", Code(lines, "xml")]
 
 
-def show(conn, name, def_type=None):
-    """The kept definition of a Def as its file holds it, then each ParentName up the chain."""
+def show(conn, name, def_type=None, max_lines=XML_LINES):
+    """The kept definition of a Def as its file holds it, then each ParentName up the chain; each block is cut at
+    max_lines (0 shows every line)."""
     f = Filters()
     f.text("d.def_name", name, "d.name")
     f.text("d.def_type", def_type)
@@ -162,7 +164,7 @@ def show(conn, name, def_type=None):
     report.lines.append(AS_WRITTEN)
     report.lines.append("Each parent is the one the game picks: the same Name from the latest mod at or before the "
                         "child's own mod in load order.")
-    position, parent, blocks = _xml_block(conn, found[0])
+    position, parent, blocks = _xml_block(conn, found[0], max_lines)
     report.section("The Def", *blocks)
     seen = set()
     while parent and parent not in seen and len(seen) < CHAIN_LIMIT:
@@ -173,7 +175,7 @@ def show(conn, name, def_type=None):
             report.section(f"Parent {parent}", "No active mod at or before this one in load order gives a Def this "
                                                "Name: the game reports the parent as missing.")
             break
-        position, next_parent, blocks = _xml_block(conn, row[0])
+        position, next_parent, blocks = _xml_block(conn, row[0], max_lines)
         report.section(f"Parent {parent}", *blocks)
         parent = next_parent
     return report

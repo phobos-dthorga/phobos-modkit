@@ -55,6 +55,8 @@ def _parser():
     s = sub.add_parser("show", parents=[common], help="a Def's XML as written, then each parent up the chain")
     s.add_argument("name", help="a defName or abstract Name")
     s.add_argument("--type", help="the Def type, when several types use the name")
+    s.add_argument("--lines", type=int, default=reports.XML_LINES,
+                   help=f"XML lines per Def before it is cut (default {reports.XML_LINES}; 0 shows every line)")
     lst = sub.add_parser("list", parents=[common], help="Defs by type, mod, name or parent")
     lst.add_argument("--type", help="Def type, e.g. ThingDef or *Def")
     lst.add_argument("--mod", help="mod name or package ID")
@@ -80,7 +82,7 @@ def _report(conn, args):
     if args.report == "who":
         return reports.who(conn, args.name, top)
     if args.report == "show":
-        return reports.show(conn, args.name, args.type)
+        return reports.show(conn, args.name, args.type, max(0, args.lines))
     if args.report == "list":
         return reports.list_defs(conn, args.type, args.mod, args.name, args.parent, args.all, top)
     if args.report == "patches":
