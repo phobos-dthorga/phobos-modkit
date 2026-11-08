@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Reads .NET assemblies through their metadata (System.Reflection.Metadata, part of .NET itself): never loads or runs
+       them. No package references: the SDK alone builds it. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <RootNamespace>Phobos.ModKit.Assemblies</RootNamespace>
+    <AssemblyName>PhobosModKit.Assemblies</AssemblyName>
+  </PropertyGroup>
+
+</Project>

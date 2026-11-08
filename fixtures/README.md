@@ -11,6 +11,14 @@ them is made up.
 | `rimworld/player-prev-1.7.log` | 1.7 | A shorter previous run, for comparisons. |
 | `rimworld/player-1.6.log` | 1.6 | Unity's usual player-log layout as we understand it. **Not checked against a real 1.6 log.** |
 
+## A made-up mod assembly
+
+`dotnet/PatchFixture/` is C# source the assembly reader's tests build (into the kit's build folder) and then read. Its
+`HarmonyLib` is a stand-in with only the names Harmony's documentation publishes (the patch attributes, `Harmony.Patch`,
+`HarmonyMethod`, `AccessTools`), no code of Harmony's. It holds one of each patch form the reader handles: a class target
+with a bool prefix and a priority, a getter, an overload with a generic argument type, marked patch methods, a
+TargetMethod, two `harmony.Patch` calls (one through `AccessTools.TypeByName`), and a look-alike that is not a patch.
+
 ## RimWorld save
 
 `rimworld/Example.rws` follows the element paths of RimWorld 1.7.5000 saves: a colony map with things, a pawn with

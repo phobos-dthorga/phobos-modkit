@@ -42,6 +42,7 @@ python -m phobos_modkit steam-publish status          every mod's Workshop packa
 python -m phobos_modkit release changelog mods/*/CHANGELOG.md   changelogs in the Phobos form?
 python -m phobos_modkit release constants --check     every copy of each version in step?
 python -m phobos_modkit rimworld-settings --mod "X*"   the player's settings for matching mods; also snapshot, compare
+python -m phobos_modkit rimworld-patches who "Pawn.Kill"   which active mods patch a method; also mod, hotspots
 python -m phobos_modkit code --each-in DIR show Type.Member   a C# member's source by name; also find, outline, refs
 python -m phobos_modkit gate --root ..         this repository's checks before a commit; only what failed
 ```
@@ -57,7 +58,7 @@ in order of expected saving.
 | 1 | [Log triage](docs/rimworld-log.md) (RimWorld) | What went wrong this run, which mod it came from, what is new since last run | Python | Built: 0.1.1 |
 | 2 | [Save index and query](docs/rimworld-save.md) (RimWorld) | Where things are in a large XML save; pawns, hediffs, holders; map grids; what changed between two saves | Rust engine, Python reports | Built: 0.6.0, with map grids and save comparison |
 | 3 | [Mod and Def index](docs/rimworld-defs.md) (RimWorld) | Which mod defines or patches something, in the player's load order, and which definition the game keeps | Python | Built: 0.4.0 |
-| 4 | Assembly metadata reader | Which mods patch a method; what constants a DLL holds; does a consumer still match its provider | C# | Planned |
+| 4 | [Harmony patches](docs/rimworld-patches.md) (RimWorld), the assembly metadata reader | Which active mods patch a method, what a mod patches, where several mods patch one method; read from metadata, never run | C# reader, Python reports | Built: 0.14.0 (patches; constants and API matching not yet) |
 | 5 | [Workshop research](docs/workshop.md) | What players report about a mod lately; supported versions; last update | Python | Built: 0.5.0 |
 | 6 | Startup sessions (RimWorld) | Load-time history and what changed between launches | Python | Planned |
 | 7 | Version readiness scan | Which mods declare the new game version, and which use risky techniques | Python | Planned |
@@ -89,12 +90,13 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/workshop.md](docs/workshop.md) | Workshop research: details, comments, pacing and what Steam hides |
 | [docs/workshop-publishing.md](docs/workshop-publishing.md) | Publishing to the Workshop: notes, staging, the owner-run uploader, the catalogue |
 | [docs/release.md](docs/release.md) | Changelog checks, constants kept in step, the history screen |
+| [docs/rimworld-patches.md](docs/rimworld-patches.md) | Harmony patches across every active mod: how they are found, what the notes mean |
 | [docs/code.md](docs/code.md) | The code index: find, outline, show and refs over C# trees, and what the scanner reads |
 | [docs/rimworld-settings.md](docs/rimworld-settings.md) | The player's mod settings: matching files to mods, defaults, snapshots |
 | [docs/gate.md](docs/gate.md) | The gate: a repository's checks from config/gate.json, and what each output parser keeps |
 | `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `query.py` (report filters), `steam/` (Workshop research; `publish/` for publishing), `release/` (changelogs, constants, history screen), `gate/` (the check runner and its output parsers), `code/` (the C# declaration scanner and index), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema), `games/ostranauts/` (publishing only) |
 | `crates/xml-index/` | Rust: streams any large XML file into SQLite, driven by a schema file; `cargo test` |
-| `dotnet/` | C# tools (planned) |
+| `dotnet/` | C# tools: `PhobosModKit.Assemblies`, the assembly metadata reader (System.Reflection.Metadata; builds outside the repository) |
 | `fixtures/`, `tests/` | Hand-written test data and the tests: `python -m unittest discover -s tests` |
 
 ## Licence

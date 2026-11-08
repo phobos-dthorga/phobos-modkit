@@ -36,6 +36,10 @@ jobs:
       - name: Build the Rust tools
         shell: bash
         run: cargo build --release --locked
+      - name: Install .NET for the assembly reader
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: "10.0.x"
       - name: Run the Python tests, with the Rust tools required
         shell: bash
         env:

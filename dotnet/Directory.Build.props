@@ -1,0 +1,14 @@
+<Project>
+
+  <!-- Build products go where the Rust tools build (phobos_modkit.native.build_dir), outside the repository: a
+       cloud-synced clone would otherwise upload obj/ and bin/. PHOBOS_MODKIT_BUILD overrides the folder. -->
+  <PropertyGroup>
+    <PhobosBuildRoot Condition="'$(PHOBOS_MODKIT_BUILD)' != ''">$(PHOBOS_MODKIT_BUILD)</PhobosBuildRoot>
+    <PhobosBuildRoot Condition="'$(PhobosBuildRoot)' == '' and '$(LOCALAPPDATA)' != ''">$(LOCALAPPDATA)\phobos-modkit\target</PhobosBuildRoot>
+    <PhobosBuildRoot Condition="'$(PhobosBuildRoot)' == '' and '$(XDG_CACHE_HOME)' != ''">$(XDG_CACHE_HOME)/phobos-modkit/target</PhobosBuildRoot>
+    <PhobosBuildRoot Condition="'$(PhobosBuildRoot)' == ''">$(HOME)/.cache/phobos-modkit/target</PhobosBuildRoot>
+    <BaseIntermediateOutputPath>$(PhobosBuildRoot)/dotnet/obj/$(MSBuildProjectName)/</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(PhobosBuildRoot)/dotnet/bin/$(MSBuildProjectName)/</BaseOutputPath>
+  </PropertyGroup>
+
+</Project>

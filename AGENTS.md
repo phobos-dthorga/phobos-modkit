@@ -81,7 +81,8 @@ adapted to a tooling repository. The repository was created on 7 November 2026 a
 - **Python** (`python/phobos_modkit/`): standard library only, Python 3.10 or newer, `unittest`. The default.
 - **Rust** (`crates/`): for large inputs where speed changes how the tool is used. Pinned toolchain, edition
   2024, as Phobos Scope does.
-- **C#** (`dotnet/`): for .NET assembly metadata. .NET 10, no assembly loading.
+- **C#** (`dotnet/`): for .NET assembly metadata. .NET 10, no assembly loading, no package references. `dotnet/Directory.Build.props`
+  sends `obj/` and `bin/` to the build folder outside the repository; a C# fixture under `fixtures/dotnet/` imports it.
 - A third-party dependency needs a stated reason and an entry in `THIRD_PARTY_NOTICES.md`.
 
 ## Tests and fixtures

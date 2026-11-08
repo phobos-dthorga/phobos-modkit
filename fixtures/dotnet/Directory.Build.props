@@ -1,0 +1,6 @@
+<Project>
+
+  <!-- Fixture builds go outside the repository too, as the tools' do. -->
+  <Import Project="$(MSBuildThisFileDirectory)..\..\dotnet\Directory.Build.props" />
+
+</Project>

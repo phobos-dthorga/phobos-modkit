@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A made-up mod assembly for the assembly reader's tests: built by the tests, never committed as a DLL. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>PatchFixture</AssemblyName>
+    <NoWarn>CS0067;CS0414;CS0169</NoWarn>
+  </PropertyGroup>
+
+</Project>

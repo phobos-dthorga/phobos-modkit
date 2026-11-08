@@ -4,6 +4,21 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-09
+
+The plan's tool 4, the assembly metadata reader, at the owner's request (9 November 2026). On the owner's 254 active mods:
+5,356 Harmony patches in 333 assemblies, read in 6 seconds.
+
+### Added
+
+- rimworld-patches: which active mods patch a method (who, with wildcards on the member and type), what one mod patches (mod), and methods several mods patch (hotspots), each patch with its kind, its patch method, its priority, and whether a prefix returning bool may stop the original. Only the assemblies the game loads are read (each active mod's load folders for the game's version), and only ones that changed since last time.
+- PhobosModKit.Assemblies (C#, dotnet/): reads assemblies through System.Reflection.Metadata, never loading them. Finds [HarmonyPatch] classes (merged as Harmony merges class and method attributes, with MethodType, argument types and HarmonyPriority), the targets a TargetMethod's code names through AccessTools, and harmony.Patch calls read from the IL. Its build goes to the kit's build folder, outside the repository.
+- docs/rimworld-patches.md; a made-up mod assembly in C# source (fixtures/dotnet/PatchFixture) and 4 tests that build and read it.
+
+### Changed
+
+- CI installs .NET 10 so the reader's tests run, as the Rust tools' do.
+
 ## [0.13.1] - 2026-11-09
 
 ### Fixed
