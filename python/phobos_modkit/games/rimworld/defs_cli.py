@@ -23,9 +23,11 @@ from ... import cache as derived
 from ...report import home_redactor, keep, render_json, render_markdown
 from . import defs
 from . import defs_reports as reports
+from . import patched_defs
 from . import paths
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
+PATCHED_DEFS = ("rimworldPatchedDefsPath", "RIMWORLD_PATCHED_DEFS")
 
 
 def _parser():
@@ -57,6 +59,12 @@ def _parser():
     s.add_argument("--type", help="the Def type, when several types use the name")
     s.add_argument("--lines", type=int, default=reports.XML_LINES,
                    help=f"XML lines per Def before it is cut (default {reports.XML_LINES}; 0 shows every line)")
+    pd = sub.add_parser("patched", parents=[common], help="a Def with every patch applied, and what the patches changed")
+    pd.add_argument("name", help="a defName or abstract Name")
+    pd.add_argument("--type", help="the Def type, when several types use the name")
+    pd.add_argument("--dump", help="the patched-Defs file a running game wrote (else RIMWORLD_PATCHED_DEFS, settings)")
+    pd.add_argument("--lines", type=int, default=reports.XML_LINES,
+                    help=f"XML lines shown (default {reports.XML_LINES}; 0 shows every line)")
     lst = sub.add_parser("list", parents=[common], help="Defs by type, mod, name or parent")
     lst.add_argument("--type", help="Def type, e.g. ThingDef or *Def")
     lst.add_argument("--mod", help="mod name or package ID")
@@ -83,6 +91,8 @@ def _report(conn, args):
         return reports.who(conn, args.name, top)
     if args.report == "show":
         return reports.show(conn, args.name, args.type, max(0, args.lines))
+    if args.report == "patched":
+        return patched_defs.show(conn, args.patched_index, args.name, args.type, max(0, args.lines))
     if args.report == "list":
         return reports.list_defs(conn, args.type, args.mod, args.name, args.parent, args.all, top)
     if args.report == "patches":
@@ -104,6 +114,15 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     cache = derived.folder(defs.CACHE_FOLDER, args.cache, environ, settings_file)
     try:
         index, built = defs.ensure(install, cache, args.rebuild or args.report == "index")
+        if args.report == "patched":
+            dump = paths.resolve(*PATCHED_DEFS, None, args.dump, environ, settings_file)
+            if dump is None:
+                raise defs.DefsError("Name the patched-Defs file with --dump (or RIMWORLD_PATCHED_DEFS); a mod has to "
+                                     "write one from a running game first.")
+            try:
+                args.patched_index, _ = patched_defs.ensure(dump, cache)
+            except patched_defs.PatchedError as problem:
+                raise defs.DefsError(str(problem)) from None
         with closing(derived.open_read_only(index)) as conn:
             report = _report(conn, args)
     except defs.DefsError as problem:

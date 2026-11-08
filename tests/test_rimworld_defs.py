@@ -334,3 +334,41 @@ class Command(Install):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+PATCHED_DUMP = """<?xml version="1.0" encoding="utf-8"?>
+<!-- Written for these tests in the shape D'thorga Framework writes: every Def after patches, before inheritance. -->
+<Defs gameVersion="1.7.9999 rev1" written="2026-11-09T10:00:00Z" activeMods="3">
+  <ThingDef Name="BaseGun" Abstract="True"><thingClass>ThingWithComps</thingClass></ThingDef>
+  <ThingDef><defName>Steel</defName><label>shiny steel</label><comps><li /></comps></ThingDef>
+  <ThingDef ParentName="BaseGun"><defName>Gun_A</defName><label>better gun a</label></ThingDef>
+  <ThingDef><defName>AddedByPatch</defName></ThingDef>
+</Defs>
+"""
+
+
+class PatchedDefs(Install):
+    run_main = Command.run_main
+
+    def test_a_def_as_patched_and_what_changed(self):
+        dump = self.root / "PatchedDefs.xml"
+        write(dump, PATCHED_DUMP)
+        code, text = self.run_main("patched", "Steel", "--dump", str(dump))
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("written 2026-11-09T10:00:00Z by game 1.7.9999 rev1 with 3 active mods", text)
+        self.assertIn("<label>shiny steel</label>", text)
+        self.assertIn("-  <label>steel</label>", text)
+        self.assertIn("+  <label>shiny steel</label>", text)
+        self.assertIn("--- as written (Core)", text)
+        code, text = self.run_main("patched", "Gun_A", "--dump", str(dump))
+        self.assertIn("Nothing: the Def is as its mod wrote it.", text)
+        code, text = self.run_main("patched", "AddedByPatch", "--dump", str(dump))
+        self.assertIn("a patch may have added this Def", text)
+        code, text = self.run_main("patched", "BaseGun", "--dump", str(dump))
+        self.assertIn("Nothing: the Def is as its mod wrote it.", text)
+
+    def test_without_a_dump_the_command_says_how_to_get_one(self):
+        out = io.StringIO()
+        code = main(["patched", "Steel", "--game", str(self.install.game), "--workshop", str(self.install.workshop),
+                     "--config", str(self.install.config), "--cache", str(self.root / "kitcache")], environ={}, out=out)
+        self.assertNotEqual(code, EXIT_OK)

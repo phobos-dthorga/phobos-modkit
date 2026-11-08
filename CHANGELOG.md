@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-09
+
+The resolved-Defs half of the plan's shared frameworks, at the owner's go-ahead (9 November 2026): a Def with every
+patch applied, which no file on disk holds.
+
+### Added
+
+- rimworld-defs patched NAME: the Def with every mod's XML patches applied (before inheritance), from a patched-Defs file a running game wrote, and a diff against the kept definition as written. A Def only a patch adds, and one the patches leave alone, each say so. The file is indexed in the cache by streaming, again whenever it changes, and is named by --dump, RIMWORLD_PATCHED_DEFS or the rimworldPatchedDefsPath setting.
+- docs/rimworld-defs.md: what such a file holds and how phobos-rimworld's D'thorga Framework writes one; 2 tests on a hand-written file.
+
 ## [0.14.0] - 2026-11-09
 
 The plan's tool 4, the assembly metadata reader, at the owner's request (9 November 2026). On the owner's 254 active mods:

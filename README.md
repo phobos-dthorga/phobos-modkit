@@ -36,6 +36,7 @@ python -m phobos_modkit rimworld-log           summarise RimWorld's Player.log a
 python -m phobos_modkit rimworld-log --show ID one message in full
 python -m phobos_modkit rimworld-save          summarise the newest save; also pawns, things, hediffs, find, sql
 python -m phobos_modkit rimworld-defs who X    which active mods define and patch a Def; also show, list, patches
+python -m phobos_modkit rimworld-defs patched X --dump F   a Def with every patch applied, and what changed
 python -m phobos_modkit rimworld-workshop report "Mod name"   what players report about a mod lately
 python -m phobos_modkit steam-publish notes --check   release notes and Workshop pages current?
 python -m phobos_modkit steam-publish status          every mod's Workshop package, blockers and order

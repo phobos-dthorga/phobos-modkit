@@ -7,7 +7,8 @@ takes about 8 seconds; later questions take about a third of a second until some
 ## Read this first (gotchas)
 
 - **Defs are shown as their mods wrote them.** Other mods' patches are not applied, so a Def a patch changes looks
-  as its author wrote it. The `who` and `patches` reports list the patches that name it.
+  as its author wrote it. The `who` and `patches` reports list the patches that name it. **`patched NAME` shows it with
+  every patch applied, and what the patches changed**, from a file a running game wrote (0.15.0; see below).
 - **Patches are matched by the defName in their xpath.** A patch that selects Defs by class, by parent or with `*`
   is in the index (`patches --type`, `sql`) but is not listed under a Def's name.
 - **A Def's type is its XML tag.** The game files a mod's subclass tags (such as `AlienRace.ThingDef_AlienRace`)
@@ -39,6 +40,7 @@ python -m phobos_modkit rimworld-defs sql "SELECT def_type, COUNT(*) FROM def WH
 | `show NAME` | The kept definition's XML as its file holds it now, then each ParentName up the chain, each cut at 80 lines unless `--lines` says otherwise (0 for all) | `--type`, `--lines` |
 | `list` | Kept Defs by type, mod, name or parent; `--all` adds replaced, abstract and unloaded ones | `--type`, `--mod`, `--name`, `--parent`, `--all` |
 | `patches` | Patch operations in load order, with the mods any PatchOperationFindMod around them names | `--target`, `--mod`, `--type`, `--operation` |
+| `patched NAME` | The Def with every mod's patches applied (before inheritance), from a patched-Defs file a running game wrote, then a diff against the kept definition as written. A Def only a patch adds says so | `--dump`, `--type`, `--lines` |
 | `sql QUERY` | Any query; the index is opened read-only | |
 
 Every report takes `--game`, `--workshop`, `--config` (the folder with ModsConfig.xml), `--cache`, `--settings`,
@@ -46,6 +48,20 @@ Every report takes `--game`, `--workshop`, `--config` (the folder with ModsConfi
 ordinary character. The folders come from the option, then `RIMWORLD_PATH`, `RIMWORLD_WORKSHOP_PATH` and
 `RIMWORLD_CONFIG_PATH`, then the settings file (`rimworldPath`, `workshopPath`, `rimworldConfigPath`), then Steam's
 usual place.
+
+## Defs with every patch applied (`patched`, 0.15.0)
+
+The game combines every active mod's XML, applies every patch in load order, reads Defs from the result and lets it go,
+so no file on disk holds a Def as patched. A mod can keep that document and write it: phobos-rimworld's D'thorga
+Framework does, once, on a developer's request (its settings in dev mode, or its dev action "write patched Defs at the
+next start"), to `PhobosPatchedDefs/PatchedDefs.xml` in the RimWorld user folder. The file is a `<Defs>` root with the
+game version, the time and the number of active mods as attributes, and every Def node as the patches left it;
+inheritance (ParentName) is not applied.
+
+`patched NAME --dump FILE` indexes that file in the cache (again whenever it changes) and shows the Def's XML, then a
+unified diff from the definition the game keeps as written (`-` lines) to the patched one (`+` lines). The file may be
+named by `--dump`, `RIMWORLD_PATCHED_DEFS` or `rimworldPatchedDefsPath` in the settings file. It holds other authors'
+Defs: keep it on the computer that wrote it.
 
 ## The game's rules it follows
 
