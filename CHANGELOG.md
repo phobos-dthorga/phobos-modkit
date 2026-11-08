@@ -4,6 +4,10 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+### Changed
+
+- README: the opening list names all ten built tools and says the Harmony patch reader needs the .NET SDK.
+
 ## [0.15.0] - 2026-11-09
 
 The resolved-Defs half of the plan's shared frameworks, at the owner's go-ahead (9 November 2026): a Def with every

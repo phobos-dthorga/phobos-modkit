@@ -6,11 +6,14 @@ questions in a short summary instead of a long read. One shared home for code th
 
 ## Read this first (gotchas)
 
-- **Six tools are built: RimWorld log triage, save index, Def index, Workshop research, Workshop publishing and
-  release chores** (0.10.0, 8 Nov 2026). The rest are planned. See [log triage](docs/rimworld-log.md),
-  [the save index](docs/rimworld-save.md), [the Def index](docs/rimworld-defs.md),
-  [Workshop research](docs/workshop.md), [Workshop publishing](docs/workshop-publishing.md) and
-  [release chores](docs/release.md).
+- **Ten tools are built**: RimWorld log triage, save index, Def index (with Defs as patched, 0.15.0), Workshop research,
+  Workshop publishing, release chores, the gate (0.11.0), mod settings (0.12.0), the code index (0.13.0) and Harmony
+  patches (0.14.0). Startup sessions and the version readiness scan are planned. See [log triage](docs/rimworld-log.md),
+  [the save index](docs/rimworld-save.md), [the Def index](docs/rimworld-defs.md), [Workshop research](docs/workshop.md),
+  [Workshop publishing](docs/workshop-publishing.md), [release chores](docs/release.md), [the gate](docs/gate.md),
+  [mod settings](docs/rimworld-settings.md), [the code index](docs/code.md) and [Harmony patches](docs/rimworld-patches.md).
+- **The Harmony patch reader needs the .NET SDK** (10 or newer) for its first build, into the same folder outside the
+  repository as the Rust tools.
 - **The save index needs one Rust build:** add `--build-indexer` to its first command, with Rust from
   [rustup](https://rustup.rs). It builds outside the repository, so a cloud-synced clone does not upload hundreds
   of megabytes. Everything else is standard-library Python 3.10 or newer.
