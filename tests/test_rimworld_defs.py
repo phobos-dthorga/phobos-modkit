@@ -367,6 +367,43 @@ class PatchedDefs(Install):
         code, text = self.run_main("patched", "BaseGun", "--dump", str(dump))
         self.assertIn("Nothing: the Def is as its mod wrote it.", text)
 
+    def _dump_now(self, text=PATCHED_DUMP):
+        dump = self.root / "PatchedDefs.xml"
+        write(dump, text)
+        os.utime(dump, (time.time() + 60, time.time() + 60))
+        return dump
+
+    def test_a_file_newer_than_the_install_is_not_called_out_of_date(self):
+        code, text = self.run_main("patched", "Steel", "--dump", str(self._dump_now()))
+        self.assertEqual(code, EXIT_OK)
+        self.assertNotIn("may be out of date", text)
+
+    def test_changes_after_the_file_are_named(self):
+        dump = self.root / "PatchedDefs.xml"
+        write(dump, PATCHED_DUMP)
+        os.utime(dump, (1, 1))
+        code, text = self.run_main("patched", "Steel", "--dump", str(dump))
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("may be out of date", text)
+        self.assertIn("the mod list has been saved since", text)
+        self.assertIn("XML changed since in the game's Mods folder", text)
+
+    def test_a_different_mod_count_or_game_version_is_reported(self):
+        changed = PATCHED_DUMP.replace('activeMods="3"', 'activeMods="9"').replace('gameVersion="1.7.9999 rev1"',
+                                                                                   'gameVersion="1.7.1 rev1"')
+        code, text = self.run_main("patched", "Steel", "--dump", str(self._dump_now(changed)))
+        self.assertIn("written with 9 active mods and", text)
+        self.assertIn("the game is now 1.7.9999 rev1", text)
+
+    def test_who_and_show_point_at_the_patched_view_only_when_the_file_exists(self):
+        dump = self._dump_now()
+        for report in ("who", "show"):
+            code, text = self.run_main(report, "Steel", "--dump", str(dump))
+            self.assertEqual(code, EXIT_OK)
+            self.assertIn("the patched report shows Steel as the game reads it", text)
+            code, text = self.run_main(report, "Steel", "--dump", str(self.root / "none.xml"))
+            self.assertNotIn("the patched report shows", text)
+
     def test_without_a_dump_the_command_says_how_to_get_one(self):
         out = io.StringIO()
         code = main(["patched", "Steel", "--game", str(self.install.game), "--workshop", str(self.install.workshop),

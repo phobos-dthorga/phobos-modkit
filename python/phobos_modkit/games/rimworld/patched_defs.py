@@ -18,10 +18,11 @@ import xml.etree.ElementTree as ET
 from ... import __version__
 from ... import cache as derived
 from ...report import Code, Report
-from .defs import element_xml
+from .defs import element_xml, local_mods_changed_since
 
 INDEX_NAME = "patched-defs.sqlite"
 INDEX_FORMAT = "1"
+FOLDERS_NAMED = 5
 SCHEMA = """
 CREATE TABLE pdef (id INTEGER PRIMARY KEY, def_type TEXT NOT NULL, def_name TEXT, name TEXT, parent TEXT,
                    abstract INTEGER NOT NULL, xml TEXT NOT NULL);
@@ -107,7 +108,31 @@ def _written(conn, def_type, name, abstract):
     return tidy(ET.fromstring(text)), row[4]
 
 
-def show(defs_conn, patched_index, name, def_type=None, max_lines=80):
+def out_of_date(install, meta, defs_conn):
+    """Why the file may no longer match the game as it stands: plain phrases, none when nothing moved since it was written."""
+    reasons = []
+    active = defs_conn.execute("SELECT COUNT(*) FROM mod WHERE installed").fetchone()[0]
+    listed = str(meta.get("dump_activeMods", ""))
+    if listed.isdigit() and int(listed) != active:
+        reasons.append(f"it was written with {listed} active mods and {active} are active now")
+    version = meta.get("dump_gameVersion")
+    if version and install.version_file.is_file():
+        now = install.version_file.read_text(encoding="utf-8", errors="replace").strip()
+        if now and now != version:
+            reasons.append(f"the game is now {now}")
+    written = int(meta.get("dump_mtime_ns") or 0)
+    for path, what in ((install.mods_config, "the mod list has been saved since"),
+                       (install.manifest, "Steam's Workshop manifest is newer, so a Workshop mod may have updated")):
+        if path.is_file() and path.stat().st_mtime_ns > written:
+            reasons.append(what)
+    changed = local_mods_changed_since(install.game, written)
+    if changed:
+        more = f" and {len(changed) - FOLDERS_NAMED} more" if len(changed) > FOLDERS_NAMED else ""
+        reasons.append(f"XML changed since in the game's Mods folder ({', '.join(changed[:FOLDERS_NAMED])}{more})")
+    return reasons
+
+
+def show(defs_conn, patched_index, name, def_type=None, max_lines=80, install=None):
     """A Def as every patch left it, and the difference from the definition as written."""
     meta = derived.read_meta(patched_index)
     with closing(derived.open_read_only(patched_index)) as conn:
@@ -121,6 +146,10 @@ def show(defs_conn, patched_index, name, def_type=None, max_lines=80):
     report.lines.append(f"From the patched-Defs file written {meta.get('dump_written', '(unknown time)')} by game "
                         f"{meta.get('dump_gameVersion', '(unknown)')} with {meta.get('dump_activeMods', '?')} active mods. "
                         "Patches are applied; inheritance is not (ParentName is shown, its values are not merged in).")
+    reasons = out_of_date(install, meta, defs_conn) if install is not None else []
+    if reasons:
+        report.lines.append("This file may be out of date: " + "; ".join(reasons) + ". These compare file times and counts, "
+                            "and the change may not touch this Def; have the game write the file again to be sure.")
     if not rows:
         report.lines.append("No Def in the file has that name. A Def the game makes in code is not in the file; check the "
                             "spelling with the who report.")

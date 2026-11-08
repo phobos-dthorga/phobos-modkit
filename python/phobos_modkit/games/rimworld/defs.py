@@ -109,9 +109,8 @@ def index_path(cache):
     return Path(cache) / INDEX_NAME
 
 
-def _local_fingerprint(game):
-    """A hash of every XML file's path, size and time in the game's Mods folder: the mods a modder edits in place."""
-    digest = hashlib.sha256()
+def _local_xml(game):
+    """Every XML file in the game's Mods folder, in a stable order, as (path inside Mods, its stat)."""
     mods = Path(game) / "Mods"
     if mods.is_dir():
         for folder, dirs, files in os.walk(mods):
@@ -119,9 +118,20 @@ def _local_fingerprint(game):
             for name in sorted(files):
                 if name.lower().endswith(".xml"):
                     path = Path(folder) / name
-                    info = path.stat()
-                    digest.update(f"{path.relative_to(mods).as_posix()}|{info.st_size}|{info.st_mtime_ns}\n".encode())
+                    yield path.relative_to(mods), path.stat()
+
+
+def _local_fingerprint(game):
+    """A hash of every XML file's path, size and time in the game's Mods folder: the mods a modder edits in place."""
+    digest = hashlib.sha256()
+    for relative, info in _local_xml(game):
+        digest.update(f"{relative.as_posix()}|{info.st_size}|{info.st_mtime_ns}\n".encode())
     return digest.hexdigest()[:derived.DIGEST_LENGTH]
+
+
+def local_mods_changed_since(game, mtime_ns):
+    """The folders in the game's Mods folder holding an XML file newer than a time, sorted."""
+    return sorted({relative.parts[0] for relative, info in _local_xml(game) if info.st_mtime_ns > mtime_ns})
 
 
 def provenance(install):

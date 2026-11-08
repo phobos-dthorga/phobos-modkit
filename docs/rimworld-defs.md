@@ -63,6 +63,11 @@ unified diff from the definition the game keeps as written (`-` lines) to the pa
 named by `--dump`, `RIMWORLD_PATCHED_DEFS` or `rimworldPatchedDefsPath` in the settings file. It holds other authors'
 Defs: keep it on the computer that wrote it.
 
+The report says when the file may no longer match the game: a different count of active mods or game version, a mod list
+or Workshop manifest saved after it, or XML changed after it in the game's Mods folder (those named). These compare file
+times and counts, so the change may not touch the Def shown. `who` and `show` take `--dump` too and add one line pointing
+at this report when the file exists.
+
 ## The game's rules it follows
 
 Summarised in our own words from the RimWorld 1.7 game code (November 2026):

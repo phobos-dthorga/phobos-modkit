@@ -23,6 +23,7 @@ class History(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             git(root, "init", "-q")
+            git(root, "config", "core.fsmonitor", "false")  # in the repository: the code under test runs plain git
             git(root, "config", "user.email", "test@example.com")
             git(root, "config", "user.name", "Test")
             (root / "clean.md").write_text("Nothing here.\n", encoding="utf-8")

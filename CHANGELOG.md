@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-08
+
+The patched view becomes the first place to look (owner, 8 November 2026), so it has to say when it cannot be trusted.
+
+### Added
+
+- rimworld-defs patched says when the file may be out of date: a different count of active mods or game version, a mod list or Workshop manifest saved after it, or XML changed after it in the game's Mods folder, naming those folders.
+- rimworld-defs who and show take --dump and add one line pointing at the patched report when the file exists.
+
+### Fixed
+
+- The Workshop publishing and release history tests set core.fsmonitor false in their test repositories. They had passed it only on their own git calls, so the plain git status in the code under test started a watcher for each test repository that never exited, and one could hang the test run.
+
 ### Changed
 
 - README: the opening list names all ten built tools and says the Harmony patch reader needs the .NET SDK.

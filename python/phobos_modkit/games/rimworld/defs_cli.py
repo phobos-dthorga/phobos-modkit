@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import argparse
 from contextlib import closing
+from datetime import datetime, timezone
 import json
+from pathlib import Path
 import sqlite3
 import sys
 
@@ -54,8 +56,10 @@ def _parser():
     m.add_argument("--name", help="a mod's name or package ID")
     w = sub.add_parser("who", parents=[common], help="every definition of a Def and every patch naming it")
     w.add_argument("name", help="a defName or abstract Name; * and ? are wildcards")
+    w.add_argument("--dump", help="a patched-Defs file; when it exists, the report points at the patched view")
     s = sub.add_parser("show", parents=[common], help="a Def's XML as written, then each parent up the chain")
     s.add_argument("name", help="a defName or abstract Name")
+    s.add_argument("--dump", help="a patched-Defs file; when it exists, the report points at the patched view")
     s.add_argument("--type", help="the Def type, when several types use the name")
     s.add_argument("--lines", type=int, default=reports.XML_LINES,
                    help=f"XML lines per Def before it is cut (default {reports.XML_LINES}; 0 shows every line)")
@@ -92,12 +96,21 @@ def _report(conn, args):
     if args.report == "show":
         return reports.show(conn, args.name, args.type, max(0, args.lines))
     if args.report == "patched":
-        return patched_defs.show(conn, args.patched_index, args.name, args.type, max(0, args.lines))
+        return patched_defs.show(conn, args.patched_index, args.name, args.type, max(0, args.lines), args.install)
     if args.report == "list":
         return reports.list_defs(conn, args.type, args.mod, args.name, args.parent, args.all, top)
     if args.report == "patches":
         return reports.patches(conn, args.target, args.mod, args.type, args.operation, top)
     return reports.sql(conn, args.query, top)
+
+
+def _patched_pointer(name, dump):
+    """One line saying the patched view exists, for the reports that show Defs as written; None when there is no file."""
+    if dump is None or not Path(dump).is_file():
+        return None
+    written = datetime.fromtimestamp(Path(dump).stat().st_mtime, timezone.utc).date().isoformat()
+    return (f"These are Defs as written. A file of Defs with every patch applied exists (written {written}): the patched "
+            f"report shows {name} as the game reads it.")
 
 
 def main(argv=None, settings_file=None, environ=None, out=None):
@@ -123,6 +136,7 @@ def main(argv=None, settings_file=None, environ=None, out=None):
                 args.patched_index, _ = patched_defs.ensure(dump, cache)
             except patched_defs.PatchedError as problem:
                 raise defs.DefsError(str(problem)) from None
+            args.install = install
         with closing(derived.open_read_only(index)) as conn:
             report = _report(conn, args)
     except defs.DefsError as problem:
@@ -139,6 +153,10 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     else:
         provenance = "Index of the active mods, reused: the mod list, the Workshop, the game and local mods are unchanged."
     report.lines.insert(0, provenance)
+    if args.report in ("who", "show"):
+        pointer = _patched_pointer(args.name, paths.resolve(*PATCHED_DEFS, None, args.dump, environ, settings_file))
+        if pointer:
+            report.lines.insert(1, pointer)
     if args.json:
         out.write(json.dumps({"index": redact(str(index)), "built": built is not None,
                               "report": render_json(report, redact)}, indent=1, ensure_ascii=False, default=str) + "\n")

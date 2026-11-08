@@ -100,6 +100,9 @@ class Publishing(unittest.TestCase):
         self.write("config/workshop-publishing.json", json.dumps(self.catalogue, indent=2) + "\n")
         self.write(".gitignore", ".local/\n")
         git(self.root, "init", "-q")
+        # In the repository, not only on our own calls: the code under test runs plain git, and a system-wide core.fsmonitor=true
+        # would start a watcher for this folder that outlives the test and can hang its git status.
+        git(self.root, "config", "core.fsmonitor", "false")
         git(self.root, "config", "user.email", "test@example.com")
         git(self.root, "config", "user.name", "Test")
         git(self.root, "config", "core.autocrlf", "false")
