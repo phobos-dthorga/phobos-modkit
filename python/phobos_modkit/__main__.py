@@ -44,6 +44,11 @@ def _rimworld_settings(argv):
     return main(argv)
 
 
+def _code(argv):
+    from .code.cli import main
+    return main(argv)
+
+
 def _gate(argv):
     from .gate.cli import main
     return main(argv)
@@ -58,6 +63,7 @@ COMMANDS = {
     "steam-workshop": (_steam_workshop, "what players report about Workshop items lately, by ID or URL"),
     "steam-publish": (_steam_publish, "release notes, staging and the owner-run Workshop uploader"),
     "release": (_release, "changelog checks, version constants kept in step, history screen"),
+    "code": (_code, "find, outline and show C# declarations, and every line using a name"),
     "gate": (_gate, "run a repository's checks before a commit and report only what failed"),
 }
 

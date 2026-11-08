@@ -4,6 +4,18 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-09
+
+At the owner's request (9 November 2026) for tools that keep agent sessions lean: research into a mod's code used to
+mean agents searching hundreds of thousands of decompiled lines. On the owner's 54 trees (about 330,000 declarations)
+the first index took 34 seconds; a query then takes under a second.
+
+### Added
+
+- code: indexes C# source trees (decompiled assemblies kept on the researcher's machine, a project's own source) into the cache, and answers find (declarations by name, with wildcards and kinds), outline (a type's members with their lines), show (a member's source by bare, dotted or full name, numbered, every overload, decompiler notes hidden) and refs (every line using a name, grouped by the member holding it). Indexes rebuild when a tree's files change.
+- The scanner blanks comments and every kind of string first (verbatim, interpolated with quotes nested in their holes, raw) and reads attributes with braces, default parameters with casts, tuple types, expression bodies and file-scoped namespaces; on the owner's trees it misses about two declarations in 100,000.
+- docs/code.md; 6 tests on made-up C#.
+
 ## [0.12.0] - 2026-11-09
 
 At the owner's request (9 November 2026) for a tool that captures the settings they play with, to help work out what
