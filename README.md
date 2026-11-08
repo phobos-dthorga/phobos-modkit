@@ -41,6 +41,7 @@ python -m phobos_modkit steam-publish notes --check   release notes and Workshop
 python -m phobos_modkit steam-publish status          every mod's Workshop package, blockers and order
 python -m phobos_modkit release changelog mods/*/CHANGELOG.md   changelogs in the Phobos form?
 python -m phobos_modkit release constants --check     every copy of each version in step?
+python -m phobos_modkit gate --root ..         this repository's checks before a commit; only what failed
 ```
 
 ## Tools
@@ -59,6 +60,7 @@ in order of expected saving.
 | 6 | Startup sessions (RimWorld) | Load-time history and what changed between launches | Python | Planned |
 | 7 | Version readiness scan | Which mods declare the new game version, and which use risky techniques | Python | Planned |
 | 8 | [Release chores](docs/release.md) | Changelog checks, constants kept in step, a history screen before going public; doc links and layout rules to come | Python | Built: 0.10.0 |
+| 10 | [The gate](docs/gate.md) | Every build, test and check before a commit, from the repository's own list; only what failed, with the errors and failed tests | Python | Built: 0.11.0 |
 | 9 | [Workshop publishing](docs/workshop-publishing.md) | Release notes from changelogs, offline staging, the owner-run uploader, pulling Steam's state back | Python | Built: 0.10.0, from phobos-ostranauts |
 
 ## How a repository uses it
@@ -83,7 +85,8 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/workshop.md](docs/workshop.md) | Workshop research: details, comments, pacing and what Steam hides |
 | [docs/workshop-publishing.md](docs/workshop-publishing.md) | Publishing to the Workshop: notes, staging, the owner-run uploader, the catalogue |
 | [docs/release.md](docs/release.md) | Changelog checks, constants kept in step, the history screen |
-| `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `query.py` (report filters), `steam/` (Workshop research; `publish/` for publishing), `release/` (changelogs, constants, history screen), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema), `games/ostranauts/` (publishing only) |
+| [docs/gate.md](docs/gate.md) | The gate: a repository's checks from config/gate.json, and what each output parser keeps |
+| `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `query.py` (report filters), `steam/` (Workshop research; `publish/` for publishing), `release/` (changelogs, constants, history screen), `gate/` (the check runner and its output parsers), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema), `games/ostranauts/` (publishing only) |
 | `crates/xml-index/` | Rust: streams any large XML file into SQLite, driven by a schema file; `cargo test` |
 | `dotnet/` | C# tools (planned) |
 | `fixtures/`, `tests/` | Hand-written test data and the tests: `python -m unittest discover -s tests` |

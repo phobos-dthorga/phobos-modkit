@@ -4,6 +4,17 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-09
+
+At the owner's request (9 November 2026) for tools that keep agent sessions lean: one command for every check before a
+commit, printing only what failed.
+
+### Added
+
+- gate: runs a repository's checks from its config/gate.json in stages and lanes (steps sharing a lane in order, lanes side by side), repeats a step for every file a glob finds, skips a step whose program is missing and says so, stops later stages when one fails, and keeps a failed step's full output in the cache. Parsers for MSBuild, dotnet test, unittest and cargo keep the errors, failed tests and counts and drop the rest; a passing run prints three lines.
+- This repository's own config/gate.json, the list of checks in AGENTS.md.
+- docs/gate.md; 11 tests on hand-written tool output and a made-up repository.
+
 ## [0.10.1] - 2026-11-09
 
 ### Fixed

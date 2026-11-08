@@ -39,6 +39,11 @@ def _release(argv):
     return main(argv)
 
 
+def _gate(argv):
+    from .gate.cli import main
+    return main(argv)
+
+
 COMMANDS = {
     "rimworld-log": (_rimworld_log, "summarise a RimWorld Player.log and name the mods involved"),
     "rimworld-save": (_rimworld_save, "answer questions about a RimWorld save from a fast index"),
@@ -47,6 +52,7 @@ COMMANDS = {
     "steam-workshop": (_steam_workshop, "what players report about Workshop items lately, by ID or URL"),
     "steam-publish": (_steam_publish, "release notes, staging and the owner-run Workshop uploader"),
     "release": (_release, "changelog checks, version constants kept in step, history screen"),
+    "gate": (_gate, "run a repository's checks before a commit and report only what failed"),
 }
 
 

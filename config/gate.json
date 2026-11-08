@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "description": "This repository's own checks, the list in AGENTS.md: python -m phobos_modkit gate runs them all.",
+  "stages": [
+    {
+      "name": "Rust",
+      "steps": [
+        {"name": "cargo fmt", "lane": "cargo", "parser": "cargo", "requires": "cargo",
+         "env": {"CARGO_TARGET_DIR": "{cargo_target}"}, "run": ["cargo", "fmt", "--all", "--", "--check"]},
+        {"name": "cargo clippy", "lane": "cargo", "parser": "cargo", "requires": "cargo",
+         "env": {"CARGO_TARGET_DIR": "{cargo_target}"}, "run": ["cargo", "clippy", "--locked", "--all-targets", "--", "-D", "warnings"]},
+        {"name": "cargo test", "lane": "cargo", "parser": "cargo", "requires": "cargo",
+         "env": {"CARGO_TARGET_DIR": "{cargo_target}"}, "run": ["cargo", "test", "--locked"]},
+        {"name": "cargo build --release", "lane": "cargo", "parser": "cargo", "requires": "cargo",
+         "env": {"CARGO_TARGET_DIR": "{cargo_target}"}, "run": ["cargo", "build", "--release", "--locked"]}
+      ]
+    },
+    {
+      "name": "Python",
+      "steps": [
+        {"name": "python tests", "parser": "unittest", "env": {"PHOBOS_REQUIRE_NATIVE": "1"},
+         "run": ["{python}", "-W", "error", "-m", "unittest", "discover", "-s", "tests"]},
+        {"name": "python 3.10 tests", "parser": "unittest", "requires": "uv", "env": {"PHOBOS_REQUIRE_NATIVE": "1"},
+         "run": ["uv", "run", "--no-project", "--python", "3.10", "python", "-W", "error", "-m", "unittest", "discover", "-s", "tests"]}
+      ]
+    }
+  ]
+}

@@ -90,7 +90,8 @@ adapted to a tooling repository. The repository was created on 7 November 2026 a
   author's file, or an excerpt of one. Say in `fixtures/README.md` what each fixture follows and how faithful it is.
 - Network and clock are passed in, so tests never reach Steam.
 - **Before every commit, run every check, and commit only when all pass**, gated on their exit codes in the same
-  command (`&&` or an `if`), never on reading the output. A commit chained after a step that may have failed is how
+  command (`&&` or an `if`), never on reading the output. **`cd python && python -m phobos_modkit gate --root ..`
+  runs them all** from `config/gate.json` and prints only what failed; the list below is what it runs, and what CI repeats. A commit chained after a step that may have failed is how
   the v0.2.2 tag came to carry a broken test (7 November 2026). The checks, which CI repeats on Windows and Linux:
 
   ```text
