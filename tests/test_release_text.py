@@ -75,9 +75,16 @@ class BBCode(unittest.TestCase):
 
     def test_refusals(self):
         for body in ("- `code`", "- a | b", "![x](https://e.com/i.png)", "- [b]raw[/b]", "1. numbered",
-                     "- [x](ftp://e.com)", "- back\\slash", "- **[b]**", "\n  nested after a blank"):
+                     "- [x](ftp://e.com)", "- back\\slash", "- **[b]**", "\n  nested after a blank", "- # not a heading"):
             with self.subTest(body), self.assertRaises(bbcode.BBCodeError):
                 bbcode.render(body)
+
+    def test_hash_inside_a_line_is_text_and_refusals_name_what_they_found(self):
+        self.assertEqual(bbcode.render("- The first C# assembly, issue #12."), "[list]\n[*]The first C# assembly, issue #12.\n[/list]")
+        with self.assertRaisesRegex(bbcode.BBCodeError, r"\(`, \|\)"):
+            bbcode.render("- a `b` | c")
+        with self.assertRaisesRegex(bbcode.BBCodeError, "# at the start"):
+            bbcode.render("- # heading")
 
     def test_validate(self):
         bbcode.validate("[h1]T[/h1]\n[list]\n[*]x\n[/list]\n[url=https://e.com]e[/url]")

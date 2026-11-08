@@ -1,7 +1,8 @@
 """Steam's BBCode: a small, deliberate Markdown subset turned into it, and a check of what a page may hold.
 
 The subset: paragraphs, "- " bullets, "### " headings, **bold** and [label](https://...) links. Anything else
-(images, tables, backticks, nested lists, raw tags) is refused rather than silently lost. ASCII double quotes become
+(images, tables, backticks, nested lists, raw tags, a line starting with #) is refused rather than silently lost, and the
+refusal names what it found. A # inside a line is text, as in C#. ASCII double quotes become
 typographic ones, because Workshop text travels inside a SteamCMD VDF string whose escapes Valve does not document.
 """
 from __future__ import annotations
@@ -47,8 +48,12 @@ def inline(text):
 
     text = re.sub(r"\[([^\]\n]+)\]\(([^)\n]+)\)", link, text)
     text = re.sub(r"\*\*([^*\n]+)\*\*", bold, text)
-    if any(c in text for c in "[]<>`*|#") or re.match(r"\d+\.\s", text):
-        raise BBCodeError(f"Unsupported changelog formatting: {text}")
+    # A # is text ("C#") except where it would start a Markdown heading, which validate() refuses on a page too.
+    found = [c for c in "[]<>`*|" if c in text] + (["# at the start"] if text.lstrip().startswith("#") else [])
+    if re.match(r"\d+\.\s", text):
+        found.append("a numbered list")
+    if found:
+        raise BBCodeError(f"Unsupported changelog formatting ({', '.join(found)}): {text}")
     for index, token in enumerate(tokens):
         text = text.replace(f"\x01{index}\x02", token)
     return text

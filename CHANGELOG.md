@@ -4,6 +4,13 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-09
+
+### Fixed
+
+- release changelog and steam-publish notes: a # inside a line is text again (C#, issue #12); only a line that starts with # is refused, as a stray Markdown heading. phobos-rimworld's changelogs failed on "C# assembly".
+- A formatting refusal now names what it found (a backtick, a pipe, # at the start, a numbered list), instead of only quoting the line.
+
 ## [0.10.0] - 2026-11-08
 
 At the owner's request (8 November 2026): phobos-ostranauts' Steam Workshop and release tools, made generic and
