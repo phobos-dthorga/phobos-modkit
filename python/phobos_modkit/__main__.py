@@ -44,6 +44,16 @@ def _rimworld_settings(argv):
     return main(argv)
 
 
+def _rimworld_startup(argv):
+    from .games.rimworld.startup_cli import main
+    return main(argv)
+
+
+def _rimworld_readiness(argv):
+    from .games.rimworld.readiness_cli import main
+    return main(argv)
+
+
 def _rimworld_patches(argv):
     from .games.rimworld.patches_cli import main
     return main(argv)
@@ -65,6 +75,8 @@ COMMANDS = {
     "rimworld-defs": (_rimworld_defs, "which active mods define and patch each RimWorld Def"),
     "rimworld-settings": (_rimworld_settings, "the player's RimWorld mod settings, files left behind, changes since a snapshot"),
     "rimworld-patches": (_rimworld_patches, "which active mods patch which methods with Harmony, from their metadata"),
+    "rimworld-startup": (_rimworld_startup, "how long RimWorld takes to start, the costliest mods, what changed between launches"),
+    "rimworld-readiness": (_rimworld_readiness, "which active mods are ready for a game version, and which are likeliest to break"),
     "rimworld-workshop": (_rimworld_workshop, "what players report about RimWorld mods on the Workshop lately"),
     "steam-workshop": (_steam_workshop, "what players report about Workshop items lately, by ID or URL"),
     "steam-publish": (_steam_publish, "release notes, staging and the owner-run Workshop uploader"),

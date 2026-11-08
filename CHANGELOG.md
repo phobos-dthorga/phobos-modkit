@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-08
+
+Two tools from the planned list (owner, 8 November 2026).
+
+### Added
+
+- rimworld-startup: every recorded launch from Loading Progress's StartupImpact sessions, the costliest mods and slowest stages over the launches with the newest mod list, a comparison of any two launches, and one mod across them.
+- rimworld-readiness: per active mod, the versions its About.xml and Steam tags declare, its Harmony transpilers, and byte scans for Prepatcher and asset bundles, riskiest first, with what changed since the last run. It says what a mod declares and how closely it depends on the game, not whether it works.
+
 ## [0.16.0] - 2026-11-08
 
 The patched view becomes the first place to look (owner, 8 November 2026), so it has to say when it cannot be trusted.

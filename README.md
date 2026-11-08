@@ -8,10 +8,11 @@ questions in a short summary instead of a long read. One shared home for code th
 
 - **Ten tools are built**: RimWorld log triage, save index, Def index (with Defs as patched, 0.15.0), Workshop research,
   Workshop publishing, release chores, the gate (0.11.0), mod settings (0.12.0), the code index (0.13.0) and Harmony
-  patches (0.14.0). Startup sessions and the version readiness scan are planned. See [log triage](docs/rimworld-log.md),
+  patches (0.14.0), startup sessions and the version readiness scan (0.17.0). See [log triage](docs/rimworld-log.md),
   [the save index](docs/rimworld-save.md), [the Def index](docs/rimworld-defs.md), [Workshop research](docs/workshop.md),
   [Workshop publishing](docs/workshop-publishing.md), [release chores](docs/release.md), [the gate](docs/gate.md),
-  [mod settings](docs/rimworld-settings.md), [the code index](docs/code.md) and [Harmony patches](docs/rimworld-patches.md).
+  [mod settings](docs/rimworld-settings.md), [the code index](docs/code.md), [Harmony patches](docs/rimworld-patches.md),
+  [startup sessions](docs/rimworld-startup.md) and [the readiness scan](docs/rimworld-readiness.md).
 - **The Harmony patch reader needs the .NET SDK** (10 or newer) for its first build, into the same folder outside the
   repository as the Rust tools.
 - **The save index needs one Rust build:** add `--build-indexer` to its first command, with Rust from
@@ -47,6 +48,8 @@ python -m phobos_modkit release changelog mods/*/CHANGELOG.md   changelogs in th
 python -m phobos_modkit release constants --check     every copy of each version in step?
 python -m phobos_modkit rimworld-settings --mod "X*"   the player's settings for matching mods; also snapshot, compare
 python -m phobos_modkit rimworld-patches who "Pawn.Kill"   which active mods patch a method; also mod, hotspots
+python -m phobos_modkit rimworld-startup                 load-time history and the costliest mods; also compare, mod
+python -m phobos_modkit rimworld-readiness               which active mods are ready for a game version
 python -m phobos_modkit code --each-in DIR show Type.Member   a C# member's source by name; also find, outline, refs
 python -m phobos_modkit gate --root ..         this repository's checks before a commit; only what failed
 ```
@@ -64,8 +67,8 @@ in order of expected saving.
 | 3 | [Mod and Def index](docs/rimworld-defs.md) (RimWorld) | Which mod defines or patches something, in the player's load order, and which definition the game keeps | Python | Built: 0.4.0 |
 | 4 | [Harmony patches](docs/rimworld-patches.md) (RimWorld), the assembly metadata reader | Which active mods patch a method, what a mod patches, where several mods patch one method; read from metadata, never run | C# reader, Python reports | Built: 0.14.0 (patches; constants and API matching not yet) |
 | 5 | [Workshop research](docs/workshop.md) | What players report about a mod lately; supported versions; last update | Python | Built: 0.5.0 |
-| 6 | Startup sessions (RimWorld) | Load-time history and what changed between launches | Python | Planned |
-| 7 | Version readiness scan | Which mods declare the new game version, and which use risky techniques | Python | Planned |
+| 6 | [Startup sessions](docs/rimworld-startup.md) (RimWorld) | Load-time history and what changed between launches | Python | Built |
+| 7 | [Version readiness scan](docs/rimworld-readiness.md) (RimWorld) | Which mods declare the new game version, and which use risky techniques | Python | Built |
 | 8 | [Release chores](docs/release.md) | Changelog checks, constants kept in step, a history screen before going public; doc links and layout rules to come | Python | Built: 0.10.0 |
 | 12 | [Code index](docs/code.md) | Where a C# type or member is, what a type holds, its source by name, and every line that uses a name, across decompiled and own source trees | Python | Built: 0.13.0 |
 | 11 | [Mod settings](docs/rimworld-settings.md) (RimWorld) | The settings the player runs with: which mod each file belongs to, values beside their defaults, files left by removed mods, what changed since a snapshot | Python | Built: 0.12.0 |
@@ -97,6 +100,8 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/rimworld-patches.md](docs/rimworld-patches.md) | Harmony patches across every active mod: how they are found, what the notes mean |
 | [docs/code.md](docs/code.md) | The code index: find, outline, show and refs over C# trees, and what the scanner reads |
 | [docs/rimworld-settings.md](docs/rimworld-settings.md) | The player's mod settings: matching files to mods, defaults, snapshots |
+| [docs/rimworld-startup.md](docs/rimworld-startup.md) | Start-up times from Loading Progress's sessions: launches, costliest mods, comparisons |
+| [docs/rimworld-readiness.md](docs/rimworld-readiness.md) | Which active mods declare a game version, and how closely each depends on the game |
 | [docs/gate.md](docs/gate.md) | The gate: a repository's checks from config/gate.json, and what each output parser keeps |
 | `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `query.py` (report filters), `steam/` (Workshop research; `publish/` for publishing), `release/` (changelogs, constants, history screen), `gate/` (the check runner and its output parsers), `code/` (the C# declaration scanner and index), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema), `games/ostranauts/` (publishing only) |
 | `crates/xml-index/` | Rust: streams any large XML file into SQLite, driven by a schema file; `cargo test` |
