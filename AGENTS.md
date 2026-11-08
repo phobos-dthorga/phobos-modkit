@@ -34,11 +34,17 @@ adapted to a tooling repository. The repository was created on 7 November 2026 a
 
 - **Read-only towards games.** Never write to an install, save or Workshop folder. Save tools copy the save to
   a temporary folder first. The install helper is the one writer: only on request, never while the game
-  runs, and it backs up what it replaces.
+  runs, and it backs up what it replaces. Release and publishing tools write only inside the repository they
+  are run on, and only when asked (`--write`, `--apply`, an upload's records).
 - **Never execute other authors' code.** Assemblies are read through their metadata
   (`System.Reflection.Metadata`), never loaded. Never run another mod's scripts.
-- **Steam, read-only and slow.** Public, keyless pages and APIs only, with pacing and a cache. Never log in,
-  handle credentials, subscribe, upload, announce or change an item's visibility.
+- **Steam, read-only and slow, with one owner-run exception.** Tools read public, keyless pages and APIs only,
+  with pacing and a cache, and never log in, handle credentials, subscribe, announce or change an item's
+  visibility. The exception is the Workshop uploader (`steam-publish upload` and `update`; owner, 8 November
+  2026, moving phobos-ostranauts' uploader here): **only the owner runs it**, in their own console. It starts
+  SteamCMD, which takes the login in its own prompt, so the tool never sees, stores or passes a password.
+  **Agents, tests and CI never run a real upload**: tests pass a stand-in for SteamCMD, and an agent may run
+  `--what-if` at most.
 - **Open logs for shared reading.** A game may hold its log open.
 - **Paths** come from one resolver: argument, then environment variable, then a local settings file, then
   the platform default. Never hard-code a personal path.

@@ -41,7 +41,9 @@ most worth sharing, and keeping it beside the core keeps the core honest about w
 - **Runtime mod libraries**, which run inside a game: D'thorga Framework (RimWorld), PhobosLib (Project
   Zomboid), FS25_PhobosLib, Phobos Framework (Ostranauts). They stay in their own repositories.
 - **In-game profiling**, which is [Phobos Scope](https://github.com/phobos-dthorga/phobos-scope)'s.
-- **Steam uploads.** Owner-run upload scripts stay in the repository that publishes.
+- **Steam uploads by anyone but the owner.** Until 8 November 2026 the owner-run upload scripts stayed in the
+  repository that publishes; that day the owner asked for phobos-ostranauts' publishing tools, uploader included,
+  to move here, made generic. The uploader runs only in the owner's console; agents, tests and CI never upload.
 
 ## Languages
 
@@ -91,6 +93,12 @@ gives each tool's design.
 5. RimWorld's mod and Def index, written to SQLite in the cache like the save index. Done 7 Nov 2026 (0.4.0); see
    [RimWorld Def index](rimworld-defs.md).
 6. Workshop research. Done 7 Nov 2026 (0.5.0); see [Workshop research](workshop.md).
-7. The assembly metadata reader, startup sessions, the readiness scan and release tooling, as the need arises.
+7. Release tooling and Workshop publishing, from phobos-ostranauts' scripts. Done 8 Nov 2026 (0.10.0) at the
+   owner's request; see [Workshop publishing](workshop-publishing.md) and [release chores](release.md). Agent
+   choices: the uploader became Python instead of PowerShell (one language, testable with a stand-in for SteamCMD,
+   runs anywhere), candidates are staged in the kit's cache, and each repository's package checks stay with it as a
+   payload hook.
+8. The assembly metadata reader, startup sessions, the readiness scan, doc links and layout rules, as the need
+   arises.
 
 Continuous integration runs the tests on Windows and Linux, as Phobos Scope does.

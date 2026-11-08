@@ -4,6 +4,40 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-08
+
+At the owner's request (8 November 2026): phobos-ostranauts' Steam Workshop and release tools, made generic and
+moved here. Read-only checks against phobos-ostranauts gave the same results as its own scripts: release notes for
+444 changelog entries byte for byte, due updates, combined change notes, change-note worksheets, pull findings and
+149 constants. Not yet used for a real upload from the kit.
+
+### Added
+
+- steam-publish notes: each changelog entry as a Steam change note in BBCode, written beside the Workshop page; checks the page's title, version and publication status lines, its size and its text; --base refuses content changed without changelog and page edits.
+- steam-publish status, pending, prepare and verify: publication order, blockers and sizes; which items have a newer version than the one uploaded; a hashed candidate staged offline in the kit's cache, with a change note covering every version since the last upload, cut to Steam's limit.
+- steam-publish upload and update, run by the owner only: SteamCMD takes the login in its own prompt, so the tool never sees a password. New items are created Private; going public needs committed work and --confirm-public; a receipt is written before SteamCMD starts; an update with nothing new does nothing; a create with no returned ID must be reconciled before another. update builds, prepares and updates every due item, dependencies first.
+- steam-publish reconcile, pull and change-notes: settle an uncertain upload; bring an item's live visibility, page and release date back from Steam's public API; worksheets for tidying an item's Change Notes tab by hand.
+- Game adapters for publishing: RimWorld reads About.xml and keeps About/PublishedFileId.txt in step with the catalogue, and reminds the owner that SteamCMD sets no tags (a Ludeon forum report, not checked against Valve's documentation); Ostranauts reads mod_info.json. A repository may pass its own package checks as a payload hook.
+- release changelog: checks changelogs in the Phobos form, including whether every entry fits the store-page text.
+- release constants: keeps every registered copy of a version or figure in step, checking all of them before writing any, with read-back and rollback.
+- release history: screens every file in a repository's history for credentials, personal paths and refused file types before it goes public.
+- Shared modules: phobos_modkit.files (link refusal, tree reads, atomic writes), phobos_modkit.steam.bbcode and phobos_modkit.steam.vdf. The Workshop item model keeps an item's description in memory (not cached).
+- 33 tests on made-up repositories, with stand-ins for SteamCMD and Steam's API.
+
+### Changed
+
+- AGENTS.md, README and project direction: the owner-run uploader is the one exception to the read-only Steam rule. Agents, tests and CI never run a real upload.
+- Hard-wrapped bullets and paragraphs in a changelog now join, as Markdown reads them, and a heading ending in history after the releases closes the log (mods merged into another keep their old logs there). The Ostranauts scripts refused indented lines.
+
+### Fixed
+
+- Constants: a JSON pointer to a string value now edits inside its quotes; the Ostranauts copy captured the quotes and could not match a string.
+
+### Compatibility and limits
+
+- Moving phobos-ostranauts onto the kit needs layout entries in its catalogue and its package checks as a payload hook; docs/migration.md lists every difference. phobos-rimworld adopts publishing when its first mod reaches its public beta gate.
+- Not moved: the Workshop cover composer (Ostranauts' art, and it needs Pillow) and Ostranauts' documentation packager.
+
 ## [0.9.0] - 2026-11-09
 
 ### Added

@@ -6,9 +6,11 @@ questions in a short summary instead of a long read. One shared home for code th
 
 ## Read this first (gotchas)
 
-- **Four tools are built: RimWorld log triage, save index, Def index and Workshop research** (0.6.0, 7 Nov
-  2026). The rest are planned. See [log triage](docs/rimworld-log.md), [the save index](docs/rimworld-save.md),
-  [the Def index](docs/rimworld-defs.md) and [Workshop research](docs/workshop.md).
+- **Six tools are built: RimWorld log triage, save index, Def index, Workshop research, Workshop publishing and
+  release chores** (0.10.0, 8 Nov 2026). The rest are planned. See [log triage](docs/rimworld-log.md),
+  [the save index](docs/rimworld-save.md), [the Def index](docs/rimworld-defs.md),
+  [Workshop research](docs/workshop.md), [Workshop publishing](docs/workshop-publishing.md) and
+  [release chores](docs/release.md).
 - **The save index needs one Rust build:** add `--build-indexer` to its first command, with Rust from
   [rustup](https://rustup.rs). It builds outside the repository, so a cloud-synced clone does not upload hundreds
   of megabytes. Everything else is standard-library Python 3.10 or newer.
@@ -18,8 +20,10 @@ questions in a short summary instead of a long read. One shared home for code th
 - **Read-only towards the game.** Tools never write to a game's install, save or Workshop folders. Save
   tools work on a copy. The one exception is the install helper, which copies a mod into a game's mod
   folder only when asked, refuses while the game runs, and backs up first.
-- **Never uploads to Steam.** Workshop tools read Steam's public, keyless pages and APIs, slowly. They never
-  log in, handle credentials, subscribe, upload or change an item's visibility.
+- **Only the owner uploads to Steam.** Workshop research and `steam-publish pull` read Steam's public, keyless
+  pages and APIs, slowly. The one tool that uploads, `steam-publish upload` (and `update`), is run by the owner in
+  their own console: SteamCMD asks for the login in its own prompt, so the tool never sees a password, and new items
+  are always created Private. Agents, tests and CI never run a real upload.
 - **Nothing from the games is committed.** No game files, saves, logs, assemblies, decompiled code or other
   authors' mod files. Test fixtures are written by hand.
 
@@ -33,6 +37,10 @@ python -m phobos_modkit rimworld-log --show ID one message in full
 python -m phobos_modkit rimworld-save          summarise the newest save; also pawns, things, hediffs, find, sql
 python -m phobos_modkit rimworld-defs who X    which active mods define and patch a Def; also show, list, patches
 python -m phobos_modkit rimworld-workshop report "Mod name"   what players report about a mod lately
+python -m phobos_modkit steam-publish notes --check   release notes and Workshop pages current?
+python -m phobos_modkit steam-publish status          every mod's Workshop package, blockers and order
+python -m phobos_modkit release changelog mods/*/CHANGELOG.md   changelogs in the Phobos form?
+python -m phobos_modkit release constants --check     every copy of each version in step?
 ```
 
 ## Tools
@@ -50,7 +58,8 @@ in order of expected saving.
 | 5 | [Workshop research](docs/workshop.md) | What players report about a mod lately; supported versions; last update | Python | Built: 0.5.0 |
 | 6 | Startup sessions (RimWorld) | Load-time history and what changed between launches | Python | Planned |
 | 7 | Version readiness scan | Which mods declare the new game version, and which use risky techniques | Python | Planned |
-| 8 | Release tooling | Changelog checks, release notes, constants, doc links, layout rules | Python | Planned |
+| 8 | [Release chores](docs/release.md) | Changelog checks, constants kept in step, a history screen before going public; doc links and layout rules to come | Python | Built: 0.10.0 |
+| 9 | [Workshop publishing](docs/workshop-publishing.md) | Release notes from changelogs, offline staging, the owner-run uploader, pulling Steam's state back | Python | Built: 0.10.0, from phobos-ostranauts |
 
 ## How a repository uses it
 
@@ -72,7 +81,9 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/rimworld-save.md](docs/rimworld-save.md) | How to index a RimWorld save and ask it questions |
 | [docs/rimworld-defs.md](docs/rimworld-defs.md) | Which mods define and patch each Def, and the game's load rules it follows |
 | [docs/workshop.md](docs/workshop.md) | Workshop research: details, comments, pacing and what Steam hides |
-| `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `query.py` (report filters), `steam/` (Workshop research), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema) |
+| [docs/workshop-publishing.md](docs/workshop-publishing.md) | Publishing to the Workshop: notes, staging, the owner-run uploader, the catalogue |
+| [docs/release.md](docs/release.md) | Changelog checks, constants kept in step, the history screen |
+| `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `query.py` (report filters), `steam/` (Workshop research; `publish/` for publishing), `release/` (changelogs, constants, history screen), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema), `games/ostranauts/` (publishing only) |
 | `crates/xml-index/` | Rust: streams any large XML file into SQLite, driven by a schema file; `cargo test` |
 | `dotnet/` | C# tools (planned) |
 | `fixtures/`, `tests/` | Hand-written test data and the tests: `python -m unittest discover -s tests` |

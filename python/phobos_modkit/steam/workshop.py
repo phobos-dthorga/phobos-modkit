@@ -82,6 +82,7 @@ class Item:
     visibility: int = 0
     banned: int = 0
     tags: list = field(default_factory=list)
+    description: str = ""   # the page's BBCode; kept in memory for publishing tools, not cached
 
 
 @dataclass
@@ -127,7 +128,8 @@ def parse_details(data):
         items.append(Item(str(d.get("publishedfileid")), int(d.get("result", 0)), d.get("title", ""),
                           str(d.get("creator", "")), int(d.get("time_created", 0)), int(d.get("time_updated", 0)),
                           int(d.get("subscriptions", 0)), int(d.get("favorited", 0)), int(d.get("visibility", 0)),
-                          int(d.get("banned", 0)), [t.get("tag", "") for t in d.get("tags", [])]))
+                          int(d.get("banned", 0)), [t.get("tag", "") for t in d.get("tags", [])],
+                          d.get("description", "")))
     return items
 
 
