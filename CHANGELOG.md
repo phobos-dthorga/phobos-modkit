@@ -4,6 +4,12 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-09
+
+### Fixed
+
+- code outline: line numbers print plainly (8765, not 8,765), as a file:line reads them.
+
 ## [0.13.0] - 2026-11-09
 
 At the owner's request (9 November 2026) for tools that keep agent sessions lean: research into a mod's code used to

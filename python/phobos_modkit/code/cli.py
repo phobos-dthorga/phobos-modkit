@@ -124,7 +124,7 @@ def outline_report(chosen, args):
         rows = []
         for corpus, path in chosen:
             if corpus.name == hit.corpus:
-                rows = [[m.start, m.kind, _cut(m.signature, 120)] for m in index.members(path, corpus.name, hit.full)
+                rows = [[str(m.start), m.kind, _cut(m.signature, 120)] for m in index.members(path, corpus.name, hit.full)
                         if m.path == hit.path]
         report.section(f"{hit.kind} {hit.full} ({_where(hit)})", Table(["Line", "Kind", "Signature"], rows[:args.top * 3],
                                                                        total=len(rows), widths={2: 120}))
