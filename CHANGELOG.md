@@ -4,6 +4,18 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-09
+
+At the owner's request (9 November 2026) for a tool that captures the settings they play with, to help work out what
+causes an error. Run on the owner's Config folder: 154 settings files, 118 of them for active mods, 36 left by mods no
+longer active (among them five of phobos-rimworld's, merged on 7 November).
+
+### Added
+
+- rimworld-settings: which mod each settings file belongs to and whether it is active; the values of chosen mods (name, package ID or folder, with wildcards); files left by removed, merged or renamed mods; snapshot and compare. A defaults file from the mod's own source shows each value beside its default, the keys left at default, keys no longer read, and defaults that disagree between a field's starting value and the one a missing key loads as.
+- docs/rimworld-settings.md: why a file lists only what the player changed (RimWorld writes nothing for a value at its default), and how files are matched to mods (class names may hold underscores, as Vanilla Expanded Framework's do).
+- 7 tests on a made-up install.
+
 ## [0.11.0] - 2026-11-09
 
 At the owner's request (9 November 2026) for tools that keep agent sessions lean: one command for every check before a
