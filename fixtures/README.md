@@ -44,4 +44,6 @@ a neighbour of tile 130, at 50% (32768).
 
 `steam/details.json` and `steam/comments-render.json` follow the shapes of Steam's GetPublishedFileDetails response
 and comment-render endpoint (7 November 2026), with made-up items, people and comments. In the comments, the first
-is by the item's uploader (account 101, the creator's SteamID64 less 76561197960265728).
+is by the item's uploader (account 101, the creator's SteamID64 less 76561197960265728). The first two items carry
+made-up BBCode descriptions. `steam/collection.json` follows GetCollectionDetails (9 November 2026): one collection
+of the three items, listed out of order with sortorder values, and one collection Steam does not return (result 9).

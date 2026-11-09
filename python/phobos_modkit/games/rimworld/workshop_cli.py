@@ -4,6 +4,7 @@
     python -m phobos_modkit rimworld-workshop details "Vanilla*"
     python -m phobos_modkit rimworld-workshop comments "Field Tents"
     python -m phobos_modkit rimworld-workshop versions        every active Workshop mod's declared versions
+    python -m phobos_modkit rimworld-workshop collection 3497770083 --grep "*tank*"   a collection's items
 
 A mod may be named by its Workshop ID or URL, its package ID, or its name (* and ? are wildcards); names and
 package IDs are looked up among the installed Workshop mods. Comment problem flags include the game's version from
@@ -30,7 +31,7 @@ def _extra(sub, common):
     for option, text in (("--game", "the RimWorld folder"), ("--workshop", "the Workshop content folder"),
                          ("--config", "the folder holding ModsConfig.xml")):
         v.add_argument(option, help=text)
-    for name in ("report", "details", "comments"):
+    for name in ("report", "details", "comments", "collection"):
         s = sub.choices[name]
         s.add_argument("--game", help="the RimWorld folder (for finding the Workshop folder)")
         s.add_argument("--workshop", help="the Workshop content folder, where mods are looked up by name")
@@ -118,6 +119,12 @@ def main(argv=None, settings_file=None, environ=None, out=None, post=None, pacer
         prepare = lambda conn, _: _versions_report(conn, args.game_version, active, args.top)
     elif args.report == "sql":
         ids = []
+    elif args.report == "collection":
+        ids = [workshop.item_id(t) for t in args.targets]
+        if None in ids:
+            print("A collection is named by its Workshop ID or URL.", file=sys.stderr)
+            return core.EXIT_USAGE
+        ids = list(dict.fromkeys(ids))
     else:
         needs_names = any(workshop.item_id(t) is None for t in args.targets)
         ids, unknown = resolve(args.targets, _installed(workshop_folder) if needs_names else [])

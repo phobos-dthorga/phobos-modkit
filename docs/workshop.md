@@ -15,7 +15,10 @@ no requests.
 - **Few problem mentions does not mean few bugs.** Some authors delete bug reports from their comments.
 - **Version tags are the author's statement, not a test.** A mod without the game's tag may still work.
 - **Read-only.** Public, keyless Steam pages only: nothing logs in, subscribes, uploads or changes anything.
-- Checked against Steam on 7 November 2026.
+- **Item pages refuse automated fetches** (an error page or HTTP 429, 9 November 2026), so nothing here reads them: the
+  details, collections and comment-render APIs answer freely. A collection's members come from the collections API, not
+  from its page.
+- Checked against Steam on 7 and 9 November 2026.
 
 ## Run it
 
@@ -24,6 +27,7 @@ python -m phobos_modkit rimworld-workshop report "Useful Marks" smashphil.vehicl
 python -m phobos_modkit rimworld-workshop versions        every active Workshop mod's declared versions
 python -m phobos_modkit rimworld-workshop comments "Field Tents"
 python -m phobos_modkit steam-workshop report <Workshop ID or URL> ...
+python -m phobos_modkit rimworld-workshop collection 3497770083 --grep "*hover*"   a collection's items
 ```
 
 | Report | What it shows | Requests |
@@ -32,7 +36,8 @@ python -m phobos_modkit steam-workshop report <Workshop ID or URL> ...
 | `details` | Updated, versions, whether the game's version is declared, subscribers | One per 100 items |
 | `comments` | One item's cached comments in full, newest first | As `report` for one item |
 | `versions` (RimWorld) | Every active Workshop mod that does not declare the game's version, in load order | One per 100 mods: about 10 s for 320 mods |
-| `sql` | Any query over the cache (tables `item`, `comment`, `meta`) | None |
+| `collection` | A Steam collection's items in its order: updated, versions, whether the game's version is declared, and the opening of each description with the BBCode stripped; `--grep` keeps the items whose title or description match | One per 100 collections, then one per 100 items; no comments |
+| `sql` | Any query over the cache (tables `item`, `comment`, `collection`, `meta`) | None |
 
 `rimworld-workshop` takes a mod's name (with `*` and `?`), its package ID, its Workshop ID or URL, and looks
 names up among the installed Workshop mods; it reads the game's version from ModsConfig.xml and flags comments that

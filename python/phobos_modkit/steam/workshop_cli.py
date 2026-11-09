@@ -3,9 +3,10 @@
     python -m phobos_modkit steam-workshop report 2023507013 3014915404   details and comment research per item
     python -m phobos_modkit steam-workshop details <ID or URL> ...        update dates, version tags, subscribers
     python -m phobos_modkit steam-workshop comments 2023507013            one item's cached comments in full
+    python -m phobos_modkit steam-workshop collection 3497770083 --grep "*hover*"   a collection's items
     python -m phobos_modkit steam-workshop sql "SELECT title, time_updated FROM item"
 
-Details come in batches of 100 in one request. Comments take one request per item, about 8 s apart, because Steam
+Details come in batches of 100 in one request, and a collection's members in one more. Comments take one request per item, about 8 s apart, because Steam
 limits quick reads; anything fetched in the last 24 hours (--max-age) is reused. Never logs in or changes anything
 on Steam. Options go after the report's name.
 """
@@ -54,6 +55,10 @@ def build_parser(prog, description, epilog, target_help, extra=None):
         s.add_argument("targets", nargs="+", help=target_help)
     s = sub.add_parser("comments", parents=[common], help="one item's comments in full, newest first")
     s.add_argument("targets", nargs=1, help=target_help)
+    c = sub.add_parser("collection", parents=[common],
+                       help="a collection's items: versions and the opening of each description; no comments fetched")
+    c.add_argument("targets", nargs="+", help="a collection's Workshop ID or URL")
+    c.add_argument("--grep", help="keep the items whose title or description matches (* and ? are wildcards)")
     q = sub.add_parser("sql", parents=[common], help="any read-only SQL query over the cache")
     q.add_argument("query")
     if extra:
@@ -70,15 +75,24 @@ def run(args, ids, settings_file=None, environ=None, out=None, post=None, pacer=
     settings_file = args.settings or settings_file
     cache = derived.folder(workshop.CACHE_FOLDER, args.cache, environ, settings_file)
     clock = clock or time.time
-    done = None
-    if ids and not args.offline and args.report in ("report", "details", "comments", "versions"):
+    done, children = None, None
+    if ids and args.report == "collection":
+        if args.offline:
+            with closing(workshop.connect(cache)) as conn:
+                children = workshop.collection_children(conn, ids)
+        else:
+            done, children = workshop.refresh_collections(ids, cache, args.max_age, force=args.refresh,
+                                                          post=post or workshop.http_post, clock=clock)
+    elif ids and not args.offline and args.report in ("report", "details", "comments", "versions"):
         done = workshop.refresh(ids, cache, args.max_age, comments=args.report in ("report", "comments"),
                                 force=args.refresh, post=post or workshop.http_post, pacer=pacer, clock=clock)
     with closing(workshop.connect(cache)) as conn:
         try:
             report = prepare(conn, args) if prepare else None
             if report is None:
-                if args.report == "report":
+                if args.report == "collection":
+                    report = reports.collection(conn, children or {}, args.game_version, args.grep, args.top)
+                elif args.report == "report":
                     report = reports.research(conn, ids, args.days, args.game_version, clock(), args.top)
                 elif args.report == "details":
                     report = reports.details(conn, ids, args.game_version)
@@ -108,7 +122,8 @@ def run(args, ids, settings_file=None, environ=None, out=None, post=None, pacer=
 
 def normalise(argv):
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and not argv[0].startswith("-") and argv[0] not in ("report", "details", "comments", "sql", "versions"):
+    if argv and not argv[0].startswith("-") and argv[0] not in ("report", "details", "comments", "collection", "sql",
+                                                               "versions"):
         argv.insert(0, "report")
     return argv
 

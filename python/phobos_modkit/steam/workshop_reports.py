@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import re
 
+from ..query import Filters
 from ..report import Report, Table
 
 PROBLEM_WORDS = (r"crash\w*", r"error\w*", r"exception\w*", r"broken", r"bug\w*", r"not work\w*", r"doesn'?t work",
@@ -11,6 +12,9 @@ PROBLEM_WORDS = (r"crash\w*", r"error\w*", r"exception\w*", r"broken", r"bug\w*"
                  r"abandon\w*", r"outdated", r"no longer", r"null ?reference", r"stuck", r"corrupt\w*")
 VERSION_TAG = re.compile(r"^\d+\.\d+$")
 SNIPPET = 220
+OPENING = 120
+BBCODE_TAG = re.compile(r"\[/?[a-zA-Z*][^\]]*\]")
+BARE_URL = re.compile(r"https?://\S+")
 PER_ITEM = 5
 NOTES = ("Comments are the newest ones Steam returns. Some authors delete bug reports from their comments, so few "
          "problem mentions does not mean few bugs.",
@@ -33,6 +37,16 @@ def version_tags(tags):
 def _snippet(text):
     text = " ".join(text.split())
     return text if len(text) <= SNIPPET else text[:SNIPPET].rstrip() + "..."
+
+
+def plain_text(bbcode):
+    """A page's BBCode as one line of plain words: tags and bare image or link addresses removed."""
+    return " ".join(BARE_URL.sub(" ", BBCODE_TAG.sub(" ", bbcode or "")).split())
+
+
+def _opening(text):
+    text = plain_text(text)
+    return text if len(text) <= OPENING else text[:OPENING].rstrip() + "..."
 
 
 def _items(conn, ids):
@@ -113,6 +127,50 @@ def research(conn, ids, days=90, game_version=None, now=None, top=30):
     return report
 
 
+def collection(conn, children, game_version=None, grep=None, top=30):
+    """One section per collection: its items with their declared versions and the opening of each description.
+    children is {collection ID: child IDs or None}; grep keeps the items whose title or description match."""
+    report = Report("Workshop collections")
+    if grep:
+        report.lines.append(f"Showing the items whose title or description matches {grep!r} (* and ? are wildcards).")
+    report.lines.append("Descriptions are the openings of the pages as their authors wrote them; version tags are the "
+                        "authors' statements, not a test.")
+    for collection_id, ids in children.items():
+        title_row = conn.execute("SELECT title FROM item WHERE id = ?", (collection_id,)).fetchone()
+        heading = f"{title_row[0]} ({collection_id})" if title_row and title_row[0] else collection_id
+        if ids is None:
+            report.section(heading, "Steam returned no public collection for this ID, or it was not fetched.")
+            continue
+        filters = Filters()
+        filters.text("title", grep, "description")
+        marks = ",".join("?" * len(ids))
+        filters.raw(f"id IN ({marks})", *ids)
+        rows = {r[0]: r[1:] for r in conn.execute(
+            f"SELECT id, result, title, time_updated, tags, description FROM item{filters.where}", filters.params)}
+        shown, gone = [], []
+        for item_id in ids:
+            if item_id not in rows:
+                if not grep:
+                    gone.append(item_id)
+                continue
+            result, title, updated, tags, description = rows[item_id]
+            if result != 1:
+                gone.append(item_id)
+                continue
+            versions = version_tags(tags)
+            declared = "" if not game_version else ("yes" if game_version in versions.split(", ") else "no")
+            shown.append((item_id, title, date_text(updated), versions, declared, _opening(description)))
+        headers = ["ID", "Title", "Updated", "Versions", f"Declares {game_version}" if game_version else "", "Opening"]
+        if not game_version:
+            headers, shown = headers[:4] + headers[5:], [r[:4] + r[5:] for r in shown]
+        matched = f"{len(shown):,} of {len(ids):,} items match" if grep else f"{len(ids):,} items"
+        section = report.section(heading, matched + ".", Table(headers, shown[:top], len(shown),
+                                                              widths={len(headers) - 1: OPENING + 10}))
+        if gone:
+            section.blocks.append("No public item for " + ", ".join(gone) + " (removed, private or not fetched).")
+    return report
+
+
 def comments(conn, item, top=50):
     """One item's cached comments in full, newest first."""
     row = conn.execute("SELECT title, comments_total FROM item WHERE id = ?", (item,)).fetchone()
@@ -132,7 +190,7 @@ def sql(conn, query, top=100):
     headers = [d[0] for d in cursor.description or []]
     rows = [tuple(r) for r in cursor.fetchmany(top + 1)]
     report = Report("Query")
-    report.lines.append("Tables: item, comment, meta.")
+    report.lines.append("Tables: item, comment, collection, meta.")
     if len(rows) > top:
         report.lines.append(f"Only the first {top:,} rows are shown; raise --top to see more.")
     report.section("Result", Table(headers, rows[:top]))

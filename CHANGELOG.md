@@ -4,7 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
-## [1.1.0] - 2026-11-09
+## [1.2.0] - 2026-11-09
+
+Which vehicle types other mods already provide could not be answered without reading a Steam collection, and Steam's item pages refuse automated fetches while its keyless APIs do not (phobos-rimworld, 9 November 2026).
+
+### Added
+
+- steam-workshop and rimworld-workshop collection: a Steam collection's items by ID or URL, in the collection's order, with each item's update date, declared versions, whether it declares the game's version, and the opening of its description with the BBCode stripped; --grep keeps the items whose title or description match (* and ? wildcards). One request per 100 collections and one per 100 items; no comments are fetched. A collection Steam does not return is named as such.
+- The cache keeps each item's description (column description) and each collection's members (table collection), so sql can ask across them. Caches made before this version gain the column on first use.
+
 
 A program showing the kit's reports needs to sort numbers as numbers, and to name a report as a person would ask for it (owner, 9 November 2026).
 

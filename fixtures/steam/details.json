@@ -1,8 +1,10 @@
 {"response": {"result": 1, "resultcount": 3, "publishedfiledetails": [
   {"publishedfileid": "1111111111", "result": 1, "creator": "76561197960265829", "title": "Example Widgets",
+   "description": "[h1]Example Widgets[/h1]\nAdds [b]hover[/b] widgets to the game. [url=https://example.com/guide]Guide[/url] https://i.imgur.com/abc.png",
    "time_created": 1700000000, "time_updated": 1790000000, "visibility": 0, "banned": 0, "subscriptions": 12345,
    "favorited": 678, "tags": [{"tag": "Mod"}, {"tag": "1.7"}, {"tag": "1.6"}]},
   {"publishedfileid": "2222222222", "result": 1, "creator": "76561197960265900", "title": "Example Old Mod",
+   "description": "An old mod. Nothing floats here.",
    "time_created": 1600000000, "time_updated": 1650000000, "visibility": 0, "banned": 0, "subscriptions": 42,
    "favorited": 1, "tags": [{"tag": "Mod"}, {"tag": "1.5"}]},
   {"publishedfileid": "3333333333", "result": 9}

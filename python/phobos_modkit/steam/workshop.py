@@ -5,6 +5,10 @@ Endpoints (public, no key or login; checked 7 November 2026):
 - Details: POST https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/ with itemcount and
   publishedfileids[n], up to 100 at a time. Gives title, creator (SteamID64), times created and updated,
   subscriptions, visibility and tags (RimWorld's tags carry its versions, such as "1.7").
+- Collections: POST https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/ with collectioncount
+  and publishedfileids[n]. Gives each collection's children (publishedfileid, sortorder). The item pages themselves
+  (steamcommunity.com/sharedfiles/filedetails) answer automated fetches with an error page, the two APIs do not
+  (checked 9 November 2026).
 - Comments: POST https://steamcommunity.com/comment/PublishedFile_Public/render/<creator>/<item>/ with start and
   count. Gives JSON with total_count and comments_html, the markup the item's own comment pages show: each comment
   has its commenter's account number (data-miniprofile), a Unix timestamp (data-timestamp) and its text. A
@@ -33,6 +37,7 @@ from .. import __version__
 from .. import cache as derived
 
 DETAILS_URL = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/"
+COLLECTION_URL = "https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/"
 COMMENTS_URL = "https://steamcommunity.com/comment/PublishedFile_Public/render/{creator}/{item}/"
 ITEM_URL = "https://steamcommunity.com/sharedfiles/filedetails/?id={item}"
 USER_AGENT = "phobos-modkit (+https://github.com/phobos-dthorga/phobos-modkit)"
@@ -51,7 +56,9 @@ TABLES = """
 CREATE TABLE IF NOT EXISTS item (id TEXT PRIMARY KEY, fetched_at INTEGER NOT NULL, result INTEGER, title TEXT,
     creator TEXT, time_created INTEGER, time_updated INTEGER, subscriptions INTEGER, favorited INTEGER,
     visibility INTEGER, banned INTEGER, tags TEXT, comments_fetched_at INTEGER, comments_total INTEGER,
-    comments_note TEXT);
+    comments_note TEXT, description TEXT);
+CREATE TABLE IF NOT EXISTS collection (collection_id TEXT NOT NULL, child_id TEXT NOT NULL, sortorder INTEGER,
+    fetched_at INTEGER NOT NULL, PRIMARY KEY (collection_id, child_id));
 CREATE TABLE IF NOT EXISTS comment (item_id TEXT NOT NULL, comment_id TEXT NOT NULL, author TEXT, account_id TEXT,
     timestamp INTEGER, by_creator INTEGER NOT NULL, text TEXT, PRIMARY KEY (item_id, comment_id));
 """
@@ -82,7 +89,7 @@ class Item:
     visibility: int = 0
     banned: int = 0
     tags: list = field(default_factory=list)
-    description: str = ""   # the page's BBCode; kept in memory for publishing tools, not cached
+    description: str = ""   # the page's BBCode, as Steam holds it
 
 
 @dataclass
@@ -119,6 +126,19 @@ def item_id(text):
     """A Workshop item ID from an ID or a Workshop URL; None when there is none."""
     match = ITEM_ID.search(str(text).strip())
     return match.group(1) if match else None
+
+
+def parse_collections(data):
+    """{collection ID: [child IDs in the collection's order]} from a GetCollectionDetails response; a collection
+    Steam did not return (result other than 1) maps to None."""
+    found = {}
+    for c in data.get("response", {}).get("collectiondetails", []):
+        if int(c.get("result", 0)) != 1:
+            found[str(c.get("publishedfileid"))] = None
+            continue
+        children = sorted(c.get("children", []), key=lambda ch: int(ch.get("sortorder", 0)))
+        found[str(c.get("publishedfileid"))] = [str(ch.get("publishedfileid")) for ch in children]
+    return found
 
 
 def parse_details(data):
@@ -206,6 +226,19 @@ def fetch_details(ids, post=http_post):
     return items
 
 
+def fetch_collections(ids, post=http_post):
+    """{collection ID: child IDs or None} for these collections, in batches."""
+    found = {}
+    for start in range(0, len(ids), DETAILS_BATCH):
+        batch = ids[start:start + DETAILS_BATCH]
+        data = {"collectioncount": len(batch), **{f"publishedfileids[{i}]": v for i, v in enumerate(batch)}}
+        status, body = post(COLLECTION_URL, data)
+        if status != 200:
+            raise WorkshopError(f"Steam's collections API answered HTTP {status}.")
+        found.update(parse_collections(json.loads(body.decode("utf-8", errors="replace"))))
+    return found
+
+
 def fetch_comments(item, pacer, post=http_post, count=COMMENTS_COUNT):
     """(comments, total on Steam) for one item, the newest first."""
     url = COMMENTS_URL.format(creator=item.creator, item=item.id)
@@ -233,6 +266,8 @@ def connect(cache):
     columns = {row[1] for row in conn.execute("PRAGMA table_info(item)")}
     if "comments_note" not in columns:  # caches made before the column existed
         conn.execute("ALTER TABLE item ADD COLUMN comments_note TEXT")
+    if "description" not in columns:  # caches made before 1.2.0
+        conn.execute("ALTER TABLE item ADD COLUMN description TEXT")
     derived.write_meta(conn, {"index_format": INDEX_FORMAT, "kit_version": __version__, "source": "Steam Workshop"})
     conn.commit()  # an open write would lock the cache against every other connection
     return conn
@@ -240,14 +275,32 @@ def connect(cache):
 
 def _save_item(conn, item, now):
     conn.execute("""INSERT INTO item (id, fetched_at, result, title, creator, time_created, time_updated, subscriptions,
-                    favorited, visibility, banned, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    favorited, visibility, banned, tags, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET fetched_at = excluded.fetched_at, result = excluded.result,
                     title = excluded.title, creator = excluded.creator, time_created = excluded.time_created,
                     time_updated = excluded.time_updated, subscriptions = excluded.subscriptions,
                     favorited = excluded.favorited, visibility = excluded.visibility, banned = excluded.banned,
-                    tags = excluded.tags""",
+                    tags = excluded.tags, description = excluded.description""",
                  (item.id, now, item.result, item.title, item.creator, item.time_created, item.time_updated,
-                  item.subscriptions, item.favorited, item.visibility, item.banned, ",".join(item.tags)))
+                  item.subscriptions, item.favorited, item.visibility, item.banned, ",".join(item.tags),
+                  item.description))
+
+
+def _save_collection(conn, collection_id, children, now):
+    conn.execute("DELETE FROM collection WHERE collection_id = ?", (collection_id,))
+    conn.executemany("INSERT OR REPLACE INTO collection VALUES (?, ?, ?, ?)",
+                     [(collection_id, child, order, now) for order, child in enumerate(children)])
+
+
+def collection_children(conn, collection_ids):
+    """{collection ID: [child IDs in order]} from the cache; a collection never fetched maps to None."""
+    found = {c: None for c in collection_ids}
+    for collection_id in collection_ids:
+        rows = conn.execute("SELECT child_id FROM collection WHERE collection_id = ? ORDER BY sortorder",
+                            (collection_id,)).fetchall()
+        if rows:
+            found[collection_id] = [r[0] for r in rows]
+    return found
 
 
 def _save_comments(conn, item_id, comments, total, now):
@@ -264,6 +317,39 @@ def _save_unavailable(conn, item_id, reason, now):
     conn.execute("DELETE FROM comment WHERE item_id = ?", (item_id,))
     conn.execute("UPDATE item SET comments_fetched_at = ?, comments_total = NULL, comments_note = ? WHERE id = ?",
                  (now, reason, item_id))
+
+
+def refresh_collections(ids, cache, max_age_hours=24, force=False, post=http_post, clock=time.time):
+    """Bring the cache up to date for these collections and every item in them: the children lists, then the
+    children's details (no comments). Returns (Refresh, {collection ID: child IDs or None})."""
+    now = int(clock())
+    oldest = now - int(max_age_hours * 3600)
+    done = Refresh()
+    with closing(connect(cache)) as conn:
+        fetched_at = {row[0]: row[1] for row in conn.execute(
+            "SELECT collection_id, MIN(fetched_at) FROM collection GROUP BY collection_id")}
+        stale = [i for i in ids if force or i not in fetched_at or fetched_at[i] < oldest]
+        if stale:
+            try:
+                for collection_id, children in fetch_collections(stale, post).items():
+                    if children is None:
+                        done.problems.append(f"Steam returned no public collection {collection_id}.")
+                        continue
+                    _save_collection(conn, collection_id, children, now)
+                    done.details_fetched += 1
+            except WorkshopError as problem:
+                done.problems.append(str(problem))
+            conn.commit()
+        done.reused += len(ids) - len(stale)
+        children = collection_children(conn, ids)
+    # The collections' own details too, so a report can name each collection by its title.
+    members = list(dict.fromkeys(list(ids) + [child for found in children.values() if found for child in found]))
+    if members:
+        items = refresh(members, cache, max_age_hours, comments=False, force=force, post=post, clock=clock)
+        done.details_fetched += items.details_fetched
+        done.reused += items.reused
+        done.problems += items.problems
+    return done, children
 
 
 @dataclass

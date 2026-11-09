@@ -1,0 +1,8 @@
+{"response": {"result": 1, "resultcount": 2, "collectiondetails": [
+  {"publishedfileid": "4444444444", "result": 1, "children": [
+    {"publishedfileid": "2222222222", "sortorder": 1, "filetype": 0},
+    {"publishedfileid": "1111111111", "sortorder": 0, "filetype": 0},
+    {"publishedfileid": "3333333333", "sortorder": 2, "filetype": 0}
+  ]},
+  {"publishedfileid": "5555555555", "result": 9}
+]}}
