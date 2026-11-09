@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-09
+
+A game died with a stack overflow and nothing in its log, and reading its crash dump took a debugger, a downloaded tool and a hand-written script (phobos-rimworld, 9 November 2026).
+
+### Added
+
+- crash-dump: reads a Windows minidump with no debugger or symbols. It names the exception and the thread, finds a call loop that ran away (how big one level is, how often it repeats, and whether every level held the same objects), and says which modules the stack points at.
+- It says what a small dump cannot tell, and for a .NET stack overflow how to get the method names next time.
+
 ## [1.3.0] - 2026-11-09
 
 What changed between two builds of an assembly could not be answered well by the metadata tools tried: one read nearly every method of a small rebuild as changed, and could not read a game's main assembly at all (phobos-rimworld, 9 November 2026).

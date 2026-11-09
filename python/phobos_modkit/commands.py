@@ -5,6 +5,7 @@ A module is imported only when its command runs, or when the manifest describes 
 from __future__ import annotations
 
 COMMANDS = {
+    "crash-dump": (".crashdump_cli", "what a Windows crash dump says failed, and whether a call loop ran away"),
     "rimworld-log": (".games.rimworld.cli", "summarise a RimWorld Player.log and name the mods involved"),
     "rimworld-save": (".games.rimworld.save_cli", "answer questions about a RimWorld save from a fast index"),
     "rimworld-defs": (".games.rimworld.defs_cli", "which active mods define and patch each RimWorld Def"),
