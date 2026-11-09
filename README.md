@@ -51,6 +51,7 @@ python -m phobos_modkit rimworld-patches who "Pawn.Kill"   which active mods pat
 python -m phobos_modkit rimworld-startup                 load-time history and the costliest mods; also compare, mod
 python -m phobos_modkit rimworld-readiness               which active mods are ready for a game version
 python -m phobos_modkit code --each-in DIR show Type.Member   a C# member's source by name; also find, outline, refs
+python -m phobos_modkit code compare OLD.dll NEW.dll   what changed between two builds, member by member
 python -m phobos_modkit gate --root ..         this repository's checks before a commit; only what failed
 python -m phobos_modkit manifest               every command, its options and what it reads or changes
 ```
@@ -99,7 +100,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/workshop-publishing.md](docs/workshop-publishing.md) | Publishing to the Workshop: notes, staging, the owner-run uploader, the catalogue |
 | [docs/release.md](docs/release.md) | Changelog checks, constants kept in step, the history screen |
 | [docs/rimworld-patches.md](docs/rimworld-patches.md) | Harmony patches across every active mod: how they are found, what the notes mean |
-| [docs/code.md](docs/code.md) | The code index: find, outline, show and refs over C# trees, and what the scanner reads |
+| [docs/code.md](docs/code.md) | The code index: find, outline, show and refs over C# trees, what the scanner reads, and compare for two builds |
 | [docs/rimworld-settings.md](docs/rimworld-settings.md) | The player's mod settings: matching files to mods, defaults, snapshots |
 | [docs/rimworld-startup.md](docs/rimworld-startup.md) | Start-up times from Loading Progress's sessions: launches, costliest mods, comparisons |
 | [docs/rimworld-readiness.md](docs/rimworld-readiness.md) | Which active mods declare a game version, and how closely each depends on the game |

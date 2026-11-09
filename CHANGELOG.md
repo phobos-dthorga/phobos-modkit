@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-09
+
+What changed between two builds of an assembly could not be answered well by the metadata tools tried: one read nearly every method of a small rebuild as changed, and could not read a game's main assembly at all (phobos-rimworld, 9 November 2026).
+
+### Added
+
+- code compare OLD NEW: what changed between two builds, declaration by declaration. Each side is a .dll, an indexed corpus, or a folder of C#. It lists what was added and removed, new signatures, and new bodies with lines changed, marking a change that touches only strings or numbers as values only; a new type is one row. --only narrows it by name and --show prints one declaration's changes as a diff.
+- A .dll is decompiled once with ilspycmd, named by --decompiler, PHOBOS_MODKIT_ILSPYCMD, ilspycmdPath or the PATH, and kept in the kit's cache by its bytes and --reference folders; the 12 most recently used are kept. ilspycmd reads the file without loading or running it.
+- A side with no declarations is an error, never a list of removals, and two sides with nothing in common are called out.
+
 ## [1.2.0] - 2026-11-09
 
 Which vehicle types other mods already provide could not be answered without reading a Steam collection, and Steam's item pages refuse automated fetches while its keyless APIs do not (phobos-rimworld, 9 November 2026).

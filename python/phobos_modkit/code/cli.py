@@ -5,6 +5,7 @@
     code --corpus NAME=PATH ... show VehicleStatHandler.ApplyDamage   the source, numbered (every overload)
     code --corpus NAME=PATH ... refs HighlightedComponent     every line using the name, by the member it is in
     code --each-in DIR ... summary                            each child of DIR is a corpus; their sizes
+    code compare OLD.dll NEW.dll                              what changed between two builds, member by member
 
 Indexes are built on first use and again when a corpus's files change; --in narrows a query to matching corpora.
 """
@@ -18,13 +19,13 @@ import sys
 
 from .. import cache as derived
 from ..report import Code, Report, Table, envelope_text, home_redactor, keep, render_markdown
-from . import index
-from ..manifest import READS
+from . import compare, index
+from .scan import DECOMPILER_NOTE
+from ..manifest import READS, RUNS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
-REPORTS = ("summary", "find", "outline", "show", "refs")
+REPORTS = ("summary", "find", "outline", "show", "refs", "compare")
 FLAGS = ("--rebuild", "--json", "--no-redact", "--raw")      # options that take no value
-DECOMPILER_NOTE = re.compile(r"^\s*//IL_[0-9A-Fa-f]+:")
 SHOW_LINES = 150
 TEXT_WIDTH = 150
 
@@ -60,6 +61,16 @@ def _parser():
     w.add_argument("--raw", action="store_true", help="keep the decompiler's //IL_ notes")
     r = sub.add_parser("refs", parents=[common], help="every line using a name, grouped by the member it is in")
     r.add_argument("name", help="an identifier; a dotted name searches for its last part")
+    c = sub.add_parser("compare", parents=[common], help="what changed between two builds, member by member")
+    c.add_argument("left", help="the older side: a .dll, a corpus name, or a folder or .cs file")
+    c.add_argument("right", help="the newer side, in any of the same forms")
+    c.add_argument("--only", action="append", default=[], metavar="PATTERN",
+                   help="only declarations whose full name matches (* and ?); repeatable")
+    c.add_argument("--show", metavar="NAME", help="the changes in one declaration, as a diff: Type.Member or a full name")
+    c.add_argument("--lines", type=int, default=SHOW_LINES, help=f"lines shown per diff (default {SHOW_LINES}; 0 for all)")
+    c.add_argument("--decompiler", help="ilspycmd, for a .dll (else PHOBOS_MODKIT_ILSPYCMD, settings, the PATH)")
+    c.add_argument("--reference", action="append", default=[], metavar="DIR",
+                   help="a folder of assemblies the .dll refers to, for a truer decompile; repeatable")
     return p
 
 
@@ -225,6 +236,12 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     code = EXIT_OK
     try:
         cache = derived.folder(index.CACHE_FOLDER, args.cache, environ, settings_file)
+        if args.report == "compare":
+            known = corpora(args) if args.corpus or args.each_in else []
+            decompiled = derived.folder(compare.CACHE_FOLDER, args.cache, environ, settings_file)
+            report, code = compare.run(args, known, cache, decompiled, environ, settings_file)
+            print(envelope_text("code", report, redact) if args.json else render_markdown(report, redact), file=out)
+            return code
         chosen, built = [], []
         for corpus in corpora(args):
             path, fresh = index.ensure(corpus, cache, args.rebuild)
@@ -250,4 +267,6 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     return code
 
 
-MANIFEST = {"game": None, "parser": _parser, "effect": READS}
+MANIFEST = {"game": None, "parser": _parser, "effect": READS,
+            "reports": {"compare": {"effect": RUNS, "when": "a side is a .dll",
+                                    "note": "runs ilspycmd on the file, which reads it without loading or running it"}}}

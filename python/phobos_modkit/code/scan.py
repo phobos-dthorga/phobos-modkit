@@ -39,6 +39,7 @@ HARD_KEYWORDS = frozenset({"if", "for", "foreach", "while", "switch", "using", "
                            "readonly", "virtual", "override", "extern", "const", "volatile", "ref", "out", "in", "params",
                            "event", "delegate", "implicit", "explicit", "unsafe", "class", "struct", "interface", "enum"})
 SIGNATURE_LIMIT = 240
+DECOMPILER_NOTE = re.compile(r"^\s*//IL_[0-9A-Fa-f]+:")
 
 
 def _open_brackets(text):
@@ -158,6 +159,16 @@ def _blanked(span):
 def blank(text):
     """text with comments and every string and character literal turned to spaces; newlines stay, so line numbers
     hold, and so do the literals' outer quotes."""
+    return _without_comments(text, _blanked)
+
+
+def uncommented(text):
+    """text with only its comments turned to spaces: literals stay as written, and newlines stay, so lines match blank's."""
+    return _without_comments(text, str)
+
+
+def _without_comments(text, literal):
+    """text with comments turned to spaces and each string or character literal passed through literal."""
     out, i, n = [], 0, len(text)
     while i < n:
         c = text[i]
@@ -173,10 +184,10 @@ def blank(text):
             i = j
         elif _is_string_start(text, i):
             j = _string_end(text, i)
-            out.append(_blanked(text[i:j]))
+            out.append(literal(text[i:j]))
             i = j
         elif c == "'" and (end := _char_end(text, i)) is not None:
-            out.append(_blanked(text[i:end]))
+            out.append(literal(text[i:end]))
             i = end
         else:
             out.append(c)
