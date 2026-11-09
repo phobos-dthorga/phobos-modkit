@@ -191,4 +191,5 @@ def main(argv=None, settings_file=None, environ=None, out=None):
 
 
 MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
-            "reports": {"snapshot": {"effect": WRITES, "note": "writes the snapshot file you name"}}}
+            "reports": {"summary": {"question": "What settings am I playing with?"},
+                        "snapshot": {"effect": WRITES, "note": "writes the snapshot file you name"}}}

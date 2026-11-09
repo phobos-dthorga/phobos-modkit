@@ -158,4 +158,8 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     return code
 
 
-MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS}
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
+            "reports": {
+    "summary": {"question": "How long does the game take to start?"},
+    "compare": {"question": "What changed between my last two launches?"},
+}}

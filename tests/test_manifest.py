@@ -40,6 +40,15 @@ class Manifest(unittest.TestCase):
             known = {r["name"] for r in find(self.data, name)["reports"]}
             self.assertLessEqual(set(declared.get("reports", {})), known, name)
 
+    def test_questions_are_questions(self):
+        asked = [r["question"] for c in self.data["commands"] for r in c["reports"] if r["question"]]
+        self.assertGreater(len(asked), 10)
+        for question in asked:
+            self.assertTrue(question.endswith("?"), question)
+
+    def test_a_command_without_reports_can_ask_too(self):
+        self.assertEqual(find(self.data, "rimworld-log")["reports"][0]["question"], "Why did the game log errors?")
+
     def test_the_uploader_is_marked_owner_only(self):
         publish = find(self.data, "steam-publish")
         self.assertEqual(report_of(publish, "upload")["effect"], kit_manifest.OWNER_ONLY)

@@ -43,6 +43,7 @@ and `reports`. Each report has:
 | `effect` | One of the effects below |
 | `when` | The flag that brings the effect on; null when it always applies |
 | `note` | Anything else a caller should know, or null |
+| `question` | The report as a person would ask for it, or null |
 | `options` | `name`, `positional`, `kind` (`flag`, `integer`, `number` or `text`), `required`, `repeatable`, `choices`, `default` and `help`, read from the command's own parser |
 | `exclusive` | Groups of options that cannot be used together |
 
@@ -67,6 +68,7 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
 
 ## Limits
 
-- Table cells in `report` are still text, so "12.5%" sorts as text.
+- A table's `values` give the number each cell sorts by, read from its text: `null` for every cell in a column that isn't all numbers
+  in one unit. A table's cells themselves stay as written.
 - The commands report nothing while they work.
 - The manifest describes the kit. A game repository's own scripts are not in it.

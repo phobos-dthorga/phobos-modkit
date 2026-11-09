@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-09
+
+A program showing the kit's reports needs to sort numbers as numbers, and to name a report as a person would ask for it (owner, 9 November 2026).
+
+### Added
+
+- Every table in a report's JSON now has values: the number each cell sorts by, so 12.5% sorts as a number. A column that isn't all numbers in one unit has none.
+- A report in the manifest can carry a question: the report as a person would ask for it. The RimWorld reports that need nothing typed have theirs.
+
 ## [1.0.0] - 2026-11-09
 
 A desktop program over the tools needs to read every command the same way, and to know what each one does before it runs it (owner, 9 November 2026).

@@ -23,6 +23,8 @@ from .markdown import CELL_LIMIT, cell
 JSON_FORMAT = 1
 ENVELOPE_FORMAT = 1
 NOTHING = "None."
+# A cell a program can sort as a number: 1,234 or -5.5, with an optional unit.
+_NUMBER = re.compile(r"^([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s?(%|ms|s|KB|MB|GB)?$")
 
 
 @dataclass
@@ -133,6 +135,35 @@ def render_markdown(report, redact=None):
 
 # ---- JSON ----
 
+def _number(value):
+    """(the number, its unit) in a cell, or None when it holds no number."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return value, ""
+    match = _NUMBER.match(value.strip()) if isinstance(value, str) else None
+    return (float(match.group(1).replace(",", "")), match.group(2) or "") if match else None
+
+
+def _empty(value):
+    return value is None or value == ""
+
+
+def _column_values(cells):
+    """Each cell's number, or all None unless every filled cell is a number in the same unit: a column to sort as text."""
+    numbers = [None if _empty(cell) else _number(cell) for cell in cells]
+    filled = [number for cell, number in zip(cells, numbers) if not _empty(cell)]
+    if not filled or None in filled or len({unit for _, unit in filled}) > 1:
+        return [None] * len(cells)
+    return [number[0] if number else None for number in numbers]
+
+
+def _table_values(table):
+    """For each row, the number each cell sorts by, or None."""
+    columns = [_column_values(list(column)) for column in zip(*table.rows)]
+    return [list(row) for row in zip(*columns)]
+
+
 def _block_json(block, redact):
     if isinstance(block, str):
         return {"type": "text", "text": redact(block)}
@@ -141,6 +172,7 @@ def _block_json(block, redact):
     if isinstance(block, Table):
         return {"type": "table", "headers": [redact(str(h)) for h in block.headers],
                 "rows": [[_scrub(v, redact) for v in row] for row in block.rows],
+                "values": _table_values(block),
                 "total": block.total if block.total is not None else len(block.rows)}
     if isinstance(block, Code):
         return {"type": "code", "language": block.language, "lines": [redact(str(l)) for l in block.lines]}

@@ -143,4 +143,5 @@ def main(argv=None, settings_file=None, environ=None, out=None, read_transpilers
     return code
 
 
-MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS}
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
+            "question": "Which of my mods are ready for this game version?"}

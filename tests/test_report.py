@@ -59,6 +59,35 @@ class Json(unittest.TestCase):
         self.assertEqual((table["total"], table["rows"][0][1]), (40, 12345))
         self.assertNotIn("tester", json.dumps(data))
 
+    def table_values(self, rows):
+        report = Report("t")
+        report.section("s", Table(["a"], rows))
+        return render_json(report)["sections"][0]["blocks"][0]["values"]
+
+    def test_numbers_are_given_for_sorting(self):
+        self.assertEqual(self.table_values([("1,234",), ("5",), (7,), (2.5,)]), [[1234.0], [5.0], [7], [2.5]])
+
+    def test_percentages_and_signs_are_numbers(self):
+        self.assertEqual(self.table_values([("12.5%",), ("+0.6%",), ("-3%",)]), [[12.5], [0.6], [-3.0]])
+
+    def test_empty_cells_do_not_spoil_a_column(self):
+        self.assertEqual(self.table_values([("5",), ("",), (None,)]), [[5.0], [None], [None]])
+
+    def test_one_word_makes_a_column_text(self):
+        self.assertEqual(self.table_values([("5",), ("some",)]), [[None], [None]])
+
+    def test_mixed_units_cannot_be_compared(self):
+        self.assertEqual(self.table_values([("5 MB",), ("900 KB",)]), [[None], [None]])
+
+    def test_things_that_only_look_numeric_stay_text(self):
+        self.assertEqual(self.table_values([("1.2.0",), ("9 Nov 2026",)]), [[None], [None]])
+
+    def test_true_and_false_are_not_numbers(self):
+        self.assertEqual(self.table_values([(True,), (False,)]), [[None], [None]])
+
+    def test_a_table_with_no_rows_has_no_values(self):
+        self.assertEqual(self.table_values([]), [])
+
     def test_unknown_blocks_are_refused(self):
         report = Report("t")
         report.section("s", 42)

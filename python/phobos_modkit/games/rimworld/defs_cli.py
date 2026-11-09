@@ -164,4 +164,10 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     return EXIT_OK
 
 
-MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS}
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
+            "reports": {
+    "summary": {"question": "How many mods and Defs do I have?"},
+    "mods": {"question": "Which mods are active?"},
+    "list": {"question": "Which Defs does my game have?"},
+    "patches": {"question": "Which patches change my game's Defs?"},
+}}

@@ -280,4 +280,14 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     return EXIT_OK
 
 
-MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS}
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
+            "reports": {
+    "summary": {"question": "What's in my newest save?"},
+    "things": {"question": "What things are in my save?"},
+    "pawns": {"question": "Who is on my maps?"},
+    "hediffs": {"question": "What injuries and conditions does everyone have?"},
+    "world": {"question": "What is on the world map?"},
+    "components": {"question": "What have mods stored in my save?"},
+    "grid": {"question": "What map grids can I look at?"},
+    "planet": {"question": "Where is the world map polluted?"},
+}}

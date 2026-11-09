@@ -194,4 +194,8 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=None):
     return code
 
 
-MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS}
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
+            "reports": {
+    "summary": {"question": "How much do my mods patch the game's code?"},
+    "hotspots": {"question": "Where do my mods collide?"},
+}}

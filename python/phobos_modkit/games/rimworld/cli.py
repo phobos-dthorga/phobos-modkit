@@ -115,4 +115,5 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     return EXIT_OK
 
 
-MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS}
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
+            "question": "Why did the game log errors?"}
