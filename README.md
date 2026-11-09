@@ -8,11 +8,11 @@ questions in a short summary instead of a long read. One shared home for code th
 
 - **Ten tools are built**: RimWorld log triage, save index, Def index (with Defs as patched, 0.15.0), Workshop research,
   Workshop publishing, release chores, the gate (0.11.0), mod settings (0.12.0), the code index (0.13.0) and Harmony
-  patches (0.14.0), startup sessions and the version readiness scan (0.17.0). See [log triage](docs/rimworld-log.md),
+  patches (0.14.0), startup sessions and the version readiness scan (0.17.0), and the target check (0.18.0). See [log triage](docs/rimworld-log.md),
   [the save index](docs/rimworld-save.md), [the Def index](docs/rimworld-defs.md), [Workshop research](docs/workshop.md),
   [Workshop publishing](docs/workshop-publishing.md), [release chores](docs/release.md), [the gate](docs/gate.md),
   [mod settings](docs/rimworld-settings.md), [the code index](docs/code.md), [Harmony patches](docs/rimworld-patches.md),
-  [startup sessions](docs/rimworld-startup.md) and [the readiness scan](docs/rimworld-readiness.md).
+  [startup sessions](docs/rimworld-startup.md), [the readiness scan](docs/rimworld-readiness.md) and [the target check](docs/rimworld-targets.md).
 - **The Harmony patch reader needs the .NET SDK** (10 or newer) for its first build, into the same folder outside the
   repository as the Rust tools.
 - **The save index needs one Rust build:** add `--build-indexer` to its first command, with Rust from

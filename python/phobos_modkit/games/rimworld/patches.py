@@ -55,6 +55,18 @@ def build_reader(environ=None, run=subprocess.run):
         raise PatchesError(f"Building the assembly reader failed:\n{(result.stdout or '')[-2000:]}")
 
 
+def ensure_reader(environ=None, run=subprocess.run):
+    """The reader's path, built first when it is missing or was built by another version of the kit."""
+    tool = reader_path(environ)
+    stamp = reader_folder(environ) / "kit-version.txt"
+    current = stamp.read_text(encoding="utf-8").strip() if stamp.is_file() else ""
+    if not tool.is_file() or current != __version__:
+        build_reader(environ, run)
+        stamp.parent.mkdir(parents=True, exist_ok=True)
+        stamp.write_text(__version__, encoding="utf-8")
+    return tool
+
+
 def mod_assemblies(active, version):
     """(ActiveMod, DLL path) for every assembly the game loads from each active mod, in load order."""
     active_ids = {loading.bare_id(a.listed_id) for a in active}

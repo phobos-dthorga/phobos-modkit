@@ -47,9 +47,20 @@ namespace HarmonyLib
 
 namespace Game
 {
-    public class Pawn
+    // A base class with a private field and a method a derived type inherits, for the member listing's tests.
+    public class Thing
     {
+        private int thingID;
+        public virtual void Tick() { }
+        public int ThingID => thingID;
+    }
+
+    public class Pawn : Thing
+    {
+        private float health;
+        public static int Count;
         public void Kill(object cause) { }
+        public void Kill(object cause, bool silent) { }
         public bool Downed => false;
         public void Heal(List<int> parts, float amount) { }
     }

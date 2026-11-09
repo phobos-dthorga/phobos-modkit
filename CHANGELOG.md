@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-09
+
+The compiler checks typeof and nameof; nothing checked the names C# holds in strings (owner, 9 November 2026).
+
+### Added
+
+- rimworld-targets: every Harmony patch and reflected lookup in a source tree, and the parameters Harmony fills at run time, checked against the game's and active mods' assemblies as metadata. Exit 1 when a name no longer matches.
+- The assembly reader's members command: the fields, methods and properties of named types and their base types.
+
 ## [0.17.0] - 2026-11-08
 
 Two tools from the planned list (owner, 8 November 2026).
