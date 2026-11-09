@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-09
+
+A desktop program over the tools needs to read every command the same way, and to know what each one does before it runs it (owner, 9 November 2026).
+
+### Changed
+
+- **Incompatible: every command's --json now prints one envelope**: envelope, tool, kit_version, report and data. What consumers must change: the report that was at the top level (release, gate, code, steam-publish, rimworld-patches, rimworld-readiness, rimworld-settings, rimworld-startup, rimworld-targets) is now under report; the save, index and built fields of rimworld-save and rimworld-defs are now under data; rimworld-log's JSON is now under data, beside its summary report. Nothing in phobos-rimworld reads this output.
+- The command table moved to commands.py, and the dispatcher imports each command's module by name.
+
+### Added
+
+- manifest: every command, its reports and options read from its own parser, and what each report reads or changes (reads, reads-online, writes, runs, owner-only). See docs/manifest.md.
+
 ## [0.19.0] - 2026-11-09
 
 Why a world tile is polluted could not be answered from a save without reading the file by hand (owner, 9 November 2026).

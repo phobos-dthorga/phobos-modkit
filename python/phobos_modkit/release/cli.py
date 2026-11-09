@@ -12,16 +12,16 @@ Run from the repository, or pass --root. Nothing here contacts a network.
 from __future__ import annotations
 
 import argparse
-import json
 from decimal import InvalidOperation
 from pathlib import Path
 import re
 import subprocess
 import sys
 
-from ..report import Bullets, Report, Table, home_redactor, keep, render_json, render_markdown
+from ..report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
 from ..steam import bbcode
 from . import changelog, constants, history
+from ..manifest import READS, WRITES
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 
@@ -136,6 +136,10 @@ def main(argv=None, root=None, out=None):
     except (ValueError, OSError, KeyError, TypeError, InvalidOperation, re.error, RuntimeError,
             subprocess.SubprocessError) as error:
         report, code = Report(f"release {args.command}: error", [str(error)]), EXIT_FAILED
-    print(json.dumps(render_json(report, redact), indent=2, ensure_ascii=False) if args.json
+    print(envelope_text("release", report, redact) if args.json
           else render_markdown(report, redact), file=out)
     return code
+
+
+MANIFEST = {"game": None, "parser": build_parser, "effect": READS,
+            "reports": {"constants": {"effect": WRITES, "when": "--apply"}}}

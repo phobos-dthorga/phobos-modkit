@@ -394,7 +394,7 @@ class Publishing(unittest.TestCase):
         self.assertIn("Content: Base has no published item ID yet", out.getvalue())
         out = io.StringIO()
         self.assertEqual(cli.main(["pending", *args, "--json"], out=out), 0)
-        self.assertEqual(json.loads(out.getvalue())["lines"], ["0 of 2 items need an upload."])
+        self.assertEqual(json.loads(out.getvalue())["report"]["lines"], ["0 of 2 items need an upload."])
         out = io.StringIO()
         self.assertEqual(cli.main(["prepare", "Base", *args], out=out), 0)
         self.assertIn("# Candidate prepared (offline)", out.getvalue())

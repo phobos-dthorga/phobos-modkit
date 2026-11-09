@@ -18,11 +18,12 @@ import subprocess
 import sys
 import tempfile
 
-from ...report import Bullets, Report, Table, home_redactor, keep, render_json, render_markdown
+from ...report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
 from ...targets import Listing, check_targets, scan_tree
 from . import loading, paths
 from .mods import ModIndex, default_roots
 from .patches import PatchesError, ensure_reader, mod_assemblies
+from ...manifest import READS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 
@@ -144,6 +145,9 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=None):
         code = EXIT_FAILED if failed else EXIT_OK
     except PatchesError as error:
         report, code = Report("rimworld-targets: error", [str(error)]), EXIT_FAILED
-    print(json.dumps(render_json(report, redact), indent=2, ensure_ascii=False) if args.json
+    print(envelope_text("rimworld-targets", report, redact) if args.json
           else render_markdown(report, redact), file=out)
     return code
+
+
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS}

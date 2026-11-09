@@ -21,6 +21,7 @@ from ...steam.workshop_reports import date_text, version_tags
 from . import paths
 from .loading import read_mods_config, resolve_active
 from .mods import ModIndex
+from ...manifest import ONLINE, READS
 
 
 def _extra(sub, common):
@@ -83,10 +84,14 @@ def _versions_report(conn, game_version, active, top):
     return report
 
 
+def _parser():
+    return core.build_parser("rimworld-workshop", __doc__.split("\n\n")[0], __doc__.split("\n\n", 1)[1],
+                             "a mod's name, package ID, Workshop ID or URL", _extra)
+
+
 def main(argv=None, settings_file=None, environ=None, out=None, post=None, pacer=None, clock=None):
     argv = core.normalise(argv)
-    parser = core.build_parser("rimworld-workshop", __doc__.split("\n\n")[0], __doc__.split("\n\n", 1)[1],
-                               "a mod's name, package ID, Workshop ID or URL", _extra)
+    parser = _parser()
     if not argv:
         parser.print_help()
         return core.EXIT_USAGE
@@ -120,4 +125,8 @@ def main(argv=None, settings_file=None, environ=None, out=None, post=None, pacer
             print(f"No installed Workshop mod matches: {', '.join(unknown)}. Name it by Workshop ID or URL instead.",
                   file=sys.stderr)
             return core.EXIT_USAGE
-    return core.run(args, ids, settings_file, environ, out, post, pacer, clock, prepare)
+    return core.run(args, ids, settings_file, environ, out, post, pacer, clock, prepare, "rimworld-workshop")
+
+
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": ONLINE,
+            "reports": {"sql": {"effect": READS}}}

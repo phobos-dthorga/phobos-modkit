@@ -10,16 +10,17 @@ Reads the log while the game runs. Writes nothing unless --json names a file. Th
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 import sys
 
 from ...logs import render
 from ...logs.triage import build_report
+from ...report import envelope_text
 from ...textfile import read_text_shared
 from . import log as rimworld_log
 from . import paths
 from .mods import ModIndex, default_roots
+from ...manifest import READS
 
 EXIT_OK, EXIT_NOT_FOUND, EXIT_USAGE = 0, 1, 2
 
@@ -104,10 +105,14 @@ def main(argv=None, settings_file=None, environ=None, out=None):
         return EXIT_OK
 
     if args.json:
-        data = json.dumps(render.to_json(report, redact=redact), indent=1, ensure_ascii=False)
+        data = envelope_text("rimworld-log", render.summary_report(report, args.top, levels), redact,
+                             render.to_json(report, redact=redact))
         if args.json == "-":
             out.write(data + "\n")
             return EXIT_OK
         Path(args.json).write_text(data + "\n", encoding="utf-8")
     out.write(render.to_markdown(report, top=args.top, levels=levels, redact=redact) + "\n")
     return EXIT_OK
+
+
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS}

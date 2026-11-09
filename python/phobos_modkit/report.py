@@ -12,12 +12,16 @@ piece of text when the report is rendered, so no tool can forget a field.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
+import os
 import re
 from pathlib import Path
 
+from . import __version__
 from .markdown import CELL_LIMIT, cell
 
 JSON_FORMAT = 1
+ENVELOPE_FORMAT = 1
 NOTHING = "None."
 
 
@@ -149,3 +153,28 @@ def render_json(report, redact=None):
             "blocks": [_block_json(b, redact) for b in report.blocks],
             "sections": [{"heading": redact(s.heading), "level": s.level,
                           "blocks": [_block_json(b, redact) for b in s.blocks]} for s in report.sections]}
+
+
+# ---- The envelope: what every command's --json prints ----
+
+def _scrub_tree(value, redact):
+    if isinstance(value, os.PathLike):
+        value = os.fspath(value)
+    if isinstance(value, str):
+        return redact(value)
+    if isinstance(value, dict):
+        return {key: _scrub_tree(item, redact) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_scrub_tree(item, redact) for item in value]
+    return value
+
+
+def envelope(tool, report, redact=None, data=None):
+    """One shape for every command: which tool and kit made it, its report, and any data of its own."""
+    redact = redact or keep
+    return {"envelope": ENVELOPE_FORMAT, "tool": tool, "kit_version": __version__, "report": render_json(report, redact),
+            "data": _scrub_tree(data or {}, redact)}
+
+
+def envelope_text(tool, report, redact=None, data=None):
+    return json.dumps(envelope(tool, report, redact, data), indent=1, ensure_ascii=False, default=str)

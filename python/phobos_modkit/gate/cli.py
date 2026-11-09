@@ -2,15 +2,15 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 from pathlib import Path
 import sys
 import time
 
 from .. import cache
-from ..report import Bullets, Code, Report, Table, home_redactor, render_json, render_markdown
+from ..report import Bullets, Code, Report, Table, envelope_text, home_redactor, render_markdown
 from .runner import CONFIG, GateError, load, run, select
+from ..manifest import RUNS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 PROBLEMS_PER_STEP = 12
@@ -118,6 +118,10 @@ def main(argv=None, out=None, environ=None, runner=None, which=None):
             code = EXIT_FAILED if any(r.state == "failed" for r in results) else EXIT_OK
     except GateError as error:
         report, code = Report("Gate: error", [str(error)]), EXIT_USAGE
-    print(json.dumps(render_json(report, redact), indent=2, ensure_ascii=False) if args.json
+    print(envelope_text("gate", report, redact) if args.json
           else render_markdown(report, redact), file=out)
     return code
+
+
+MANIFEST = {"game": None, "parser": build_parser, "effect": RUNS,
+            "note": "builds the repository and runs its tests"}

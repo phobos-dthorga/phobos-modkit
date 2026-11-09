@@ -36,7 +36,7 @@ this kit provide their own short command (phobos-rimworld: `python scripts/triag
 | `--show ID` | Print one signature in full: its first message as written, every clue, the lines it occurs on |
 | `--top N` | How many signatures to list (default 20) |
 | `--levels ERROR,WARN` | Which levels to list; add `INFO` for everything |
-| `--json FILE` | Also write everything as JSON; `--json -` prints only JSON |
+| `--json FILE` | Also write everything as JSON, in the envelope with the signatures under `data`; `--json -` prints only JSON |
 | `--logs`, `--game`, `--workshop` | Where the logs, the game and the Workshop folder are |
 | `--settings FILE` | A JSON file with `rimworldLogsPath`, `rimworldPath` and `workshopPath` |
 | `--no-mods` | Do not read installed mods; clues stay unnamed |

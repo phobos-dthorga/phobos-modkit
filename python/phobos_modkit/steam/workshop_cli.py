@@ -13,15 +13,15 @@ from __future__ import annotations
 
 import argparse
 from contextlib import closing
-import json
 import sqlite3
 import sys
 import time
 
 from .. import cache as derived
-from ..report import home_redactor, keep, render_json, render_markdown
+from ..report import envelope_text, home_redactor, keep, render_markdown
 from . import workshop
 from . import workshop_reports as reports
+from ..manifest import ONLINE, READS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 
@@ -62,7 +62,7 @@ def build_parser(prog, description, epilog, target_help, extra=None):
 
 
 def run(args, ids, settings_file=None, environ=None, out=None, post=None, pacer=None, clock=None,
-        prepare=None):
+        prepare=None, tool="steam-workshop"):
     """Refresh the cache for ids as the report needs, then print the report. prepare(conn, args) may return a
     Report of its own for reports a game adapter adds."""
     out = out or sys.stdout
@@ -100,7 +100,7 @@ def run(args, ids, settings_file=None, environ=None, out=None, post=None, pacer=
     elif args.offline:
         report.lines.insert(0, "From the cache only (--offline); nothing was fetched.")
     if args.json:
-        out.write(json.dumps({"report": render_json(report, redact)}, indent=1, ensure_ascii=False) + "\n")
+        out.write(envelope_text(tool, report, redact) + "\n")
     else:
         out.write(render_markdown(report, redact) + "\n")
     return EXIT_OK
@@ -113,10 +113,14 @@ def normalise(argv):
     return argv
 
 
+def _parser():
+    return build_parser("steam-workshop", __doc__.split("\n\n")[0], __doc__.split("\n\n", 1)[1],
+                        "a Workshop item ID or URL")
+
+
 def main(argv=None, settings_file=None, environ=None, out=None, post=None, pacer=None, clock=None):
     argv = normalise(argv)
-    parser = build_parser("steam-workshop", __doc__.split("\n\n")[0], __doc__.split("\n\n", 1)[1],
-                          "a Workshop item ID or URL")
+    parser = _parser()
     if not argv:
         parser.print_help()
         return EXIT_USAGE
@@ -129,3 +133,7 @@ def main(argv=None, settings_file=None, environ=None, out=None, post=None, pacer
             return EXIT_USAGE
         ids.append(found)
     return run(args, list(dict.fromkeys(ids)), settings_file, environ, out, post, pacer, clock)
+
+
+MANIFEST = {"game": None, "parser": _parser, "effect": ONLINE,
+            "reports": {"sql": {"effect": READS}}}

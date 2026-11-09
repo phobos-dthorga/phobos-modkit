@@ -184,7 +184,7 @@ class Readiness(unittest.TestCase):
     def test_json_output_is_valid(self):
         with tempfile.TemporaryDirectory() as tmp:
             _, text = self.run_tool(tmp, "--json")
-        self.assertIn("title", json.loads(text))
+        self.assertIn("title", json.loads(text)["report"])
 
 
 if __name__ == "__main__":

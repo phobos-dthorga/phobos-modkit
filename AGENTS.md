@@ -59,6 +59,10 @@ adapted to a tooling repository. The repository was created on 7 November 2026 a
   paragraphs, bullets, tables and code blocks and render it with `render_markdown` or `render_json`, which apply
   redaction everywhere. Never hand-write Markdown in a tool. A tool may add its own richer JSON data export, as
   log triage's is.
+- **Every command's `--json` prints `report.envelope_text`**: one shape, with the report under `report` and anything of the
+  tool's own under `data`. Never `json.dumps` a report in a tool.
+- **Every command declares a `MANIFEST`** beside its parser (its game, the parser and what it reads or changes), and is
+  listed in `commands.py`; `tests/test_manifest.py` holds it to that (`docs/manifest.md`).
 - **Report filters and capped queries go through `phobos_modkit.query`**: `like` for users' wildcards (`*` and `?`,
   with `%` and `_` literal), `Filters` for WHERE clauses with parameters, `count` and `rows` for tables cut at
   `--top`. Never build SQL from a user's text by hand.

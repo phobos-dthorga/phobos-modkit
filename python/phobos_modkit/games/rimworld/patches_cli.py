@@ -11,17 +11,17 @@ Reads only: each DLL is opened as a file and never loaded or run. The first run 
 from __future__ import annotations
 
 import argparse
-import json
 from contextlib import closing
 from pathlib import Path
 import sys
 
-from ...report import Report, Table, home_redactor, keep, render_json, render_markdown
+from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
 from ... import cache as derived
 from ...query import like
 from . import loading, paths
 from .mods import ModIndex, default_roots
 from .patches import CACHE_FOLDER, INDEX_NAME, PatchesError, mod_assemblies, refresh
+from ...manifest import READS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 REPORTS = ("summary", "who", "mod", "hotspots")
@@ -189,6 +189,9 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=None):
                 report.lines.append(f"Read {read} changed assemblies first.")
     except PatchesError as error:
         report, code = Report("rimworld-patches: error", [str(error)]), EXIT_FAILED
-    print(json.dumps(render_json(report, redact), indent=2, ensure_ascii=False) if args.json
+    print(envelope_text("rimworld-patches", report, redact) if args.json
           else render_markdown(report, redact), file=out)
     return code
+
+
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS}

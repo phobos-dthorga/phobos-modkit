@@ -18,16 +18,16 @@ never for an agent, a test or CI. pull reads Steam's public API without a key.
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 import subprocess
 import sys
 
 from ... import cache as derived
-from ...report import Bullets, Code, Report, Table, home_redactor, keep, render_json, render_markdown
+from ...report import Bullets, Code, Report, Table, envelope_text, home_redactor, keep, render_markdown
 from .. import workshop
 from . import notes, pull, stage, upload, worksheets
 from .project import STAGING_CACHE, Project, PublishError
+from ...manifest import OWNER_ONLY, READS, RUNS, WRITES
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 
@@ -208,7 +208,7 @@ def main(argv=None, root=None, payload=None, settings_file=None, environ=None, o
     except (PublishError, ValueError, OSError, KeyError, subprocess.SubprocessError, workshop.WorkshopError) as error:
         report, code = Report("steam-publish: error", [str(error)]), EXIT_FAILED
     if report is not None:
-        print(json.dumps(render_json(report, redact), indent=2, ensure_ascii=False) if args.json
+        print(envelope_text("steam-publish", report, redact) if args.json
               else render_markdown(report, redact), file=out)
     return code
 
@@ -247,3 +247,14 @@ def dispatch(project, args, say, post, run, build_run, environ):
     if command == "change-notes":
         return worksheets_report(project, args)
     raise PublishError(f"Unknown command {command}")
+
+
+MANIFEST = {"game": None, "parser": build_parser, "effect": READS, "reports": {
+    "notes": {"effect": WRITES, "when": "--write"},
+    "prepare": {"effect": RUNS, "when": "--build", "note": "stages a candidate in the kit's cache"},
+    "upload": {"effect": OWNER_ONLY, "note": "only the owner runs it, in their own console"},
+    "update": {"effect": OWNER_ONLY, "note": "only the owner runs it, in their own console"},
+    "reconcile": {"effect": WRITES, "note": "settles an upload's receipt"},
+    "pull": {"effect": WRITES, "when": "--write", "note": "reads Steam"},
+    "change-notes": {"effect": WRITES, "note": "--no-write only counts"},
+}}

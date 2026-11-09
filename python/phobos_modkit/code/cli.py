@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
-import json
 from pathlib import Path
 import re
 import sys
 
 from .. import cache as derived
-from ..report import Code, Report, Table, home_redactor, keep, render_json, render_markdown
+from ..report import Code, Report, Table, envelope_text, home_redactor, keep, render_markdown
 from . import index
+from ..manifest import READS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 REPORTS = ("summary", "find", "outline", "show", "refs")
@@ -245,6 +245,9 @@ def main(argv=None, settings_file=None, environ=None, out=None):
             report.lines.append(f"Indexed now: {', '.join(built)}.")
     except index.CodeError as error:
         report, code = Report("code: error", [str(error)]), EXIT_FAILED
-    print(json.dumps(render_json(report, redact), indent=2, ensure_ascii=False) if args.json
+    print(envelope_text("code", report, redact) if args.json
           else render_markdown(report, redact), file=out)
     return code
+
+
+MANIFEST = {"game": None, "parser": _parser, "effect": READS}

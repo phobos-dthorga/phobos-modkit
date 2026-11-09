@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
-import json
 from pathlib import Path
 from statistics import median
 import sys
 
-from ...report import Report, Table, home_redactor, keep, render_json, render_markdown
+from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
 from . import paths
 from .startup import StartupError, cost_changes, list_change, median_costs, median_stages, read_sessions, same_list
+from ...manifest import READS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 REPORTS = ("summary", "compare", "mod")
@@ -153,6 +153,9 @@ def main(argv=None, settings_file=None, environ=None, out=None):
             report = _summary(sessions, unreadable, args.top)
     except StartupError as error:
         report, code = Report("rimworld-startup: error", [str(error)]), EXIT_FAILED
-    print(json.dumps(render_json(report, redact), indent=2, ensure_ascii=False) if args.json
+    print(envelope_text("rimworld-startup", report, redact) if args.json
           else render_markdown(report, redact), file=out)
     return code
+
+
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS}

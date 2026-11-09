@@ -50,7 +50,7 @@ class Command(unittest.TestCase):
 
     def test_show_one_signature(self):
         code, text = self.run_main(str(self.logs / "Player.log"), "--json", "-")
-        some_id = json.loads(text)["groups"][0]["id"]
+        some_id = json.loads(text)["data"]["groups"][0]["id"]
         code, text = self.run_main(str(self.logs / "Player.log"), "--show", some_id[:6])
         self.assertEqual(code, EXIT_OK)
         self.assertIn(f"# Signature {some_id}", text)
@@ -64,7 +64,7 @@ class Command(unittest.TestCase):
         code, text = self.run_main(str(self.logs / "Player.log"), "--json", str(target))
         self.assertEqual(code, EXIT_OK)
         self.assertIn("# Log triage", text)
-        self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["log"]["name"], "Player.log")
+        self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["data"]["log"]["name"], "Player.log")
 
     def test_levels_option_can_include_info(self):
         code, text = self.run_main(str(self.logs / "Player.log"), "--levels", "info")

@@ -17,10 +17,11 @@ import json
 from pathlib import Path
 import sys
 
-from ...report import Bullets, Report, Section, Table, home_redactor, keep, render_json, render_markdown
+from ...report import Bullets, Report, Section, Table, envelope_text, home_redactor, keep, render_markdown
 from . import loading, paths
 from .mods import ModIndex, default_roots
 from .settings import LIST_SHOWN, SettingsError, compare, read_defaults, read_snapshot, same_value, scan, snapshot
+from ...manifest import READS, WRITES
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 VALUE_WIDTH = 100
@@ -184,6 +185,10 @@ def main(argv=None, settings_file=None, environ=None, out=None):
         code = EXIT_OK
     except SettingsError as error:
         report, code = Report("rimworld-settings: error", [str(error)]), EXIT_FAILED
-    print(json.dumps(render_json(report, redact), indent=2, ensure_ascii=False) if args.json
+    print(envelope_text("rimworld-settings", report, redact) if args.json
           else render_markdown(report, redact), file=out)
     return code
+
+
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
+            "reports": {"snapshot": {"effect": WRITES, "note": "writes the snapshot file you name"}}}

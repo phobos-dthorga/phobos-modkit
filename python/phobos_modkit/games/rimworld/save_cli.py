@@ -25,14 +25,13 @@ from __future__ import annotations
 import argparse
 from contextlib import closing
 import fnmatch
-import json
 from pathlib import Path
 import sqlite3
 import sys
 
 from ... import cache as derived
 from ...native import ToolMissing, build_tools
-from ...report import home_redactor, keep, render_json, render_markdown
+from ...report import envelope_text, home_redactor, keep, render_markdown
 from . import defs as def_index
 from . import grids
 from . import paths
@@ -42,6 +41,7 @@ from . import save as saves
 from . import save_diff
 from . import save_maps
 from . import save_reports as reports
+from ...manifest import READS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 REPORTS = ("summary", "index", "schema", "things", "pawns", "hediffs", "find", "world", "components", "grid", "planet",
@@ -273,9 +273,11 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     report.lines.insert(0, provenance)
 
     if args.json:
-        data = {"save": source, "index": redact(str(index)), "built": built is not None,
-                "report": render_json(report, redact)}
-        out.write(json.dumps(data, indent=1, ensure_ascii=False, default=str) + "\n")
+        out.write(envelope_text("rimworld-save", report, redact,
+                                {"save": source, "index": str(index), "built": built is not None}) + "\n")
     else:
         out.write(render_markdown(report, redact) + "\n")
     return EXIT_OK
+
+
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS}

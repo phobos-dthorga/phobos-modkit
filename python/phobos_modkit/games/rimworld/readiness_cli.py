@@ -19,13 +19,14 @@ from pathlib import Path
 import sys
 
 from ... import cache as derived
-from ...report import Report, Table, home_redactor, keep, render_json, render_markdown
+from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
 from ...steam import workshop
 from ...steam.workshop_reports import version_tags
 from . import loading, paths
 from .mods import ModIndex, default_roots
 from .patches import CACHE_FOLDER as PATCHES_FOLDER, INDEX_NAME as PATCHES_INDEX, PatchesError, mod_assemblies, refresh
 from .readiness import assess, changes, riskiest, snapshot
+from ...manifest import READS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 CACHE_FOLDER = "rimworld-readiness"
@@ -137,6 +138,9 @@ def main(argv=None, settings_file=None, environ=None, out=None, read_transpilers
             last_file.write_text(json.dumps(now, indent=1, sort_keys=True), encoding="utf-8")
     except PatchesError as error:
         report, code = Report("rimworld-readiness: error", [str(error)]), EXIT_FAILED
-    print(json.dumps(render_json(report, redact), indent=2, ensure_ascii=False) if args.json
+    print(envelope_text("rimworld-readiness", report, redact) if args.json
           else render_markdown(report, redact), file=out)
     return code
+
+
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS}
