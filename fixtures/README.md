@@ -36,6 +36,10 @@ these values, cells numbered z * 8 + x:
 | pollution | cell 5, that is (5, 0) |
 | deep resources | Steel (33787), count 300, at cell 10, that is (2, 1) |
 
+Its world has a surface pollution layer for a planet of three subdivisions (272 tiles, 16-bit values, base64 of raw
+deflate): tile 120 at 10% (6554, under Example Home), tile 130 at 100% (65535, under Raider Camp) and tile 7,
+a neighbour of tile 130, at 50% (32768).
+
 ## Steam
 
 `steam/details.json` and `steam/comments-render.json` follow the shapes of Steam's GetPublishedFileDetails response

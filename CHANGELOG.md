@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-09
+
+Why a world tile is polluted could not be answered from a save without reading the file by hand (owner, 9 November 2026).
+
+### Added
+
+- rimworld-save planet: pollution on the world map from the save's planet layer, by band and as patches of touching tiles with what stands on or nearest each, rings of tiles around a named place or tile (--near, --hops), what changed against another save (--compare), and every save of the same world by in-game day (--history, read straight from the saves without indexing them).
+- The save index holds the planet's pollution layer (table planet_grid).
+- A planet's tile centres and neighbours are rebuilt from a model of its shape and cached by subdivision count; a world generated with less than full coverage is reported as such and its tiles are not placed.
+
 ## [0.18.0] - 2026-11-09
 
 The compiler checks typeof and nameof; nothing checked the names C# holds in strings (owner, 9 November 2026).

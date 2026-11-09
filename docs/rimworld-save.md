@@ -42,6 +42,8 @@ python -m phobos_modkit rimworld-save grid --kind gas --render       one layer, 
 python -m phobos_modkit rimworld-save grid --at 137,266              every layer at one cell, and what stands there
 python -m phobos_modkit rimworld-save world --faction "Ryūmon*"     one faction's settlements and sites
 python -m phobos_modkit rimworld-save components --class "*RimPacts*" --path "defendMission/*"
+python -m phobos_modkit rimworld-save planet --near "Red Brook"      pollution on the world map, patch by patch and around one place
+python -m phobos_modkit rimworld-save planet --near 1234 --history   when it arrived, save by save
 python -m phobos_modkit rimworld-save diff Autosave-12               what changed since an earlier save
 python -m phobos_modkit rimworld-save diff PG2 --component "*RimPacts*"   the same, one mod's state only
 python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP BY def"
@@ -57,6 +59,7 @@ python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP
 | `hediffs` | Hediffs counted by def, or one pawn's in full with body part, severity, age and source | `--pawn`, `--def` |
 | `find ID` | A thing by its ID, with every thing holding it out to the map or world | |
 | `world` | World objects counted by def and faction, listed with ID, name, faction and tile, or one object's values in full (an aircraft's flight path, a site's parts) | `--def`, `--faction`, `--name`, `--id` |
+| `planet` | Pollution on the world map from the save's planet layer: by band, patches of touching tiles with what stands on or nearest each, rings of tiles around a place, what changed against another save, every save of the world by in-game day. Tile positions come from a rebuilt model of the planet; a world with less than full coverage is reported as such and its tiles are not placed | `--near` (a name or tile number), `--hops`, `--compare SAVE`, `--history [PATTERN]` |
 | `components` | The game's, the world's and maps' components with how many values each holds, or the values inside them with their paths | `--class`, `--path`, `--value`, `--map` |
 | `grid` | A map's layers counted: terrain, foundations (bridges and the like), roofs, each gas, fog, snow, pollution and deep resources; one layer in full with a text picture (north up); or every layer at one cell with the things standing there | `--map`, `--kind`, `--render`, `--gas`, `--columns`, `--at X,Z`, `--area X1,Z1,X2,Z2`, `--no-names` |
 | `diff OTHER` | What changed since another save: counts, things that appeared and went by def, stacks that grew or shrank, pawns that moved, arrived or left, pawns' hediffs gained, lost, worse or better, world objects that changed faction, appeared or went, and component values that changed and lists that grew or shrank | `--faction` (`player` by default, `any`, or a faction), `--component` |

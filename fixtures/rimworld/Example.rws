@@ -95,6 +95,18 @@
           </li>
         </pawnsDead>
       </worldPawns>
+      <grid>
+        <layers>
+          <keys>
+            <li>0</li>
+          </keys>
+          <values>
+            <li>
+              <tilePollutionDeflate>Y2BAAQ0MwxzMksQU+/+fYRTgAAA=</tilePollutionDeflate>
+            </li>
+          </values>
+        </layers>
+      </grid>
       <worldObjects>
         <worldObjects>
           <li Class="Settlement">

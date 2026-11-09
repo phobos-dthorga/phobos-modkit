@@ -318,6 +318,22 @@ tag = "parent"
 name = "data"
 path = ""
 
+# The planet's pollution layer, as map_grid holds a map's grids: its base64 text as written (phobos_modkit.games.rimworld.planet
+# decodes it). Only the surface layer has one.
+[[table]]
+name = "planet_grid"
+match = [
+    "savegame/game/world/grid/layers/values/li/tilePollutionDeflate",
+    "savegame/game/world/grid/layers/values/li/tilePollution",
+]
+require = ["data"]
+[[table.column]]
+name = "element"
+tag = "self"
+[[table.column]]
+name = "data"
+path = ""
+
 [[view]]
 name = "mods"
 sql = """

@@ -11,6 +11,8 @@
     python -m phobos_modkit rimworld-save grid --at 120,85            every layer at one cell, and what stands there
     python -m phobos_modkit rimworld-save world --faction "Example*"   one faction's settlements and sites
     python -m phobos_modkit rimworld-save components --class "*Wars*"  a mod's saved state, value by value
+    python -m phobos_modkit rimworld-save planet --near "Red Brook"   world-map pollution, patch by patch and around one place
+    python -m phobos_modkit rimworld-save planet --near 1234 --history "Autosave-*"   when it arrived, save by save
     python -m phobos_modkit rimworld-save diff Autosave-3             what changed since another save
     python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP BY def"
 
@@ -22,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import closing
+import fnmatch
 import json
 from pathlib import Path
 import sqlite3
@@ -33,14 +36,16 @@ from ...report import home_redactor, keep, render_json, render_markdown
 from . import defs as def_index
 from . import grids
 from . import paths
+from . import planet
+from . import planet_reports
 from . import save as saves
 from . import save_diff
 from . import save_maps
 from . import save_reports as reports
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
-REPORTS = ("summary", "index", "schema", "things", "pawns", "hediffs", "find", "world", "components", "grid", "diff",
-           "sql")
+REPORTS = ("summary", "index", "schema", "things", "pawns", "hediffs", "find", "world", "components", "grid", "planet",
+           "diff", "sql")
 
 
 def _parser():
@@ -111,6 +116,13 @@ def _parser():
                          ("--config", "the folder holding ModsConfig.xml, for naming")):
         g.add_argument(option, help=text)
     g.add_argument("--no-names", action="store_true", help="show Defs as numbers; do not read the installed mods")
+    l = sub.add_parser("planet", parents=[common], help="pollution on the world map: patch by patch, around a place, "
+                                                        "against another save, or across saves")
+    l.add_argument("--near", help="a world object's name, or a tile number: rings of tiles around it")
+    l.add_argument("--hops", type=int, default=8, help="with --near or --history: tiles out from the place (default 8)")
+    l.add_argument("--compare", metavar="SAVE", help="what changed against another save, usually an earlier one")
+    l.add_argument("--history", metavar="PATTERN", nargs="?", const="*", help="with --near: every save of this world "
+                   "by in-game day, optionally only saves matching a pattern such as Autosave-*")
     d = sub.add_parser("diff", parents=[common], help="what changed between this save and another")
     d.add_argument("other", help="the save to compare with (a name or path), usually an earlier one")
     d.add_argument("--faction", default="player", help="whose pawns and hediffs to compare: player (default), any, "
@@ -146,6 +158,29 @@ def _names(args, environ, settings_file):
     return grids.Names(derived.open_read_only(index)), None
 
 
+def _planet(conn, args, environ, settings_file, cache, top):
+    folder = paths.saves_path(args.saves, environ, settings_file)
+    try:
+        if args.history is not None:
+            if not args.near:
+                raise saves.SaveError("--history needs --near, the place to follow.")
+            tile, name = planet_reports.find_place(conn, args.near)
+            source = saves.find_save(folder, args.save)
+            _, seed, _ = planet.read_save(source)
+            chosen = [p for p in saves.saves_in(folder) if fnmatch.fnmatch(p.stem.lower(), args.history.lower())]
+            return planet_reports.report_history(chosen, tile, name, args.hops, cache, seed, top)
+        compare = None
+        if args.compare:
+            other = saves.find_save(folder, args.compare)
+            values = planet.read_save(other)[2]
+            if values is None:
+                raise saves.SaveError(f"{other.name} holds no planet pollution layer.")
+            compare = (values, other.name)
+        return planet_reports.report_planet(conn, cache, args.near, args.hops, compare, top)
+    except planet.PlanetError as problem:
+        raise saves.SaveError(str(problem)) from None
+
+
 def _report(conn, args, environ=None, settings_file=None, other=None):
     top = args.top
     if args.report == "grid":
@@ -163,6 +198,9 @@ def _report(conn, args, environ=None, settings_file=None, other=None):
         if note:
             report.lines.append(note)
         return report
+    if args.report == "planet":
+        cache = derived.folder(planet.CACHE_FOLDER, args.cache, environ, settings_file)
+        return _planet(conn, args, environ, settings_file, cache, top)
     if args.report == "diff":
         other_index, other_name, this_name = other
         return save_diff.diff(conn, Path(other_index).resolve().as_uri() + "?mode=ro", other_name, this_name,
