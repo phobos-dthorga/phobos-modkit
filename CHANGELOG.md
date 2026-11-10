@@ -4,6 +4,12 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-11-10
+
+### Fixed
+
+- rimworld-save mood: the charts of what hurts and helps most have titles of their own, instead of repeating their section's heading (seen in D'thorga Companion).
+
 ## [1.5.0] - 2026-11-10
 
 The owner's colony showed "Extreme break risk x29" and they asked to see where it was lacking mood-wise, in D'thorga Companion (phobos-rimworld, 10 November 2026). They also asked for graphs.

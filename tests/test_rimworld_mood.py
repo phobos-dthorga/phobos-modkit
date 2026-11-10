@@ -165,8 +165,8 @@ class Report(save_tests.Folders):
     def test_charts_reach_the_json(self):
         code, text = self.run_mood("--json")
         charts = [b for s in json.loads(text)["report"]["sections"] for b in s["blocks"] if b["type"] == "chart"]
-        self.assertEqual([c["title"] for c in charts], ["Mood against breaking point", "What hurts the most",
-                                                        "What helps the most", "Needs across the colony"])
+        self.assertEqual([c["title"] for c in charts], ["Mood against breaking point", "Costliest remembered events",
+                                                        "Most cheering remembered events", "Needs across the colony"])
         first = charts[0]
         self.assertEqual((first["categories"], first["series"][0]["label"], first["series"][0]["values"]),
                          (["Annie"], "Extreme break risk", [4.0]))

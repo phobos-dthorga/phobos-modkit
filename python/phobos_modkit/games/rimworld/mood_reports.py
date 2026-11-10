@@ -157,15 +157,15 @@ def _thought_sections(colony, top):
     hurting = sorted((t for t in totals if t[2] < 0), key=lambda t: t[2])
     helping = sorted((t for t in totals if t[2] > 0), key=lambda t: -t[2])
     sections = []
-    for heading, items, role, describe in (
-            ("What hurts the most", hurting, "risk",
+    for heading, title, items, role, describe in (
+            ("What hurts the most", "Costliest remembered events", hurting, "risk",
              "Remembered events by the mood they cost everyone together, worst first."),
-            ("What helps the most", helping, "success",
+            ("What helps the most", "Most cheering remembered events", helping, "success",
              "Remembered events by the mood they add for everyone together, best first.")):
         charted = items[:CHART_THOUGHTS]
         blocks = []
         if charted:
-            blocks.append(Chart(heading, describe, [t[0] for t in charted],
+            blocks.append(Chart(title, describe, [t[0] for t in charted],
                                 [ChartSeries("Mood, everyone together", [round(t[2], 1) for t in charted], role)],
                                 value_label="Mood points"))
         blocks.append(Table(["Remembered event", "Pawns", "Mood, everyone together", "Each, on average", "Def"],
