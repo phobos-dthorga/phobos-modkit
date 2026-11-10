@@ -217,6 +217,94 @@ path = "story/childhood"
 [[table.column]]
 name = "adulthood"
 path = "story/adulthood"
+# Written only when it is not the default (Guest): Prisoner or Slave. host_faction is whose prisoner or slave.
+[[table.column]]
+name = "guest_status"
+path = "guest/guestStatus"
+[[table.column]]
+name = "host_faction"
+path = "guest/hostFaction"
+
+# A pawn's needs (mood, food, rest, recreation and mods' own), level 0 to 1 for most. The game leaves the level out when
+# it is 0, so an empty level means an empty need. Only needs inside a thing's own needs tracker: a mod's helper object
+# holding needs of its own is not that thing's.
+[[table]]
+name = "need"
+match = [
+    "savegame/game/maps/li/things/thing/needs/needs/li",
+    "**/innerList/li/needs/needs/li",
+    "savegame/game/world/worldPawns/*/li/needs/needs/li",
+    "**/occupants/li/needs/needs/li",
+]
+require = ["def"]
+indexes = ["pawn"]
+[[table.column]]
+name = "pawn"
+parent = "thing"
+[[table.column]]
+name = "def"
+path = "def"
+[[table.column]]
+name = "level"
+path = "curLevel"
+type = "real"
+
+# Remembered thoughts (Thought_Memory), the half of a pawn's mood the game saves; situational thoughts (rooms, pain,
+# cold, traits, precepts) are worked out live and never written. Values left at the game's default are not written:
+# mood_power_factor 1, mood_offset 0, stage_index 0, duration_override -1 (read from the 1.7 game code).
+[[table]]
+name = "memory"
+match = [
+    "savegame/game/maps/li/things/thing/needs/needs/li/thoughts/memories/memories/li",
+    "**/innerList/li/needs/needs/li/thoughts/memories/memories/li",
+    "savegame/game/world/worldPawns/*/li/needs/needs/li/thoughts/memories/memories/li",
+    "**/occupants/li/needs/needs/li/thoughts/memories/memories/li",
+]
+require = ["def"]
+indexes = ["pawn", "def"]
+[[table.column]]
+name = "pawn"
+parent = "thing"
+[[table.column]]
+name = "def"
+path = "def"
+[[table.column]]
+name = "class"
+attr = "Class"
+[[table.column]]
+name = "age_ticks"
+path = "age"
+type = "int"
+[[table.column]]
+name = "other_pawn"
+path = "otherPawn"
+[[table.column]]
+name = "source_precept"
+path = "sourcePrecept"
+[[table.column]]
+name = "duration_override"
+path = "durationTicksOverride"
+type = "int"
+[[table.column]]
+name = "mood_power_factor"
+path = "moodPowerFactor"
+type = "real"
+[[table.column]]
+name = "mood_offset"
+path = "moodOffset"
+type = "int"
+[[table.column]]
+name = "stage_index"
+path = "stageIndex"
+type = "int"
+[[table.column]]
+name = "opinion_offset"
+path = "opinionOffset"
+type = "real"
+[[table.column]]
+name = "permanent"
+path = "permanent"
+type = "bool"
 
 [[table]]
 name = "hediff"

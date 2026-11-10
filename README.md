@@ -39,6 +39,7 @@ python -m phobos_modkit rimworld-save --build-indexer   once: builds the save in
 python -m phobos_modkit rimworld-log           summarise RimWorld's Player.log against the run before
 python -m phobos_modkit rimworld-log --show ID one message in full
 python -m phobos_modkit rimworld-save          summarise the newest save; also pawns, things, hediffs, find, sql
+python -m phobos_modkit rimworld-save mood     where the colony's mood suffers, and who may break
 python -m phobos_modkit rimworld-defs who X    which active mods define and patch a Def; also show, list, patches
 python -m phobos_modkit rimworld-defs patched X --dump F   a Def with every patch applied, and what changed
 python -m phobos_modkit rimworld-workshop report "Mod name"   what players report about a mod lately
@@ -66,7 +67,7 @@ in order of expected saving.
 | # | Tool | What it answers | Language | Status |
 | --- | --- | --- | --- | --- |
 | 1 | [Log triage](docs/rimworld-log.md) (RimWorld) | What went wrong this run, which mod it came from, what is new since last run | Python | Built: 0.1.1 |
-| 2 | [Save index and query](docs/rimworld-save.md) (RimWorld) | Where things are in a large XML save; pawns, hediffs, holders; map grids; pollution on the world map; what changed between two saves | Rust engine, Python reports | Built: 0.6.0, with map grids and save comparison; world-map pollution 0.19.0 |
+| 2 | [Save index and query](docs/rimworld-save.md) (RimWorld) | Where things are in a large XML save; pawns, hediffs, holders; map grids; pollution on the world map; what changed between two saves; where a colony's mood suffers | Rust engine, Python reports | Built: 0.6.0, with map grids and save comparison; world-map pollution 0.19.0; colony mood 1.5.0 |
 | 3 | [Mod and Def index](docs/rimworld-defs.md) (RimWorld) | Which mod defines or patches something, in the player's load order, and which definition the game keeps | Python | Built: 0.4.0 |
 | 4 | [Harmony patches](docs/rimworld-patches.md) (RimWorld), the assembly metadata reader | Which active mods patch a method, what a mod patches, where several mods patch one method; read from metadata, never run | C# reader, Python reports | Built: 0.14.0 (patches; constants and API matching not yet) |
 | 5 | [Workshop research](docs/workshop.md) | What players report about a mod lately; supported versions; last update | Python | Built: 0.5.0 |

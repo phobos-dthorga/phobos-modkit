@@ -26,10 +26,25 @@ python -m phobos_modkit manifest --json    the whole description, in the envelop
 | `envelope` | The shape's version |
 | `tool` | The command that made it |
 | `kit_version` | The kit that made it |
-| `report` | The report: `format`, `title`, `lines`, `blocks` and `sections` |
+| `report` | The report: `format`, `title`, `lines`, `blocks` and `sections`. A block's `type` is `text`, `bullets`, `table` (with `values`, the number each cell sorts by), `code` or `chart` |
 | `data` | Anything else the tool offers; empty when it has nothing. `rimworld-save` and `rimworld-defs` give `index` and `built`, `rimworld-log` gives every signature |
 
 Redaction reaches every string in `report` and `data`.
+
+**A chart block** (1.5.0) pictures numbers the report also states in a table or a line, so a program may draw it and a
+reader without it loses nothing. Markdown shows it as text bars, or as a table when a category has several values.
+
+| Field | What it holds |
+| --- | --- |
+| `kind` | `bar` (one bar per category, running sideways) or `line` (along the categories in order) |
+| `title`, `description` | A name, and one sentence saying what it shows, for reading in place of the picture |
+| `categories` | The labels along the category axis |
+| `series` | Each has `label`, `role` and `values`: one number or null per category |
+| `lines` | Reference lines across the value axis, such as thresholds: `label`, `value`, `role` |
+| `unit`, `value_label`, `stacked` | The unit after each value (`%`, `ms`), what the value axis measures, and whether series stack |
+
+A `role` says what a series means, never its colour: `accent`, `observed`, `comparison`, `risk`, `success` or `neutral`.
+A program colours each role from its own theme.
 
 ## The manifest
 

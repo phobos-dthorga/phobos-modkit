@@ -46,6 +46,8 @@ python -m phobos_modkit rimworld-save planet --near "Red Brook"      pollution o
 python -m phobos_modkit rimworld-save planet --near 1234 --history   when it arrived, save by save
 python -m phobos_modkit rimworld-save diff Autosave-12               what changed since an earlier save
 python -m phobos_modkit rimworld-save diff PG2 --component "*RimPacts*"   the same, one mod's state only
+python -m phobos_modkit rimworld-save mood                           where the colony's mood suffers, and who may break
+python -m phobos_modkit rimworld-save mood --pawn Annie              one pawn's remembered events and needs
 python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP BY def"
 ```
 
@@ -62,12 +64,34 @@ python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP
 | `planet` | Pollution on the world map from the save's planet layer: by band, patches of touching tiles with what stands on or nearest each, rings of tiles around a place, what changed against another save, every save of the world by in-game day. Tile positions come from a rebuilt model of the planet; a world with less than full coverage is reported as such and its tiles are not placed | `--near` (a name or tile number), `--hops`, `--compare SAVE`, `--history [PATTERN]` |
 | `components` | The game's, the world's and maps' components with how many values each holds, or the values inside them with their paths | `--class`, `--path`, `--value`, `--map` |
 | `grid` | A map's layers counted: terrain, foundations (bridges and the like), roofs, each gas, fog, snow, pollution and deep resources; one layer in full with a text picture (north up); or every layer at one cell with the things standing there | `--map`, `--kind`, `--render`, `--gas`, `--columns`, `--at X,Z`, `--area X1,Z1,X2,Z2`, `--no-names` |
+| `mood` | Where the colony's mood suffers: each pawn's mood against its break thresholds, the remembered events that cost the colony most and help it most, needs running low, and addictions and drug needs, with charts; `--pawn` gives one pawn's events and needs in full. See [Mood](#mood) for what a save cannot show | `--who` (`all`, `colonists`, `slaves`, `prisoners`), `--pawn`, `--patched-defs`, `--game`, `--workshop`, `--config`, `--no-defs` |
 | `diff OTHER` | What changed since another save: counts, things that appeared and went by def, stacks that grew or shrank, pawns that moved, arrived or left, pawns' hediffs gained, lost, worse or better, world objects that changed faction, appeared or went, and component values that changed and lists that grew or shrank | `--faction` (`player` by default, `any`, or a faction), `--component` |
 | `sql QUERY` | Any query; the index is opened read-only, so nothing can change it | |
 
 Every report takes `--save NAME` (default: the newest save), `--saves`, `--cache`, `--index FILE` (read an index
 directly), `--rebuild`, `--top N`, `--json` and `--no-redact`. Filters ignore case; `*` and `?` are wildcards, and
 `_` is an ordinary character.
+
+## Mood
+
+**A save holds only half of a pawn's mood.** The game saves remembered thoughts (a death, a meal off the floor, a
+party) and leaves out situational ones (bedroom and dining room, pain, hunger, cold, darkness, traits, precepts, a drug's
+high), which it works out while it runs. So `mood` counts the remembered events exactly and gives the rest as one
+figure, "everything else": the pawn's mood minus its remembered events. Summed over the colony it says how much the
+unsaved half costs, without naming it.
+
+| Part | Where it comes from |
+| --- | --- |
+| Who | Pawns on a map with a mood: the player's own (colonists), the player's slaves, and the player's prisoners |
+| Mood | The Mood need's saved level. **The game leaves a level of 0 out of the save**, so a missing level is 0, not unknown |
+| A remembered event's mood | Its ThoughtDef stage's `baseMoodEffect`, times the saved strength, plus the saved offset; fading where the Def says so. Repeats of one event count once at full weight, then each at 0.75 (or the Def's own multiplier) of the one before |
+| Break thresholds | The `MentalBreakThreshold` stat's base value, moved by the pawn's traits; major is 4/7 of minor, extreme 1/7 |
+| Defs | The patched-Defs file where one exists (by default where D'thorga Framework writes it, beside the Config folder), else the installed mods' Defs as written |
+
+These rules were read from the 1.7 game code and are summarised in `python/phobos_modkit/games/rimworld/mood.py`.
+**Left out, and said so in the report:** a thought's stat multipliers and its own rules; cancelling by hediffs, genes,
+precepts and tales (trait cancelling is applied); threshold changes from anything but traits; the difficulty's mood
+offset. The low-need line at 30% is our choice, not the game's.
 
 ## What the index holds
 
@@ -80,6 +104,7 @@ directly), `--rebuild`, `--top N`, `--json` and `--no-redact`. Filters ignore ca
 | `thing` | Every thing on a map, held by another thing, or a world pawn: def, ID, class, stuff, stack, hit points, quality, forbidden, map, position, faction, the thing holding it |
 | `pawn` | The pawn part of a thing (same `id`): kind, gender, name parts, health state, biological age, backstories |
 | `hediff`, `trait`, `skill` | Each belongs to a pawn by its `id` |
+| `need`, `memory` | Each pawn's needs (def and level; a missing level is 0, which the game leaves out) and remembered thoughts (def, age, stage, mood power and offset, the other pawn, the precept) |
 | `thing_place` (view) | For each thing, the outermost thing holding it, whether it is held, its place and map |
 | `pawn_view` (view) | Pawns with display name, race, faction name, place, map, position and age in years |
 | `map_grid` | Each map's grids as the save holds them (base64 text), with the grid's element and owner |

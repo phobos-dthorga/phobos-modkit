@@ -3,7 +3,8 @@ import json
 import unittest
 
 import support  # noqa: F401
-from phobos_modkit.report import (Bullets, Code, Report, Table, home_redactor, render_json, render_markdown)
+from phobos_modkit.report import (Bullets, Chart, ChartLine, ChartSeries, Code, Report, Table, home_redactor,
+                                  render_json, render_markdown)
 
 HOME = r"C:\Users\tester"
 
@@ -102,6 +103,48 @@ class Sections(unittest.TestCase):
         section = report.section("s", "words", table)
         self.assertIs(section.table, table)
         self.assertIsNone(report.section("none", "words").table)
+
+
+class Charts(unittest.TestCase):
+    def chart(self, **changes):
+        values = dict(title=r"Mood in C:\Users\tester", description="Who is low.", categories=["Ann", "Bo", "Cy"],
+                      series=[ChartSeries("Low", [4, None, None], "risk"),
+                              ChartSeries("Fine", [None, 60, 30], "success")],
+                      unit="%", lines=[ChartLine("Break", 35, "risk")], stacked=True)
+        values.update(changes)
+        return Chart(**values)
+
+    def test_one_value_per_category_draws_text_bars_scaled_to_the_largest(self):
+        report = Report("t")
+        report.section("s", self.chart())
+        text = render_markdown(report, home_redactor(HOME))
+        self.assertIn("**Mood in ~**: Who is low.", text)
+        self.assertIn("Bo  " + "\u2588" * 30 + " 60%  (Fine)", text)
+        self.assertIn("Cy  " + "\u2588" * 15 + " " * 16 + "30%  (Fine)", text)
+        self.assertIn("Lines: Break 35%.", text)
+
+    def test_several_values_per_category_become_a_table(self):
+        report = Report("t")
+        report.section("s", self.chart(series=[ChartSeries("A", [1, 2, 3]), ChartSeries("B", [4, 5, 6])],
+                                       value_label="Pawn", unit="ms"))
+        text = render_markdown(report)
+        self.assertIn("| Pawn | A | B |", text)
+        self.assertIn("| Ann | 1 ms | 4 ms |", text)
+
+    def test_json_carries_the_spec_with_roles_not_colours(self):
+        block = render_json(Report("t", blocks=[self.chart()]), home_redactor(HOME))["blocks"][0]
+        self.assertEqual((block["type"], block["kind"], block["title"], block["stacked"]),
+                         ("chart", "bar", "Mood in ~", True))
+        self.assertEqual(block["series"][0], {"label": "Low", "role": "risk", "values": [4.0, None, None]})
+        self.assertEqual(block["lines"], [{"label": "Break", "value": 35.0, "role": "risk"}])
+
+    def test_bad_charts_are_refused(self):
+        with self.assertRaisesRegex(ValueError, "kind"):
+            self.chart(kind="pie")
+        with self.assertRaisesRegex(ValueError, "role"):
+            self.chart(series=[ChartSeries("A", [1, 2, 3], "#ff0000")])
+        with self.assertRaisesRegex(ValueError, "2 values for 3 categories"):
+            self.chart(series=[ChartSeries("A", [1, 2])])
 
 
 if __name__ == "__main__":

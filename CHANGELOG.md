@@ -4,6 +4,22 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-10
+
+The owner's colony showed "Extreme break risk x29" and they asked to see where it was lacking mood-wise, in D'thorga Companion (phobos-rimworld, 10 November 2026). They also asked for graphs.
+
+### Added
+
+- rimworld-save mood: each pawn's mood against its own break thresholds, the remembered events that cost the colony most and help it most, needs running low, and addictions and drug needs. --pawn gives one pawn in full; --who narrows it to colonists, slaves or prisoners.
+- It counts remembered events by the game's own rules (stage, strength, fading, stacking, trait cancelling) from the Defs as patched where a patched-Defs file exists, else as written, and says plainly that situational thoughts are not in a save. What they cost comes as one figure, mood minus the remembered events.
+- The save index gains need and memory tables, and each pawn's prisoner or slave status.
+- A chart block in the report model: bars or lines, with series and reference lines that carry a meaning (risk, success and so on), never a colour. Markdown shows text bars; JSON carries the chart for a program to draw.
+- The patched-Defs file is found by default where D'thorga Framework writes it, beside the Config folder.
+
+### Fixed
+
+- A need whose level is 0 is left out of the save by the game; the mood report reads that as 0, not as unknown.
+
 ## [1.4.0] - 2026-11-09
 
 A game died with a stack overflow and nothing in its log, and reading its crash dump took a debugger, a downloaded tool and a hand-written script (phobos-rimworld, 9 November 2026).

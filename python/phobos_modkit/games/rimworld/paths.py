@@ -68,3 +68,15 @@ def saves_path(explicit=None, environ=None, settings_file=None):
 def config_path(explicit=None, environ=None, settings_file=None):
     """The folder holding ModsConfig.xml."""
     return resolve(*CONFIG, default_user_data() / "Config", explicit, environ, settings_file)
+
+
+# A file of every Def with patches applied, written by a running game on request. phobos-rimworld's D'thorga Framework
+# writes it beside the Config folder; another mod may write the same shape anywhere and name it with these settings.
+PATCHED_DEFS = ("rimworldPatchedDefsPath", "RIMWORLD_PATCHED_DEFS")
+PATCHED_DEFS_DEFAULT = ("PhobosPatchedDefs", "PatchedDefs.xml")
+
+
+def patched_defs_path(explicit=None, environ=None, settings_file=None):
+    """The patched-Defs file: the one named, or where D'thorga Framework writes it. It may not exist."""
+    default = Path(config_path(None, environ, settings_file)).parent.joinpath(*PATCHED_DEFS_DEFAULT)
+    return resolve(*PATCHED_DEFS, default, explicit, environ, settings_file)

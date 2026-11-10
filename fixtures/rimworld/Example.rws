@@ -237,6 +237,52 @@
                 </li>
               </skills>
             </skills>
+            <needs>
+              <needs>
+                <li Class="Need_Mood">
+                  <def>Mood</def>
+                  <curLevel>0.04</curLevel>
+                  <thoughts>
+                    <memories>
+                      <memories>
+                        <li>
+                          <def>AteWithoutTable</def>
+                          <otherPawn>null</otherPawn>
+                          <age>3000</age>
+                        </li>
+                        <li>
+                          <def>AteWithoutTable</def>
+                          <otherPawn>null</otherPawn>
+                          <age>9000</age>
+                        </li>
+                        <li Class="Thought_MemorySocial">
+                          <def>Insulted</def>
+                          <otherPawn>Thing_Human300</otherPawn>
+                          <moodPowerFactor>0.5</moodPowerFactor>
+                          <opinionOffset>-15</opinionOffset>
+                        </li>
+                        <li>
+                          <def>Example_Fading</def>
+                          <otherPawn>null</otherPawn>
+                          <age>30000</age>
+                        </li>
+                        <li>
+                          <def>Example_Unknown</def>
+                          <otherPawn>null</otherPawn>
+                        </li>
+                      </memories>
+                    </memories>
+                  </thoughts>
+                </li>
+                <li Class="Need_Food">
+                  <def>Food</def>
+                </li>
+                <li Class="Need_Chemical">
+                  <def>Chemical_Example</def>
+                  <curLevel>0.2</curLevel>
+                </li>
+              </needs>
+            </needs>
             <healthTracker>
               <hediffSet>
                 <hediffs>

@@ -1,7 +1,8 @@
 """One report model for every tool, rendered as Markdown for people and agent sessions, or as JSON for programs.
 
 A report has a title, intro lines (one paragraph, one line each), further opening blocks, and sections. A block is a
-paragraph (a plain string), Bullets, a Table or Code. Redaction, such as hiding the home folder, applies to every
+paragraph (a plain string), Bullets, a Table, Code or a Chart (text bars in Markdown, a spec a program can draw in
+JSON). Redaction, such as hiding the home folder, applies to every
 piece of text when the report is rendered, so no tool can forget a field.
 
     report = Report("Things")
@@ -45,6 +46,56 @@ class Bullets:
 class Code:
     lines: list
     language: str = "text"
+
+
+# What a chart's series or line means, so a program can colour it from its own theme. Never a colour itself.
+CHART_ROLES = ("accent", "observed", "comparison", "risk", "success", "neutral")
+CHART_KINDS = ("bar", "line")
+BAR_WIDTH = 30                                    # characters in the longest text bar
+
+
+@dataclass
+class ChartSeries:
+    label: str
+    values: list                                  # one number, or None, per category
+    role: str = "accent"
+
+
+@dataclass
+class ChartLine:
+    """A reference line across the value axis, such as a threshold."""
+    label: str
+    value: float
+    role: str = "neutral"
+
+
+@dataclass
+class Chart:
+    """A picture of numbers a report already states: a program draws it, and Markdown shows text bars.
+
+    Every figure in a chart should also be in a table or a line of the report, so nothing depends on seeing it.
+    Bars run sideways, one per category; a line chart runs along the categories in order.
+    """
+    title: str
+    description: str                              # one sentence saying what it shows, read in place of the picture
+    categories: list
+    series: list
+    kind: str = "bar"
+    unit: str = ""                                # shown after each value, such as % or ms
+    value_label: str = ""                         # what the value axis measures
+    lines: list = field(default_factory=list)     # ChartLine
+    stacked: bool = False
+
+    def __post_init__(self):
+        if self.kind not in CHART_KINDS:
+            raise ValueError(f"chart kind must be one of {', '.join(CHART_KINDS)}, not {self.kind!r}")
+        for part in [*self.series, *self.lines]:
+            if part.role not in CHART_ROLES:
+                raise ValueError(f"chart role must be one of {', '.join(CHART_ROLES)}, not {part.role!r}")
+        for series in self.series:
+            if len(series.values) != len(self.categories):
+                raise ValueError(f"series {series.label!r} has {len(series.values)} values for "
+                                 f"{len(self.categories)} categories")
 
 
 @dataclass
@@ -107,7 +158,42 @@ def _table_lines(table, redact):
     return lines
 
 
+def _chart_value(value, unit):
+    if value is None:
+        return ""
+    text = f"{value:,.0f}" if float(value).is_integer() or abs(value) >= 100 else f"{value:,.1f}"
+    return f"{text}{unit}" if unit == "%" else f"{text} {unit}".rstrip()
+
+
+def _chart_lines(chart, redact):
+    """Text bars when each category has one value; otherwise a table of every series."""
+    title = f"**{redact(chart.title)}**: {redact(chart.description)}"
+    if not chart.categories:
+        return [title, "", NOTHING]
+    single = all(sum(s.values[i] is not None for s in chart.series) <= 1 for i in range(len(chart.categories)))
+    if not single or chart.kind == "line":
+        headers = [chart.value_label or "Category", *(s.label for s in chart.series)]
+        rows = [(c, *(_chart_value(s.values[i], chart.unit) for s in chart.series))
+                for i, c in enumerate(chart.categories)]
+        return [title, "", *_table_lines(Table(headers, rows), redact)]
+    picked = [next(((s.values[i], s) for s in chart.series if s.values[i] is not None), (None, None))
+              for i in range(len(chart.categories))]
+    scale = max([abs(v) for v, _ in picked if v is not None] + [abs(line.value) for line in chart.lines] + [0])
+    names = [redact(str(c)) for c in chart.categories]
+    width = min(max(len(n) for n in names), 32)
+    several = len(chart.series) > 1
+    out = []
+    for name, (value, series) in zip(names, picked):
+        bar = "" if value is None or not scale else "█" * max(1, round(abs(value) / scale * BAR_WIDTH))
+        note = f"  ({redact(series.label)})" if several and series is not None else ""
+        out.append(f"{name[:width]:<{width}} {bar:<{BAR_WIDTH}} {_chart_value(value, chart.unit)}{note}".rstrip())
+    marks = "; ".join(f"{redact(line.label)} {_chart_value(line.value, chart.unit)}" for line in chart.lines)
+    return [title, "", "```text", *out, "```", *([f"Lines: {marks}."] if marks else [])]
+
+
 def _block_lines(block, redact):
+    if isinstance(block, Chart):
+        return _chart_lines(block, redact)
     if isinstance(block, str):
         return [redact(block)]
     if isinstance(block, Bullets):
@@ -176,6 +262,13 @@ def _block_json(block, redact):
                 "total": block.total if block.total is not None else len(block.rows)}
     if isinstance(block, Code):
         return {"type": "code", "language": block.language, "lines": [redact(str(l)) for l in block.lines]}
+    if isinstance(block, Chart):
+        return {"type": "chart", "kind": block.kind, "title": redact(block.title),
+                "description": redact(block.description), "unit": block.unit, "value_label": redact(block.value_label),
+                "stacked": block.stacked, "categories": [redact(str(c)) for c in block.categories],
+                "series": [{"label": redact(s.label), "role": s.role,
+                            "values": [None if v is None else float(v) for v in s.values]} for s in block.series],
+                "lines": [{"label": redact(l.label), "value": float(l.value), "role": l.role} for l in block.lines]}
     raise TypeError(f"not a report block: {type(block).__name__}")
 
 

@@ -22,7 +22,8 @@ TargetMethod, two `harmony.Patch` calls (one through `AccessTools.TypeByName`), 
 ## RimWorld save
 
 `rimworld/Example.rws` follows the element paths of RimWorld 1.7.5000 saves: a colony map with things, a pawn with
-hediffs, traits, skills, inventory and apparel, a corpse holding a pawn, world pawns alive and dead, factions and
+hediffs, traits, skills, inventory and apparel, needs and remembered thoughts (its Food need has no level, as the game
+leaves out a level of 0), a corpse holding a pawn, world pawns alive and dead, factions and
 mods. Its 8 by 8 map has grids encoded the game's way (base64 of raw deflate, or plain for pollution's `arr`) from
 these values, cells numbered z * 8 + x:
 

@@ -29,7 +29,7 @@ from . import paths
 from ...manifest import READS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
-PATCHED_DEFS = ("rimworldPatchedDefsPath", "RIMWORLD_PATCHED_DEFS")
+PATCHED_DEFS = paths.PATCHED_DEFS
 
 
 def _parser():
