@@ -1,0 +1,46 @@
+{
+  "format": "1",
+  "note": "Agent-authored (10 Nov 2026), for the owner to revise: a colour for each biome close to how the game's world map looks, and a drawing width from 1 to 4 for each road and river. Keys are Def names. A biome missing here gets a colour from its tiles' climate, and the atlas says so. Colours are our own choices, not taken from the game's art.",
+  "biomes": {
+    "Ocean": "#1f4466",
+    "Lake": "#3a6f95",
+    "SeaIce": "#c3d5e0",
+    "IceSheet": "#eef2f4",
+    "GlacialPlain": "#c9d4d6",
+    "Tundra": "#a8a58c",
+    "BorealForest": "#3e5d3e",
+    "ColdBog": "#5c6a4e",
+    "TemperateForest": "#4e7a39",
+    "TemperateSwamp": "#566f48",
+    "Grasslands": "#88a252",
+    "TropicalRainforest": "#2d6a2c",
+    "TropicalSwamp": "#3d6a3b",
+    "Glowforest": "#3a7d70",
+    "AridShrubland": "#b49e6a",
+    "Desert": "#d3ba8b",
+    "ExtremeDesert": "#e4d0a0",
+    "Scarlands": "#7d5b4b",
+    "LavaField": "#5b2c22",
+    "DMSE_ImpactCraterBiome": "#6e6a61"
+  },
+  "water_biomes": ["Ocean", "Lake"],
+  "hilliness": {"Flat": "#a4b47e", "SmallHills": "#b99f6c", "LargeHills": "#8e6f4c", "Mountainous": "#66513f", "Impassable": "#35302c"},
+  "roads": {
+    "DirtPath": 1,
+    "DirtPathBuilt": 1,
+    "DirtRoad": 2,
+    "DirtRoadBuilt": 2,
+    "StoneRoad": 2,
+    "StoneRoadBuilt": 2,
+    "AncientAsphaltRoad": 3,
+    "AsphaltRoad": 3,
+    "AncientAsphaltHighway": 4
+  },
+  "rivers": {
+    "Creek": 1,
+    "River": 2,
+    "LargeRiver": 3,
+    "HugeRiver": 4
+  },
+  "default_width": 2
+}

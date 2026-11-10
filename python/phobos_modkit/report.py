@@ -1,8 +1,8 @@
 """One report model for every tool, rendered as Markdown for people and agent sessions, or as JSON for programs.
 
 A report has a title, intro lines (one paragraph, one line each), further opening blocks, and sections. A block is a
-paragraph (a plain string), Bullets, a Table, Code or a Chart (text bars in Markdown, a spec a program can draw in
-JSON). Redaction, such as hiding the home folder, applies to every
+paragraph (a plain string), Bullets, a Table, Code, a Chart (text bars in Markdown, a spec a program can draw in
+JSON) or a Globe (a planet of tiles a program can draw; a line saying what it holds in Markdown). Redaction, such as hiding the home folder, applies to every
 piece of text when the report is rendered, so no tool can forget a field.
 
     report = Report("Things")
@@ -12,11 +12,14 @@ piece of text when the report is rendered, so no tool can forget a field.
 """
 from __future__ import annotations
 
+from array import array
+import base64
 from dataclasses import dataclass, field
 import json
 import os
 import re
 from pathlib import Path
+import sys
 
 from . import __version__
 from .markdown import CELL_LIMIT, cell
@@ -96,6 +99,141 @@ class Chart:
             if len(series.values) != len(self.categories):
                 raise ValueError(f"series {series.label!r} has {len(series.values)} values for "
                                  f"{len(self.categories)} categories")
+
+
+# ---- Globes ----
+#
+# A globe is a planet of tiles for a program to draw: every tile's point on the unit sphere (y up; longitude is
+# atan2(x, -z) and latitude asin(y), as RimWorld reckons them), each tile's neighbours in order round it, and layers
+# of one value per tile. A tile's outline joins the centres of the triangles it makes with each pair of neighbours
+# next to each other, so a program needs no other geometry. Arrays travel as little-endian base64 in JSON.
+
+GLOBE_DTYPES = {"B": "u8", "H": "u16", "i": "i32", "f": "f32"}   # array typecode -> name in JSON
+GLOBE_LAYER_KINDS = ("categories", "measure", "names")            # names: a label per tile, never a colour
+GLOBE_RAMPS = ("temperature", "rainfall", "elevation", "sequential", "pollution")
+GLOBE_LINE_STYLES = ("river", "road")
+
+
+@dataclass
+class GlobeCategory:
+    label: str
+    colour: str = ""                              # "#rrggbb": the map's own colour for it (a biome's look), not a theme's
+    description: str = ""
+
+
+@dataclass
+class GlobeBand:
+    """A named range of a measure, in shown units, such as the game's pollution bands."""
+    label: str
+    low: float
+    high: float
+
+
+@dataclass
+class GlobeLayer:
+    """One value per tile. A category layer's value is an index into categories; a measure's shown value is
+    raw * scale + offset, in unit; a names layer's value is an index into categories, shown only as text."""
+    key: str
+    label: str
+    description: str
+    values: object                                # array.array, one per tile
+    kind: str = "measure"
+    categories: list = field(default_factory=list)   # GlobeCategory
+    unit: str = ""
+    scale: float = 1.0
+    offset: float = 0.0
+    precision: int = 0                            # decimals to show
+    ramp: str = "sequential"
+    missing: int = None                           # a raw value meaning "nothing here"
+    missing_label: str = ""                       # what a missing value means, such as water
+    overlay: bool = False                         # drawn over the chosen view; a raw 0 or missing value is clear
+    bands: list = field(default_factory=list)     # GlobeBand
+
+
+@dataclass
+class GlobePlace:
+    tile: int
+    label: str
+    kind: str                                     # what it is, such as Settlement
+    group: str                                    # which list it belongs in, such as Your colonies
+    role: str = "neutral"                         # CHART_ROLES: how a program colours it
+    detail: str = ""                              # such as the faction's name
+    priority: int = 0                             # higher is labelled first when labels crowd
+
+
+@dataclass
+class GlobeLines:
+    """Lines from tile centre to tile centre, such as roads, with a width from 1 to 4 for each piece."""
+    key: str
+    label: str
+    description: str
+    style: str
+    pairs: object                                 # array.array("i"): two tiles per piece
+    widths: object                                # array.array("B"): one per piece
+    names: list = field(default_factory=list)     # what each piece is, by index in kinds
+    kinds: object = None                          # array.array("H"): one per piece, an index into names
+
+
+@dataclass
+class GlobeTags:
+    """Short notes on some tiles, several per tile allowed, such as Caves or Coast."""
+    key: str
+    label: str
+    names: list
+    tiles: object                                 # array.array("i")
+    tags: object                                  # array.array("H"): an index into names, one per entry in tiles
+
+
+@dataclass
+class GlobeLabel:
+    """A named region's label where the game draws it: a point on the unit sphere and a size in tiles."""
+    label: str
+    kind: str
+    position: tuple
+    size: float = 1.0
+
+
+@dataclass
+class Globe:
+    """A planet a program can draw and explore. Markdown cannot draw one: it says what the globe holds, and every
+    figure a person needs should also be in a table of the report."""
+    title: str
+    description: str
+    positions: object                             # array.array("f"): x, y, z for each tile
+    ring_start: object                            # array.array("i"): tiles + 1 offsets into ring
+    ring: object                                  # array.array("i"): each tile's neighbours, in order round it
+    layers: list = field(default_factory=list)    # GlobeLayer; the first category layer is the default view
+    places: list = field(default_factory=list)    # GlobePlace
+    lines: list = field(default_factory=list)     # GlobeLines
+    tags: list = field(default_factory=list)      # GlobeTags
+    labels: list = field(default_factory=list)    # GlobeLabel
+
+    @property
+    def tiles(self):
+        return len(self.positions) // 3
+
+    def __post_init__(self):
+        tiles = self.tiles
+        problems = []
+        if len(self.positions) != 3 * tiles or len(self.ring_start) != tiles + 1:
+            problems.append("positions and ring_start do not agree on the number of tiles")
+        for layer in self.layers:
+            if layer.kind not in GLOBE_LAYER_KINDS:
+                problems.append(f"layer {layer.key!r} has kind {layer.kind!r}")
+            if layer.ramp not in GLOBE_RAMPS:
+                problems.append(f"layer {layer.key!r} has ramp {layer.ramp!r}")
+            if len(layer.values) != tiles:
+                problems.append(f"layer {layer.key!r} has {len(layer.values)} values for {tiles} tiles")
+        for place in self.places:
+            if place.role not in CHART_ROLES:
+                problems.append(f"place {place.label!r} has role {place.role!r}")
+        for lines in self.lines:
+            if lines.style not in GLOBE_LINE_STYLES:
+                problems.append(f"lines {lines.key!r} have style {lines.style!r}")
+            if len(lines.pairs) != 2 * len(lines.widths):
+                problems.append(f"lines {lines.key!r} need two tiles and one width per piece")
+        if problems:
+            raise ValueError("; ".join(problems))
 
 
 @dataclass
@@ -191,9 +329,23 @@ def _chart_lines(chart, redact):
     return [title, "", "```text", *out, "```", *([f"Lines: {marks}."] if marks else [])]
 
 
+def _globe_lines(globe, redact):
+    views = [layer.label for layer in globe.layers if layer.kind != "names" and not layer.overlay]
+    overlays = [layer.label for layer in globe.layers if layer.overlay]
+    parts = [f"{globe.tiles:,} tiles", f"views: {', '.join(views) or 'none'}"]
+    if overlays:
+        parts.append(f"overlays: {', '.join(overlays)}")
+    parts.append(f"{len(globe.places):,} places")
+    parts += [f"{len(lines.widths):,} pieces of {lines.label.lower()}" for lines in globe.lines]
+    return [f"**{redact(globe.title)}**: {redact(globe.description)}", "",
+            redact(f"A globe for a program to draw ({'; '.join(parts)}). The tables in this report list what it shows.")]
+
+
 def _block_lines(block, redact):
     if isinstance(block, Chart):
         return _chart_lines(block, redact)
+    if isinstance(block, Globe):
+        return _globe_lines(block, redact)
     if isinstance(block, str):
         return [redact(block)]
     if isinstance(block, Bullets):
@@ -250,7 +402,49 @@ def _table_values(table):
     return [list(row) for row in zip(*columns)]
 
 
+def _array_json(values):
+    """An array.array as {"dtype", "count", "data"}: little-endian bytes in base64."""
+    if values is None:
+        return None
+    if values.typecode not in GLOBE_DTYPES:
+        raise TypeError(f"a globe array cannot have typecode {values.typecode!r}")
+    if sys.byteorder == "big" and values.itemsize > 1:
+        values = array(values.typecode, values)
+        values.byteswap()
+    return {"dtype": GLOBE_DTYPES[values.typecode], "count": len(values),
+            "data": base64.b64encode(values.tobytes()).decode("ascii")}
+
+
+def _globe_json(globe, redact):
+    text = lambda value: redact(str(value))
+    return {"type": "globe", "title": text(globe.title), "description": text(globe.description), "tiles": globe.tiles,
+            "positions": _array_json(globe.positions), "ring_start": _array_json(globe.ring_start),
+            "ring": _array_json(globe.ring),
+            "layers": [{"key": layer.key, "label": text(layer.label), "description": text(layer.description),
+                        "kind": layer.kind, "values": _array_json(layer.values),
+                        "categories": [{"label": text(c.label), "colour": c.colour, "description": text(c.description)}
+                                       for c in layer.categories],
+                        "unit": layer.unit, "scale": layer.scale, "offset": layer.offset, "precision": layer.precision,
+                        "ramp": layer.ramp, "missing": layer.missing,
+                        "missing_label": text(layer.missing_label), "overlay": layer.overlay,
+                        "bands": [{"label": text(b.label), "low": b.low, "high": b.high} for b in layer.bands]}
+                       for layer in globe.layers],
+            "places": [{"tile": p.tile, "label": text(p.label), "kind": text(p.kind), "group": text(p.group),
+                        "role": p.role, "detail": text(p.detail), "priority": p.priority} for p in globe.places],
+            "lines": [{"key": lines.key, "label": text(lines.label), "description": text(lines.description),
+                       "style": lines.style, "pairs": _array_json(lines.pairs), "widths": _array_json(lines.widths),
+                       "names": [text(n) for n in lines.names], "kinds": _array_json(lines.kinds)}
+                      for lines in globe.lines],
+            "tags": [{"key": tags.key, "label": text(tags.label), "names": [text(n) for n in tags.names],
+                      "tiles": _array_json(tags.tiles), "tags": _array_json(tags.tags)} for tags in globe.tags],
+            "labels": [{"label": text(label.label), "kind": text(label.kind),
+                        "position": [float(v) for v in label.position], "size": float(label.size)}
+                       for label in globe.labels]}
+
+
 def _block_json(block, redact):
+    if isinstance(block, Globe):
+        return _globe_json(block, redact)
     if isinstance(block, str):
         return {"type": "text", "text": redact(block)}
     if isinstance(block, Bullets):

@@ -30,7 +30,8 @@ fn every_table_holds_what_the_fixture_has() {
     for (table, expected) in [
         ("game", 1),
         ("mod_id", 3),
-        ("faction", 2),
+        ("faction", 3),
+        ("faction_relation", 4),
         ("map", 1),
         ("thing", 10),
         ("pawn", 4),
@@ -38,6 +39,8 @@ fn every_table_holds_what_the_fixture_has() {
         ("trait", 2),
         ("skill", 1),
         ("map_grid", 8),
+        ("planet_grid", 16),
+        ("world_feature", 2),
     ] {
         assert_eq!(count(&conn, &format!("SELECT COUNT(*) FROM {table}")), expected, "{table}");
     }

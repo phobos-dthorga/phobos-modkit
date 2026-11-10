@@ -41,6 +41,15 @@ Its world has a surface pollution layer for a planet of three subdivisions (272 
 deflate): tile 120 at 10% (6554, under Example Home), tile 130 at 100% (65535, under Raider Camp) and tile 7,
 a neighbour of tile 130, at 50% (32768).
 
+The same layer holds the atlas's layers, all base64 of raw deflate as the game writes them. Biomes: tiles 0 to 99
+Ocean, 100 to 199 TemperateForest, 200 to 271 IceSheet, and tile 150 Example_ModBiome, a made-up Def the palette does
+not know. Elevation is tile x 10 - 500 m (+8192 as saved), temperature 20 - tile / 10 degrees C (+300, x 10 as saved),
+rainfall tile x 5 mm, hilliness tile mod 6, swampiness tile mod 256 (of 255). Features: tiles 0 to 99 lie in Example
+Ocean (uniqueID 7) and 100 to 119 in Example Isle (8), both in the world's features list with draw centres. One
+DirtRoad piece runs from tile 120 to 154 and one River piece from 130 to 168, each named by the other tile's position
+in tile 120's or 130's neighbour list, in the game's order. Tile 120 carries one mutator, Caves, by its short hash. Faction 1 (the player) and Faction 2 (the raiders) are hostile; Faction 3,
+Example Traders, leaves its relation to the player at the defaults (neutral).
+
 ## Steam
 
 `steam/details.json` and `steam/comments-render.json` follow the shapes of Steam's GetPublishedFileDetails response

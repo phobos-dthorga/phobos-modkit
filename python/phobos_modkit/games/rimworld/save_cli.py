@@ -13,6 +13,7 @@
     python -m phobos_modkit rimworld-save components --class "*Wars*"  a mod's saved state, value by value
     python -m phobos_modkit rimworld-save planet --near "Red Brook"   world-map pollution, patch by patch and around one place
     python -m phobos_modkit rimworld-save planet --near 1234 --history "Autosave-*"   when it arrived, save by save
+    python -m phobos_modkit rimworld-save atlas                       the whole world map, for a program to draw
     python -m phobos_modkit rimworld-save diff Autosave-3             what changed since another save
     python -m phobos_modkit rimworld-save mood                        where the colony's mood suffers, and who may break
     python -m phobos_modkit rimworld-save mood --pawn Annie           one pawn's remembered events and needs
@@ -41,6 +42,7 @@ from . import mood_file as mood_files
 from . import mood_reports
 from . import patched_defs
 from . import paths
+from . import atlas
 from . import planet
 from . import planet_reports
 from . import save as saves
@@ -51,7 +53,7 @@ from ...manifest import READS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 REPORTS = ("summary", "index", "schema", "things", "pawns", "hediffs", "find", "world", "components", "grid", "planet",
-           "mood", "diff", "sql")
+           "atlas", "mood", "diff", "sql")
 
 
 def _parser():
@@ -129,6 +131,14 @@ def _parser():
     l.add_argument("--compare", metavar="SAVE", help="what changed against another save, usually an earlier one")
     l.add_argument("--history", metavar="PATTERN", nargs="?", const="*", help="with --near: every save of this world "
                    "by in-game day, optionally only saves matching a pattern such as Autosave-*")
+    at = sub.add_parser("atlas", parents=[common], help="the whole world map for a program to draw: biomes, climate, "
+                                                        "terrain, pollution, places, roads and rivers")
+    for option, text in (("--game", "the RimWorld folder, for naming modded biomes, roads and places"),
+                         ("--workshop", "the Workshop content folder, for naming"),
+                         ("--config", "the folder holding ModsConfig.xml, for naming")):
+        at.add_argument(option, help=text)
+    at.add_argument("--no-defs", action="store_true", help="read no Defs: name only the game's own biomes, roads and "
+                                                           "rivers")
     md = sub.add_parser("mood", parents=[common], help="where the colony's mood suffers: who may break, what hurts and "
                                                        "helps most, low needs and addictions")
     md.add_argument("--who", choices=mood_reports.WHO, default="all", help="whose mood: all (default), colonists, "
@@ -179,22 +189,27 @@ def _names(args, environ, settings_file):
     return grids.Names(derived.open_read_only(index)), None
 
 
-def _def_source(args, environ, settings_file):
-    """Defs for the mood report: (DefSource, connections to close, notes). The patched file wins where it has a Def."""
-    if args.no_defs:
-        return def_lookup.DefSource(), [], ["No Defs were read (--no-defs): remembered events are not counted."]
-    notes, conns = [], []
+def _written_defs(args, environ, settings_file):
+    """(a read-only connection to the installed mods' Def index, or None; notes)."""
     cache = derived.folder(def_index.CACHE_FOLDER, args.cache, environ, settings_file)
-    written = patched = None
     try:
         game = paths.game_path(args.game, environ, settings_file)
         install = def_index.Install(game, paths.workshop_path(game, args.workshop, environ, settings_file),
                                     paths.config_path(args.config, environ, settings_file))
         index, _ = def_index.ensure(install, cache)
-        written = derived.open_read_only(index)
-        conns.append(written)
+        return derived.open_read_only(index), []
     except (def_index.DefsError, OSError) as problem:
-        notes.append(f"The installed mods' Defs could not be read ({problem}).")
+        return None, [f"The installed mods' Defs could not be read ({problem})."]
+
+
+def _def_source(args, environ, settings_file):
+    """Defs for the mood report: (DefSource, connections to close, notes). The patched file wins where it has a Def."""
+    if args.no_defs:
+        return def_lookup.DefSource(), [], ["No Defs were read (--no-defs): remembered events are not counted."]
+    cache = derived.folder(def_index.CACHE_FOLDER, args.cache, environ, settings_file)
+    written, notes = _written_defs(args, environ, settings_file)
+    patched = None
+    conns = [written] if written is not None else []
     dump = paths.patched_defs_path(args.patched_defs, environ, settings_file)
     if dump is not None and dump.is_file():
         try:
@@ -228,6 +243,20 @@ def _mood(conn, args, environ, settings_file, top):
     finally:
         for opened in conns:
             opened.close()
+    report.lines += notes
+    return report
+
+
+def _atlas(conn, args, environ, settings_file, top):
+    cache = derived.folder(planet.CACHE_FOLDER, args.cache, environ, settings_file)
+    written, notes = (None, []) if args.no_defs else _written_defs(args, environ, settings_file)
+    try:
+        report = atlas.atlas(conn, cache, written, top)
+    except planet.PlanetError as problem:
+        raise saves.SaveError(str(problem)) from None
+    finally:
+        if written is not None:
+            written.close()
     report.lines += notes
     return report
 
@@ -275,6 +304,8 @@ def _report(conn, args, environ=None, settings_file=None, other=None):
     if args.report == "planet":
         cache = derived.folder(planet.CACHE_FOLDER, args.cache, environ, settings_file)
         return _planet(conn, args, environ, settings_file, cache, top)
+    if args.report == "atlas":
+        return _atlas(conn, args, environ, settings_file, top)
     if args.report == "mood":
         return _mood(conn, args, environ, settings_file, top)
     if args.report == "diff":
@@ -366,5 +397,6 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
     "components": {"question": "What have mods stored in my save?"},
     "grid": {"question": "What map grids can I look at?"},
     "planet": {"question": "Where is the world map polluted?"},
+    "atlas": {"question": "What does my world look like?", "surface": "globe"},
     "mood": {"question": "Where is my colony's mood suffering?"},
 }}

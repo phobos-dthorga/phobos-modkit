@@ -41,12 +41,39 @@
             <def>PlayerColony</def>
             <loadID>1</loadID>
             <name>Example Colony</name>
+            <relations>
+              <li>
+                <other>Faction_2</other>
+                <kind>Hostile</kind>
+                <goodwill>-80</goodwill>
+              </li>
+              <li>
+                <other>Faction_3</other>
+              </li>
+            </relations>
           </li>
           <li>
             <def>Pirate</def>
             <loadID>2</loadID>
             <name>Example Raiders</name>
             <leader>Thing_Human300</leader>
+            <relations>
+              <li>
+                <other>Faction_1</other>
+                <kind>Hostile</kind>
+                <goodwill>-80</goodwill>
+              </li>
+            </relations>
+          </li>
+          <li>
+            <def>OutlanderCivil</def>
+            <loadID>3</loadID>
+            <name>Example Traders</name>
+            <relations>
+              <li>
+                <other>Faction_1</other>
+              </li>
+            </relations>
           </li>
         </allFactions>
       </factionManager>
@@ -106,10 +133,45 @@
           <values>
             <li>
               <tilePollutionDeflate>Y2BAAQ0MwxzMksQU+/+fYRTgAAA=</tilePollutionDeflate>
+              <tileBiomeDeflate>e5f1bljA4qu0hyrBtLfDe9XgggA=</tileBiomeDeflate>
+              <tileElevationDeflate>BcEBRARAEADAJEmSJEmyt7e3t3eSJEmSlyRJkiRJkuQlyUuSlyQvSZIkSZIkSZIkSZIkSZIkSZIkSZIkSdJMAqQCQibkQQDKoQYaIQghCEMExmAaFmAVtmAfTuAS7uAZPuAXYlWSSlesslWBKlGVqk41q3bVrfrVsJpQs2pJrasddajO1LV6UK/qS0VhPKYgoMdcLMIyrMYGbMVO7MVBHMUpnMcV3MQ9PMYLvMUnfMcfjNGJOk2TztL5ulhX6FrdpNt0l+7TQ3pcz+hFvaa39YE+1Vf6Xr/oT/2n4yiZMkgohwqplKqonlqog3pogEZokuZomTZol47onG7okd7om6JNgkk1aDJNngmYclNjGk3QhEzYRMyYmTYLZtVsmX1zYi7NnXk2H+bXxHISpzNzNhdwCVdyHTdzO3dzPw/zBM/yEq/zDh/yGV/zA7/yF0fZeJtiwXqba4tsma22DbbVdtpeO2hH7ZSdtyt20+7ZY3thb+2Tfbc/NkYSJU1IsiRfiqVCaqVJ2qRL+mRIxmVGFmVNtuVATuVK7uVFPuVP4lyyy3DiclyhK3VVrt61uA7X4wbciJt0c27Zbbhdd+TO3Y17dG/u20X7BJ/q0Wf6PB/w5b7GN/qgD/mwj/gxP+0X/D8=</tileElevationDeflate>
+              <tileHillinessDeflate>Y2BkYmZhZRgloSQA</tileHillinessDeflate>
+              <tileTemperatureDeflate>BcEDgBAAAMDArC3btm3btm3bn23btm3btm27uwD728++9rG3vexpD7vbza52sbOd7GgH29vOtraxta1saQub28ymNrGxjWxoA+tbz7rWsba1rGkNq1vNqlaxspWsaAXLW86ylrG0pSxpCYtbzKIWsbCFLGgB85vPvOYxt7nMaQ6zm82sZjGzmcxoBtObzrSmMbWpTGkKk5vMpCYxsYlMaALjG8+4xjG2sYxpDKMbzahGMbKRjGgEwxvOsCqGMbShDGkIgxvMoAYxsIH8x1/+8Jtf/OQH3/nGV77wmU985APvecdb3vCaV7zkBc95xlOe8JhHPOQB97nHXe5wm1vc5AbXucZVrnCZS1zkAuc5x1nOcJpTnOQExznGUY5wmEMc5AD72cde9rCbXexkB9vZxla2sJlNbGQD61nHWtawmlWsZAXLWcZSlrCYRSxkAfOZx1zmMJtZzGQG05nGVKYwmUlMZALjGcdYxjCaUYxkBMMZxlCGMJhBDGQAAfSnH33pQ2960ZMedKcbXelCZzrRkf8=</tileTemperatureDeflate>
+              <tileRainfallDeflate>BcEDYBBQFAXQ++57PywsLCys1sLCwsLCwsLC8rJt28tatraMZdu2bdt2nQM4eMATXvCGD/zgjwAEIgjBCEEowlAVNVEPjdECbdEJ3dEHAzEUozAOkzEDc7EAS7ES67AZO7AXh3AcZ3AR13AbD/AUr/AeX/AT/2ASVxJKUkkpaSWDZJEckkcKSBEpIWWkglSRGlJXGklzaSMdpZv0lgEyREZKpEyS6TJH5ssSiZG1skm2yx45KMfktFyQq3JL7ssTeSnv5LP8kL+ijMMETMIUTENfZmZ25mZ+FmZxlmZ5VmY467Ahm7E1O7Are7E/B3MEx3Iip3E2o7mYK7iGG7mNu3mAR3mK53mFN3mPj/mCb/mJ3/mH1NgaXxNrck2t6TWTZtNcmk8LaTEtpeW0klbX2tpAm2orba9dtKf20wgdrmN0gk7VWRqli3S5rtYNulV36X49oif1nF7WG3pXH+lzfaMf9Zv+VrFYFs8SWTJLZekso2W1nJbXClpRK2llraJVs1pW35pYS2tnna2H9bVBNsxG23ibYjNtni20ZbbK1tsW22n77LCdsLN2ya7bHXtoz+y1fbCv9svgnPNwns7LeTsf5+f8XYALdEEu2IW4UBfm/gM=</tileRainfallDeflate>
+              <tileSwampinessDeflate>Y2BkYmZhZWPn4OTi5uHl4xcQFBIWERUTl5CUkpaRlZNXUFRSVlFVU9fQ1NLW0dXTNzA0MjYxNTO3sLSytrG1s3dwdHJ2cXVz9/D08vbx9fMPCAwKDgkNC4+IjIqOiY2LT0hMSk5JTUvPyMzKzsnNyy8oLCouKS0rr6isqq6pratvaGxqbmlta+/o7Oru6e3rnzBx0uQpU6dNnzFz1uw5c+fNX7Bw0eIlS5ctX7Fy1eo1a9et37Bx0+YtW7dt37Fz1+49e/ftP3Dw0OEjR48dP3Hy1OkzZ8+dv3Dx0uUrV69dv3Hz1u07d+/df/Dw0eMnT589f/Hy1es3b9+9//Dx0+cvX799//Hz1+8/f//9Z0DzPwA=</tileSwampinessDeflate>
+              <tileFeatureDeflate>Y2dgHxaQg0j4fxSQBAA=</tileFeatureDeflate>
+              <tileRoadOriginsDeflate>q2BgYAAA</tileRoadOriginsDeflate>
+              <tileRoadAdjacencyDeflate>YwYA</tileRoadAdjacencyDeflate>
+              <tileRoadDefDeflate>+7IcAA==</tileRoadDefDeflate>
+              <tileRiverOriginsDeflate>a2JgYAAA</tileRiverOriginsDeflate>
+              <tileRiverAdjacencyDeflate>YwYA</tileRiverAdjacencyDeflate>
+              <tileRiverDefDeflate>01wDAA==</tileRiverDefDeflate>
+              <tileMutatorTilesDeflate>q2BgYAAA</tileMutatorTilesDeflate>
+              <tileMutatorDefsDeflate>O7McAA==</tileMutatorDefsDeflate>
             </li>
           </values>
         </layers>
       </grid>
+      <features>
+        <features>
+          <li>
+            <def>Ocean</def>
+            <uniqueID>7</uniqueID>
+            <name>Example Ocean</name>
+            <drawCenter>(0, 60, -80)</drawCenter>
+            <maxDrawSizeInTiles>20</maxDrawSizeInTiles>
+            <layer>PlanetLayer_0</layer>
+          </li>
+          <li>
+            <def>Island</def>
+            <uniqueID>8</uniqueID>
+            <name>Example Isle</name>
+            <drawCenter>(80, 0, 60)</drawCenter>
+            <maxDrawSizeInTiles>4</maxDrawSizeInTiles>
+            <layer>PlanetLayer_0</layer>
+          </li>
+        </features>
+      </features>
       <worldObjects>
         <worldObjects>
           <li Class="Settlement">

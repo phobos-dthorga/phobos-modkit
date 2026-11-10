@@ -409,13 +409,43 @@ tag = "parent"
 name = "data"
 path = ""
 
-# The planet's pollution layer, as map_grid holds a map's grids: its base64 text as written (phobos_modkit.games.rimworld.planet
-# decodes it). Only the surface layer has one.
+# The planet's per-tile layers, as map_grid holds a map's grids: each one's base64 text as written
+# (phobos_modkit.games.rimworld.planet decodes them). Only the surface layer saves these.
 [[table]]
 name = "planet_grid"
 match = [
     "savegame/game/world/grid/layers/values/li/tilePollutionDeflate",
     "savegame/game/world/grid/layers/values/li/tilePollution",
+    "savegame/game/world/grid/layers/values/li/tileBiomeDeflate",
+    "savegame/game/world/grid/layers/values/li/tileBiome",
+    "savegame/game/world/grid/layers/values/li/tileElevationDeflate",
+    "savegame/game/world/grid/layers/values/li/tileElevation",
+    "savegame/game/world/grid/layers/values/li/tileHillinessDeflate",
+    "savegame/game/world/grid/layers/values/li/tileHilliness",
+    "savegame/game/world/grid/layers/values/li/tileTemperatureDeflate",
+    "savegame/game/world/grid/layers/values/li/tileTemperature",
+    "savegame/game/world/grid/layers/values/li/tileRainfallDeflate",
+    "savegame/game/world/grid/layers/values/li/tileRainfall",
+    "savegame/game/world/grid/layers/values/li/tileSwampinessDeflate",
+    "savegame/game/world/grid/layers/values/li/tileSwampiness",
+    "savegame/game/world/grid/layers/values/li/tileFeatureDeflate",
+    "savegame/game/world/grid/layers/values/li/tileFeature",
+    "savegame/game/world/grid/layers/values/li/tileRoadOriginsDeflate",
+    "savegame/game/world/grid/layers/values/li/tileRoadOrigins",
+    "savegame/game/world/grid/layers/values/li/tileRoadAdjacencyDeflate",
+    "savegame/game/world/grid/layers/values/li/tileRoadAdjacency",
+    "savegame/game/world/grid/layers/values/li/tileRoadDefDeflate",
+    "savegame/game/world/grid/layers/values/li/tileRoadDef",
+    "savegame/game/world/grid/layers/values/li/tileRiverOriginsDeflate",
+    "savegame/game/world/grid/layers/values/li/tileRiverOrigins",
+    "savegame/game/world/grid/layers/values/li/tileRiverAdjacencyDeflate",
+    "savegame/game/world/grid/layers/values/li/tileRiverAdjacency",
+    "savegame/game/world/grid/layers/values/li/tileRiverDefDeflate",
+    "savegame/game/world/grid/layers/values/li/tileRiverDef",
+    "savegame/game/world/grid/layers/values/li/tileMutatorTilesDeflate",
+    "savegame/game/world/grid/layers/values/li/tileMutatorTiles",
+    "savegame/game/world/grid/layers/values/li/tileMutatorDefsDeflate",
+    "savegame/game/world/grid/layers/values/li/tileMutatorDefs",
 ]
 require = ["data"]
 [[table.column]]
@@ -424,6 +454,53 @@ tag = "self"
 [[table.column]]
 name = "data"
 path = ""
+
+# Named regions of the world map (islands, oceans, mountain ranges), with where the game draws each name: drawCenter is
+# a point on a planet of the layer's radius.
+[[table]]
+name = "world_feature"
+match = ["savegame/game/world/features/features/li"]
+require = ["name"]
+[[table.column]]
+name = "def"
+path = "def"
+[[table.column]]
+name = "unique_id"
+path = "uniqueID"
+type = "int"
+[[table.column]]
+name = "name"
+path = "name"
+[[table.column]]
+name = "draw_center"
+path = "drawCenter"
+[[table.column]]
+name = "max_draw_size"
+path = "maxDrawSizeInTiles"
+type = "real"
+[[table.column]]
+name = "layer"
+path = "layer"
+
+# How each faction stands with each other one. The game leaves out kind and goodwill at their defaults: Neutral and 0.
+[[table]]
+name = "faction_relation"
+match = ["savegame/game/world/factionManager/allFactions/li/relations/li"]
+require = ["other"]
+indexes = ["faction"]
+[[table.column]]
+name = "faction"
+parent = "faction"
+[[table.column]]
+name = "other"
+path = "other"
+[[table.column]]
+name = "kind"
+path = "kind"
+[[table.column]]
+name = "goodwill"
+path = "goodwill"
+type = "int"
 
 [[view]]
 name = "mods"

@@ -62,6 +62,7 @@ python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP
 | `find ID` | A thing by its ID, with every thing holding it out to the map or world | |
 | `world` | World objects counted by def and faction, listed with ID, name, faction and tile, or one object's values in full (an aircraft's flight path, a site's parts) | `--def`, `--faction`, `--name`, `--id` |
 | `planet` | Pollution on the world map from the save's planet layer: by band, patches of touching tiles with what stands on or nearest each, rings of tiles around a place, what changed against another save, every save of the world by in-game day. Tile positions come from a rebuilt model of the planet; a world with less than full coverage is reported as such and its tiles are not placed | `--near` (a name or tile number), `--hops`, `--compare SAVE`, `--history [PATTERN]` |
+| `atlas` | The whole world map for a program to draw (a globe block): every surface tile's biome, elevation, temperature, rainfall, hills, swampiness, pollution and named region, with landscape features (caves, coast), settlements and other world objects grouped by how their faction stands with the player, roads, rivers and the game's region labels. Tables list biomes, places with their latitude and longitude, named regions, and roads and rivers. See [Atlas](#atlas) | `--game`, `--workshop`, `--config`, `--no-defs` |
 | `components` | The game's, the world's and maps' components with how many values each holds, or the values inside them with their paths | `--class`, `--path`, `--value`, `--map` |
 | `grid` | A map's layers counted: terrain, foundations (bridges and the like), roofs, each gas, fog, snow, pollution and deep resources; one layer in full with a text picture (north up); or every layer at one cell with the things standing there | `--map`, `--kind`, `--render`, `--gas`, `--columns`, `--at X,Z`, `--area X1,Z1,X2,Z2`, `--no-names` |
 | `mood` | Where the colony's mood suffers: each pawn's mood against its break thresholds, the remembered events that cost the colony most and help it most, needs running low, and addictions and drug needs, with charts; `--pawn` gives one pawn's events and needs in full. See [Mood](#mood) for what a save cannot show | `--who` (`all`, `colonists`, `slaves`, `prisoners`), `--pawn`, `--patched-defs`, `--mood-file`, `--no-mood-file`, `--game`, `--workshop`, `--config`, `--no-defs` |
@@ -107,6 +108,41 @@ how the game behaves, keyed by Def name in `python/phobos_modkit/games/rimworld/
 checked against a 1.7 install), and the report always labels them as advice. A cause only time removes (a death) has advice but
 stays out of "Where to start".
 
+## Atlas
+
+**The planet sits as the game's does.** The game builds its world from an icosahedron of twelve points and twenty triangles,
+subdivides it, and never rotates it (`IcosahedronGenerator`, `PlanetLayer.InitializeLayer`, read from the 1.7 code on 10
+November 2026). `planet.py` rebuilds the same shape, so tile numbers, neighbours, longitude and latitude match the game's: a
+tile's outline joins the centres of the triangles it makes with its neighbours, and its longitude and latitude come from the
+mean of those corners, as `PlanetLayer.LongLatOf` reckons them. On the owner's world, ice sheet averages 75.5 degrees from the
+equator and tropical rainforest 4.4, as climate says they should.
+
+| Layer | As the game saves it | As the atlas gives it |
+| --- | --- | --- |
+| Biome | The BiomeDef's short hash | A category with a colour from `atlas-palette.json`, or from its tiles' climate when the palette does not know it |
+| Elevation | Metres + 8192 | Metres; seas and lakes show their depth |
+| Temperature | (degrees C + 300) x 10 | Degrees C, the year's average |
+| Rainfall | mm a year | mm a year; water tiles carry none |
+| Hills | The Hilliness enum | Flat to impassable; water tiles carry none |
+| Swampiness | 0 to 1 as 0 to 255 | Percent; water tiles carry none |
+| Pollution | 0 to 1 as 0 to 65535 | Percent, an overlay, with the game's four bands |
+| Region | The WorldFeature's ID | Its name, as text only |
+| Roads, rivers | The lower tile, the other's place in its neighbour list, the Def's short hash | Lines between tile centres, 1 to 4 wide by Def (`atlas-palette.json`) |
+| Mutators | Tile and TileMutatorDef short hash | Tags, such as Caves or Coast, named only when the Defs are read |
+
+A short hash is the game's `StableStringHash` of the Def name, modulo 65535, moved past 0 and past hashes earlier Defs of the
+same type took in name order. **Names need the Defs**: the installed mods' Def index names modded biomes, roads, mutators and
+world objects; without it (`--no-defs`, or no install found) only the names in the palette are known, and a hash nothing
+matches is shown as an unknown biome and counted in the report. The palette's colours and widths are agent-authored (10
+November 2026) for the owner to revise; they are our own choices, not the game's art.
+
+Places are the save's world objects on the surface: grouped as the player's own (any `Player*` faction), allies, neutral,
+hostile, or no faction, by the relation each faction holds with the player (a relation the save leaves out is neutral, the
+game's default). A world generated with less than full planet coverage renumbers its tiles and is refused, as by `planet`.
+
+On the owner's PG5 (590,492 tiles, 525 places, 287 named regions) the report takes about 1.1 s once the save is indexed, and
+its JSON is about 45 MB, most of it the tile positions and rings.
+
 ## What the index holds
 
 | Table or view | Rows |
@@ -114,6 +150,7 @@ stays out of "Where to start".
 | `game` | The save's version, ticks, starting year, scenario, play time and world seed |
 | `mods` (view of `mod_id`, `mod_name`, `mod_steam_id`) | The save's mod list, in load order |
 | `faction` | Every faction's load ID, def and name; things name it as `Faction_<load ID>` |
+| `faction_relation` | How each faction stands with each other one: the other faction, kind and goodwill (left out at the defaults, Neutral and 0) |
 | `map` | Each map's position, generator, size and world object |
 | `thing` | Every thing on a map, held by another thing, or a world pawn: def, ID, class, stuff, stack, hit points, quality, forbidden, map, position, faction, the thing holding it |
 | `pawn` | The pawn part of a thing (same `id`): kind, gender, name parts, health state, biological age, backstories |
@@ -122,6 +159,8 @@ stays out of "Where to start".
 | `thing_place` (view) | For each thing, the outermost thing holding it, whether it is held, its place and map |
 | `pawn_view` (view) | Pawns with display name, race, faction name, place, map, position and age in years |
 | `map_grid` | Each map's grids as the save holds them (base64 text), with the grid's element and owner |
+| `planet_grid` | The surface layer's per-tile arrays as the save holds them (base64 text): biome, elevation, hills, temperature, rainfall, swampiness, feature, pollution, roads, rivers and mutators |
+| `world_feature` | Named regions of the world map: def, ID, name, where the game draws the name, its size in tiles, and the planet layer |
 | `world_object` | Every world object (settlements, sites, caravans, destroyed settlements): def, class, ID, tile, faction, name |
 | `world_object_value`, `world_object_value_view` (view) | Every value with text inside a world object, with its path inside the object (about 70,000 on the owner's save) |
 | `component`, `component_value` | The game's, the world's and each map's components (class, position, map), and every value with text inside one (its tag, place among same-named siblings and text); `element_path` gives its full path |

@@ -4,6 +4,30 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-10
+
+The owner asked for the atlas in D'thorga Companion: the whole world map, with biomes, settlements, pollution, climate and terrain views, roads and rivers (phobos-rimworld, 10 November 2026).
+
+### Added
+
+- rimworld-save atlas: every surface tile of a save's world as a globe a program can draw, with its biome, elevation, temperature, rainfall, hills, swampiness, pollution, named region and landscape features; settlements and other world objects grouped by how their faction stands with the player; roads, rivers and the game's region labels. Tables list biomes, places with latitude and longitude, named regions, and roads and rivers.
+- A globe block in the report model: tile positions, each tile's neighbours in order round it, layers of one value per tile, places, lines, tags and labels, with arrays as base64 in JSON. docs/manifest.md describes it.
+- The save index holds the surface layer's per-tile arrays, the world's named regions, and how each faction stands with the others.
+- The manifest's surface field names a report that is mostly a picture (globe for the atlas), so a program can give it a page of its own.
+- Biome colours and road and river widths in a data file (atlas-palette.json), agent-authored for the owner to revise.
+
+### Changed
+
+- The planet model keeps each tile's neighbours in order round it as well, and gives a tile's outline, longitude and latitude as the game reckons them. Its cache rebuilds once.
+
+### Fixed
+
+- The planet model kept each tile's neighbours in an order of its own, not the game's. Saves name a road's or river's other end by its place in that list, so the model would have put every road and river piece on the wrong neighbour; no report read them before the atlas. Now in the game's order: on the owner's save, river pieces join into 233 river systems and road pieces into 33 networks, where the wrong order scattered them into thousands of scraps. The planet's cache rebuilds once.
+
+### Notes
+
+- The planet's orientation is settled from the game's code: it builds the world from the same icosahedron and never rotates it, so no in-game reading is needed.
+
 ## [1.6.0] - 2026-11-10
 
 The owner said yes to naming the half of mood a save leaves out, to suggested fixes labelled as advice, and to colonists, slaves and prisoners together (10 November 2026).
