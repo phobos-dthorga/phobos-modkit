@@ -64,7 +64,7 @@ python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP
 | `planet` | Pollution on the world map from the save's planet layer: by band, patches of touching tiles with what stands on or nearest each, rings of tiles around a place, what changed against another save, every save of the world by in-game day. Tile positions come from a rebuilt model of the planet; a world with less than full coverage is reported as such and its tiles are not placed | `--near` (a name or tile number), `--hops`, `--compare SAVE`, `--history [PATTERN]` |
 | `components` | The game's, the world's and maps' components with how many values each holds, or the values inside them with their paths | `--class`, `--path`, `--value`, `--map` |
 | `grid` | A map's layers counted: terrain, foundations (bridges and the like), roofs, each gas, fog, snow, pollution and deep resources; one layer in full with a text picture (north up); or every layer at one cell with the things standing there | `--map`, `--kind`, `--render`, `--gas`, `--columns`, `--at X,Z`, `--area X1,Z1,X2,Z2`, `--no-names` |
-| `mood` | Where the colony's mood suffers: each pawn's mood against its break thresholds, the remembered events that cost the colony most and help it most, needs running low, and addictions and drug needs, with charts; `--pawn` gives one pawn's events and needs in full. See [Mood](#mood) for what a save cannot show | `--who` (`all`, `colonists`, `slaves`, `prisoners`), `--pawn`, `--patched-defs`, `--game`, `--workshop`, `--config`, `--no-defs` |
+| `mood` | Where the colony's mood suffers: each pawn's mood against its break thresholds, the remembered events that cost the colony most and help it most, needs running low, and addictions and drug needs, with charts; `--pawn` gives one pawn's events and needs in full. See [Mood](#mood) for what a save cannot show | `--who` (`all`, `colonists`, `slaves`, `prisoners`), `--pawn`, `--patched-defs`, `--mood-file`, `--no-mood-file`, `--game`, `--workshop`, `--config`, `--no-defs` |
 | `diff OTHER` | What changed since another save: counts, things that appeared and went by def, stacks that grew or shrank, pawns that moved, arrived or left, pawns' hediffs gained, lost, worse or better, world objects that changed faction, appeared or went, and component values that changed and lists that grew or shrank | `--faction` (`player` by default, `any`, or a faction), `--component` |
 | `sql QUERY` | Any query; the index is opened read-only, so nothing can change it | |
 
@@ -93,11 +93,25 @@ These rules were read from the 1.7 game code and are summarised in `python/phobo
 precepts and tales (trait cancelling is applied); threshold changes from anything but traits; the difficulty's mood
 offset. The low-need line at 30% is our choice, not the game's.
 
+**The colony mood file names the other half** (1.6.0). phobos-rimworld's D'thorga Framework (0.64.0 and later, its setting
+"Write a colony mood file at each save") writes `PhobosSnapshots/ColonyMood.xml` beside the Config folder at every save: each
+colonist's, slave's and prisoner's thought groups as the game added them up, situational ones included, with each pawn's break
+thresholds from the game's own mental breaker. The file names the tick count and world seed it was written at, and `mood` uses
+it **only when both match the save it reads**; then every thought, its kind (remembered or situational) and every threshold
+come from the game, and the rules above are not needed. A file from another save is said and set aside. Name another file with
+`--mood-file`, `RIMWORLD_COLONY_MOOD` or `rimworldColonyMoodPath`; ignore it with `--no-mood-file`.
+
+**Advice** (1.6.0, owner's choice of 10 November 2026). "Where to start" lists the costliest causes a player can do something
+about, with a suggestion for each; one pawn's report and the needs table carry advice too. The suggestions are ours, written from
+how the game behaves, keyed by Def name in `python/phobos_modkit/games/rimworld/mood-advice.json` (wildcards allowed, every name
+checked against a 1.7 install), and the report always labels them as advice. A cause only time removes (a death) has advice but
+stays out of "Where to start".
+
 ## What the index holds
 
 | Table or view | Rows |
 | --- | --- |
-| `game` | The save's version, ticks, starting year, scenario and play time |
+| `game` | The save's version, ticks, starting year, scenario, play time and world seed |
 | `mods` (view of `mod_id`, `mod_name`, `mod_steam_id`) | The save's mod list, in load order |
 | `faction` | Every faction's load ID, def and name; things name it as `Faction_<load ID>` |
 | `map` | Each map's position, generator, size and world object |

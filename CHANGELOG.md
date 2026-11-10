@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-10
+
+The owner said yes to naming the half of mood a save leaves out, to suggested fixes labelled as advice, and to colonists, slaves and prisoners together (10 November 2026).
+
+### Added
+
+- rimworld-save mood reads the colony mood file D'thorga Framework writes at each save, when its tick count and world seed match the save: every thought as the game counted it, bedrooms, pain, cold and beliefs included, with each pawn's own break thresholds. A file from another save, or of another shape, is said and set aside. --mood-file names one; --no-mood-file ignores it.
+- Where to start: the costliest causes a player can do something about, each with a suggestion. Needs running low and one pawn's thoughts carry advice too. The suggestions are ours, kept in a data file anyone can add to, and always labelled as advice.
+- The save index records the world's seed.
+
 ## [1.5.1] - 2026-11-10
 
 ### Fixed

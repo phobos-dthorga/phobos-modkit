@@ -41,6 +41,9 @@ path = "game/scenario/name"
 name = "play_seconds"
 path = "game/info/realPlayTimeInteracting"
 type = "real"
+[[table.column]]
+name = "world_seed"
+path = "game/world/info/seedString"
 
 # The save's three mod lists are parallel: the same position in each is the same mod.
 [[table]]

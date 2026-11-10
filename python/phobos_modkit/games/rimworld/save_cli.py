@@ -37,6 +37,7 @@ from ...report import envelope_text, home_redactor, keep, render_markdown
 from . import def_lookup
 from . import defs as def_index
 from . import grids
+from . import mood_file as mood_files
 from . import mood_reports
 from . import patched_defs
 from . import paths
@@ -140,6 +141,9 @@ def _parser():
                          ("--config", "the folder holding ModsConfig.xml, for reading Defs")):
         md.add_argument(option, help=text)
     md.add_argument("--no-defs", action="store_true", help="read no Defs: mood levels and needs only")
+    md.add_argument("--mood-file", help="the colony mood file a running game wrote at a save (else RIMWORLD_COLONY_MOOD, "
+                                        "settings, where D'thorga Framework writes it); used when it matches the save")
+    md.add_argument("--no-mood-file", action="store_true", help="ignore the colony mood file: the save alone")
     d = sub.add_parser("diff", parents=[common], help="what changed between this save and another")
     d.add_argument("other", help="the save to compare with (a name or path), usually an earlier one")
     d.add_argument("--faction", default="player", help="whose pawns and hediffs to compare: player (default), any, "
@@ -202,11 +206,25 @@ def _def_source(args, environ, settings_file):
     return def_lookup.DefSource(written, patched), conns, notes
 
 
+def _mood_file(args, environ, settings_file):
+    """(the colony mood file or None, a note or None)."""
+    if args.no_mood_file:
+        return None, None
+    try:
+        return mood_files.read(paths.colony_mood_path(args.mood_file, environ, settings_file)), None
+    except mood_files.MoodFileError as problem:
+        return None, str(problem)
+
+
 def _mood(conn, args, environ, settings_file, top):
     lookup, conns, notes = _def_source(args, environ, settings_file)
+    found, note = _mood_file(args, environ, settings_file)
+    if note:
+        notes.append(note)
+    advice = mood_files.Advice()
     try:
-        report = (mood_reports.pawn_mood(conn, lookup, args.pawn, top) if args.pawn
-                  else mood_reports.mood(conn, lookup, args.who, top))
+        report = (mood_reports.pawn_mood(conn, lookup, args.pawn, top, found, advice) if args.pawn
+                  else mood_reports.mood(conn, lookup, args.who, top, found, advice))
     finally:
         for opened in conns:
             opened.close()

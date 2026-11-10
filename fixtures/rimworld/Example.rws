@@ -32,6 +32,9 @@
       <name>Example Landing</name>
     </scenario>
     <world>
+      <info>
+        <seedString>example seed</seedString>
+      </info>
       <factionManager>
         <allFactions>
           <li>

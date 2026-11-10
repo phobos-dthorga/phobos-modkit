@@ -1,0 +1,75 @@
+{
+  "about": "Advice for the RimWorld mood report, keyed by ThoughtDef or NeedDef name (* and ? are wildcards). Written by Claude for the owner on 10 November 2026 (agent-authored, for the owner's review), from how the game behaves, not from the game's own text. Every Def name was checked against a 1.7 install with its mods. Add to it freely; the report always labels these lines as advice. An entry is either the advice itself or {\"text\": ..., \"fix\": false} for a cause nothing can remove, which the report leaves out of its list of where to start.",
+  "thoughts": {
+    "AteWithoutTable": "Put tables and chairs where colonists eat; a meal at a table removes this.",
+    "AteNutrientPasteMeal": "Cook simple or fine meals instead: a stove, a cook, and the paste dispenser forbidden or taken down.",
+    "AteRawFood": "Keep cooked meals in stock and within reach, so nobody eats raw food.",
+    "AteFungusAsIngredient_Despised": "Their belief despises fungus: take fungus out of the cooks' ingredient filters.",
+    "AteVeneratedAnimalMeat": "Their belief venerates that animal: take its meat out of the cooks' ingredient filters and the food stockpiles.",
+    "AteHumanlikeMeat*": "Take human meat out of the cooks' ingredient filters for people who mind it.",
+    "AteCorpse": "Keep proper food within reach, so nobody eats a corpse.",
+    "VFEFactory_AteProcessedMinceIngredient": "Cook from whole ingredients instead of processed mince where you can.",
+    "SleptInCold": "Heat the bedrooms: a heater set to a comfortable temperature, with walls, doors and roof sealed.",
+    "SleptInHeat": "Cool the bedrooms: a cooler or air conditioner, and roofs that keep the sun out.",
+    "SleptOutside": "Give everyone a bed under a roof.",
+    "SleptOnGround": "Give everyone a bed.",
+    "SleptInBarracks": "Give each colonist a bedroom of their own; shared barracks always cost mood unless a belief welcomes them.",
+    "SleptInBedroom": "Make bedrooms bigger, cleaner and better furnished: impressiveness turns this from a cost into a lift.",
+    "SleepDisturbed": "Keep noise and traffic out of bedrooms: no paths through them, and work and animals kept away.",
+    "SoakingWet": "Roof the walkways colonists use most, or move outdoor work out of the rain.",
+    "EnvironmentDark": "Light the places colonists work and walk.",
+    "EnvironmentCold": "Heat the rooms colonists spend time in, or dress them warmer.",
+    "Pain": "Treat injuries properly: good medicine, a hospital bed, and painkillers where the colony allows them.",
+    "Naked": "Give everyone clothes they can wear.",
+    "ApparelDamaged": "Replace or repair worn clothes; outfits can be set to swap clothes below a condition.",
+    "DeadMansApparel": "Set outfits to refuse clothes taken from the dead.",
+    "HumanLeatherApparelSad": "Keep human-leather clothes off people who mind them, with their outfits' filters.",
+    "ObservedLayingCorpse": "Bury, burn or haul away corpses quickly, and keep the dumping ground out of sight.",
+    "ObservedLayingRottingCorpse": "Bury, burn or haul away corpses quickly, and keep the dumping ground out of sight.",
+    "Insulted": "Keep quarrelling pawns apart: different work areas, rooms and meal times.",
+    "InsultedMood": "Keep quarrelling pawns apart: different work areas, rooms and meal times.",
+    "KnowColonistDied": {
+      "text": "Only time eases this; a funeral helps where their belief holds one.",
+      "fix": false
+    },
+    "PawnWithGoodOpinionDied": {
+      "text": "Only time eases this; a funeral helps where their belief holds one.",
+      "fix": false
+    },
+    "My*Died": {
+      "text": "Only time eases this; a funeral helps where their belief holds one.",
+      "fix": false
+    },
+    "WitnessedDeathAlly": {
+      "text": "Only time eases this.",
+      "fix": false
+    },
+    "NeedFood": "Keep meals in stock and within reach of where colonists work.",
+    "NeedRest": "Give colonists more sleep time in their schedules, and better beds.",
+    "NeedJoy": "More time for recreation in the schedules, and more kinds of it: a pawn bored of one kind needs another.",
+    "NeedBeauty": "Art, clean floors and no filth where colonists spend their time.",
+    "NeedComfort": "Comfortable seats where they eat and relax, and better beds.",
+    "NeedOutdoors": "Some time outside: work or recreation under the sky.",
+    "NeedIndoors": "Shelter for those who need it: indoor work and roofed rooms.",
+    "NeedRoomSize": "Bigger rooms where colonists live and work.",
+    "HygieneLevel": "Baths or showers within reach, and time in the schedule to use them.",
+    "Expectations": {
+      "text": "Not something to fix: what colonists expect rises with the colony's wealth.",
+      "fix": false
+    }
+  },
+  "needs": {
+    "Food": "Keep meals in stock and within reach of where colonists work.",
+    "Rest": "Give colonists more sleep time in their schedules, and better beds.",
+    "Joy": "More time for recreation, and more kinds of it: a pawn bored of one kind needs another.",
+    "Beauty": "Art, clean floors and no filth where colonists spend their time.",
+    "Comfort": "Comfortable seats where they eat and relax, and better beds.",
+    "Outdoors": "Some time outside: work or recreation under the sky.",
+    "Indoors": "Shelter for those who need it: indoor work and roofed rooms.",
+    "RoomSize": "Bigger rooms where colonists live and work.",
+    "Hygiene": "Baths or showers within reach, and time to use them.",
+    "Bladder": "Toilets within reach of where colonists work and sleep.",
+    "DBHThirst": "Clean water within reach: a tap, a well or stocked drinks."
+  },
+  "drug_need": "Keep the drug in stock for those addicted, or let them through withdrawal with care; an empty addiction brings withdrawal."
+}

@@ -11,6 +11,7 @@ import io
 import support  # noqa: F401
 import test_rimworld_save as save_tests
 from phobos_modkit.games.rimworld import def_lookup, mood
+from phobos_modkit.games.rimworld import mood_file as mood_files
 from phobos_modkit.games.rimworld.save_cli import EXIT_OK, main
 
 PATCHED = """<?xml version="1.0" encoding="utf-8"?>
@@ -31,6 +32,37 @@ PATCHED = """<?xml version="1.0" encoding="utf-8"?>
   <NeedDef><defName>Chemical_Example</defName><needClass>Need_Chemical</needClass><label>example drug</label></NeedDef>
 </Defs>
 """
+
+
+def mood_file(ticks, seed):
+    """A colony mood file in the shape D'thorga Framework writes, for the fixture save's colonist."""
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<ColonyMood format="1" gameVersion="1.7.9999 rev1" ticksGame="{ticks}" seed="{seed}" written="2026-11-10T05:00:00Z"
+            difficultyMoodOffset="0">
+  <pawn id="Human200" name="Annie" group="colonist" mood="0.04" instantMood="0.02" minor="0.4" major="0.2286" extreme="0.0571">
+    <thought def="AteWithoutTable" label="Ate without table" kind="memory" count="2" mood="-5.25" />
+    <thought def="Example_ColdRoom" label="Freezing bedroom" kind="situational" count="1" mood="-8" precept="Example_P" />
+  </pawn>
+</ColonyMood>
+"""
+
+
+class AdviceRules(unittest.TestCase):
+    def test_exact_names_then_wildcards_and_what_only_waits(self):
+        advice = mood_files.Advice()
+        self.assertIn("tables and chairs", advice.thought("AteWithoutTable"))
+        self.assertIn("Only time", advice.thought("MyWifeDied"))
+        self.assertTrue(advice.fixable("AteWithoutTable"))
+        self.assertFalse(advice.fixable("MyWifeDied"))
+        self.assertFalse(advice.fixable("Example_NoAdvice"))
+        self.assertIsNone(advice.thought("Example_NoAdvice"))
+        self.assertIn("Toilets", advice.need("Bladder"))
+        self.assertIn("withdrawal", advice.drug)
+
+    def test_every_entry_is_plain_text_or_a_marked_wait(self):
+        for entry in [*mood_files.Advice().thoughts.values(), *mood_files.Advice().needs.values()]:
+            text = entry["text"] if isinstance(entry, dict) else entry
+            self.assertTrue(text.endswith("."), text)
 
 
 def rule(xml, name="T"):
@@ -142,12 +174,42 @@ class Report(save_tests.Folders):
                     out=out)
         return code, out.getvalue()
 
-    def run_mood(self, *args, patched=True):
+    def run_mood(self, *args, patched=True, mood_file=None):
         dump = self.saves.parent / "PatchedDefs.xml"
         dump.write_text(PATCHED, encoding="utf-8")
         nowhere = self.saves.parent / "no-game"
+        found = self.saves.parent / "ColonyMood.xml"
+        if mood_file is not None:
+            found.write_text(mood_file, encoding="utf-8")
         return self.run_main("mood", "--patched-defs", str(dump if patched else nowhere / "none.xml"),
+                             "--mood-file", str(found if mood_file is not None else nowhere / "none.xml"),
                              "--game", str(nowhere), "--config", str(nowhere), *args)
+
+    def test_the_mood_file_from_the_same_save_names_every_thought(self):
+        code, text = self.run_mood(mood_file=mood_file(3720000, "example seed"))
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("Every thought as the game counted it at this save: remembered events add -5.2 mood in all and "
+                      "situational thoughts -8.0; the costliest is \"Freezing bedroom\"", text)
+        # Thresholds come from the game's own breaker in the file (40%), not from traits worked out here (42%).
+        self.assertIn("| Annie | colonist | 4% | 40% | Extreme break risk | -5.2 | -8.0 | Food 0% |", text)
+        self.assertIn("| Freezing bedroom | 1 | -8.0 | -8.0 | situational | Example_ColdRoom |", text)
+        self.assertIn("read from the colony mood file written 2026-11-10T05:00:00Z", text)
+        self.assertIn("| Ate without table | 1 | -5.2 | Put tables and chairs where colonists eat", text)
+        code, text = self.run_mood("--pawn", "Annie", mood_file=mood_file(3720000, "example seed"))
+        self.assertIn("Remembered events -5.2; situational thoughts -8.0.", text)
+
+    def test_a_mood_file_from_another_save_is_not_used(self):
+        code, text = self.run_mood(mood_file=mood_file(999, "example seed"))
+        self.assertIn("written at another save (tick 999)", text)
+        self.assertIn("Remembered events add -6.2 mood in all", text)
+        code, text = self.run_mood(mood_file=mood_file(3720000, "another world"))
+        self.assertIn("written at another save", text)
+
+    def test_a_mood_file_of_another_shape_is_refused_and_said(self):
+        code, text = self.run_mood(mood_file='<ColonyMood format="9" ticksGame="3720000" />')
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("is not in a shape this kit reads (format 9)", text)
+        self.assertIn("Remembered events add -6.2 mood in all", text)
 
     def test_who_is_at_risk_what_hurts_and_what_helps(self):
         code, text = self.run_mood()
@@ -175,7 +237,8 @@ class Report(save_tests.Folders):
     def test_one_pawn_in_full(self):
         code, text = self.run_mood("--pawn", "annie")
         self.assertIn("Annie (colonist): mood 4%, extreme break risk. Breaks below 42% (minor)", text)
-        self.assertIn("| Ate without table | -5.2 | AteWithoutTable |", text)
+        self.assertIn("| Ate without table | -5.2 | remembered | Put tables and chairs where colonists eat; a meal at a "
+                      "table removes this. | AteWithoutTable |", text)
         code, text = self.run_mood("--pawn", "Nobody")
         self.assertIn("No pawn of the colony", text)
 
@@ -184,7 +247,7 @@ class Report(save_tests.Folders):
         self.assertEqual(code, EXIT_OK)
         self.assertIn("could not be read", text)
         self.assertIn("1 below the extreme break threshold", text)
-        code, text = self.run_main("mood", "--no-defs")
+        code, text = self.run_main("mood", "--no-defs", "--no-mood-file")
         self.assertIn("No Defs were read (--no-defs)", text)
 
 

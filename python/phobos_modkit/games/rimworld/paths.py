@@ -80,3 +80,15 @@ def patched_defs_path(explicit=None, environ=None, settings_file=None):
     """The patched-Defs file: the one named, or where D'thorga Framework writes it. It may not exist."""
     default = Path(config_path(None, environ, settings_file)).parent.joinpath(*PATCHED_DEFS_DEFAULT)
     return resolve(*PATCHED_DEFS, default, explicit, environ, settings_file)
+
+
+# The colony mood file: every colonist's thoughts as the game added them up at the last save. phobos-rimworld's D'thorga
+# Framework writes it beside the Config folder (its setting "Write a colony mood file at each save").
+COLONY_MOOD = ("rimworldColonyMoodPath", "RIMWORLD_COLONY_MOOD")
+COLONY_MOOD_DEFAULT = ("PhobosSnapshots", "ColonyMood.xml")
+
+
+def colony_mood_path(explicit=None, environ=None, settings_file=None):
+    """The colony mood file: the one named, or where D'thorga Framework writes it. It may not exist."""
+    default = Path(config_path(None, environ, settings_file)).parent.joinpath(*COLONY_MOOD_DEFAULT)
+    return resolve(*COLONY_MOOD, default, explicit, environ, settings_file)
