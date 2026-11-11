@@ -135,5 +135,7 @@ def main(argv=None, settings_file=None, environ=None, out=None, post=None, pacer
     return core.run(args, ids, settings_file, environ, out, post, pacer, clock, prepare, "rimworld-workshop")
 
 
+CACHE_POLICIES = [workshop.CACHE_POLICY]
+
 MANIFEST = {"game": "rimworld", "parser": _parser, "effect": ONLINE,
             "reports": {"sql": {"effect": READS}}}

@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-11
+
+The owner asked for a cleanup of every temporary file the RimWorld work had left, and for the tool to live here (phobos-rimworld, 11 November 2026).
+
+### Added
+
+- cleanup: lists what the kit's tools and a repository's builds and tests left behind, with sizes and the reason each may go, and deletes it only with --apply. It covers the kit's cache (a file a tool says is stale, anything unchanged for 14 days, frozen copies a stopped run left), the kit's development build (never the release programs the tools run, and never while cargo or rustc runs), the folders and patterns a repository names in config/cleanup.json, and git's file-watcher daemons. docs/cleanup.md describes the rules file.
+- A command may declare CACHE_POLICIES for its cache folders: a stale test, or a reason to keep the folder. rimworld-save's index is stale once its save has been saved again or has gone; the Workshop cache is always kept, its pages being slow to fetch.
+
 ## [1.7.0] - 2026-11-10
 
 The owner asked for the atlas in D'thorga Companion: the whole world map, with biomes, settlements, pollution, climate and terrain views, roads and rivers (phobos-rimworld, 10 November 2026).

@@ -49,6 +49,8 @@ BACKOFF_SECONDS = 150
 TIMEOUT_SECONDS = 30
 CACHE_FOLDER = "steam-workshop"
 INDEX_NAME = "workshop.sqlite"
+# What the cleanup command may clear from this cache: nothing, since its pages are fetched slowly, paced for Steam.
+CACHE_POLICY = {"folder": CACHE_FOLDER, "keep": "pages fetched from Steam, paced and slow to fetch again"}
 INDEX_FORMAT = "1"
 ITEM_ID = re.compile(r"(?:[?&]id=|^)(\d{6,})")
 

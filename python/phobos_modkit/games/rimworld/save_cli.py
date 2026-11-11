@@ -387,6 +387,8 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     return EXIT_OK
 
 
+CACHE_POLICIES = [saves.CACHE_POLICY]
+
 MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
             "reports": {
     "summary": {"question": "What's in my newest save?"},

@@ -101,6 +101,25 @@ def build(save, cache, indexer=None, environ=None, run=subprocess.run, schema=SC
     return Built(index, summary["elements"], summary["rows"], summary["seconds"])
 
 
+def stale_index(index, environ=None, settings_file=None):
+    """Why an index in the cache is no longer any use, or None: its save has gone from the Saves folder, or has been
+    saved over since (the next question about it builds a new index anyway). For the cleanup command."""
+    from . import paths
+    name = read_meta(index).get("source")
+    if not name:
+        return None
+    save = paths.saves_path(None, environ, settings_file) / name
+    if not save.is_file():
+        return f"its save, {name}, is no longer in the Saves folder"
+    if not is_current(index, save):
+        return f"{name} has been saved again since, so the next question about it builds a new index"
+    return None
+
+
+# What the cleanup command may clear from this tool's cache folder.
+CACHE_POLICY = {"folder": CACHE_FOLDER, "stale": stale_index}
+
+
 def ensure(save, cache, indexer=None, environ=None, rebuild=False, run=subprocess.run, schema=SCHEMA):
     """(index path, Built or None): the current index of save, built only when missing or stale."""
     index = index_for(cache, save)

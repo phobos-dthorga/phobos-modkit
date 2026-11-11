@@ -150,5 +150,7 @@ def main(argv=None, settings_file=None, environ=None, out=None, post=None, pacer
     return run(args, list(dict.fromkeys(ids)), settings_file, environ, out, post, pacer, clock)
 
 
+CACHE_POLICIES = [workshop.CACHE_POLICY]
+
 MANIFEST = {"game": None, "parser": _parser, "effect": ONLINE,
             "reports": {"sql": {"effect": READS}}}
