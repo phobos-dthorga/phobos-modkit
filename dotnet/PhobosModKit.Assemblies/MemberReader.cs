@@ -6,7 +6,8 @@ using System.Reflection.PortableExecutable;
 namespace Phobos.ModKit.Assemblies;
 
 public sealed record MemberField(string Name, string Type, bool IsStatic, string Access);
-public sealed record MemberMethod(string Name, string[] Parameters, string Returns, bool IsStatic, string Access);
+/// <summary>A method; ParameterNames lines up with Parameters, "" where the metadata names none (Harmony binds patch arguments by these names).</summary>
+public sealed record MemberMethod(string Name, string[] Parameters, string[] ParameterNames, string Returns, bool IsStatic, string Access);
 public sealed record MemberProperty(string Name, string Type, bool HasGetter, bool HasSetter, bool IsStatic);
 
 /// <summary>The members of one type: what a patch or a reflected lookup can name on it.</summary>
@@ -171,7 +172,15 @@ public sealed class MemberReader : IDisposable
                 parameters = Array.Empty<string>();
                 returns = "?";
             }
-            methods.Add(new MemberMethod(name, parameters, returns, (method.Attributes & MethodAttributes.Static) != 0, MethodAccess(method.Attributes)));
+            var parameterNames = new string[parameters.Length];
+            Array.Fill(parameterNames, "");
+            foreach (ParameterHandle parameterHandle in method.GetParameters())
+            {
+                Parameter parameter = reader.GetParameter(parameterHandle);
+                int index = parameter.SequenceNumber - 1;   // 0 is the return value
+                if (index >= 0 && index < parameterNames.Length) parameterNames[index] = reader.GetString(parameter.Name);
+            }
+            methods.Add(new MemberMethod(name, parameters, parameterNames, returns, (method.Attributes & MethodAttributes.Static) != 0, MethodAccess(method.Attributes)));
         }
         return new TypeMembers(Names.Full(reader, type), entry.Assembly, entry.Path, baseName, interfaces.ToArray(), fields, methods, properties);
     }

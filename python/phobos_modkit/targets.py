@@ -7,9 +7,15 @@ assembly changes. This module finds every such name in a source tree and checks 
 assemblies' members, read through their metadata by the kit's reader (dotnet/PhobosModKit.Assemblies members).
 
 What it reads from the source: [HarmonyPatch(...)] attributes on classes and methods (typeof, strings, nameof,
-MethodType, overload types, constructors) and the parameters of their patch methods; AccessTools.Field, Method, Property,
-PropertyGetter, PropertySetter, Constructor and their Declared forms, FieldRefAccess; typeof(T).GetField, GetMethod and
-GetProperty. A lookup whose type is worked out at run time (a variable, TypeByName) cannot be checked and is listed.
+MethodType, overload types, constructors) and the parameters of their patch methods, both the ones Harmony fills itself
+(__instance, __result, ___field) and the ones it matches by name with the original's; AccessTools.Field, Method, Property,
+PropertyGetter, PropertySetter, Constructor and their Declared forms, FieldRefAccess, with the type from typeof or as a
+"Type:Member" string; typeof(T).GetField, GetMethod and GetProperty. A type may also come from a by-name lookup with a
+fixed name (AccessTools.TypeByName("..."), Type.GetType, and whatever lookups the caller names), directly or through a
+variable that every assignment in its file sets to the same type; names may be string constants, from this file or, as
+Class.Name, from any file scanned. A TargetMethod whose body names one member gives its patch class that target. What is
+still worked out at run time (a name put together from a parameter, a type read from a property) cannot be checked and is
+listed.
 
 No game is named here: the source is C#, the attributes are Harmony's public names, and the listing comes from whatever
 assemblies the caller chose.
@@ -43,6 +49,7 @@ class Target:
     source: str                       # HarmonyPatch, AccessTools.Method, GetField, ...
     compiler_checked: bool = False    # named with nameof(): the build already checks the member exists
     note: str = ""
+    position: int = field(default=-1, compare=False, repr=False)   # where in the file it was read, for TargetMethod bodies
 
     @property
     def label(self):
@@ -54,12 +61,14 @@ class Target:
 
 @dataclass
 class Injection:
-    """A patch method's parameter Harmony fills at run time: __instance, __result or ___field."""
+    """A patch method's parameter Harmony fills at run time: __instance, __result or ___field, or (argument) one it
+    matches by name with a parameter of the original."""
     file: str
     line: int
     target: Target
     name: str
     declared_type: str
+    argument: bool = False
 
 
 @dataclass
@@ -69,6 +78,7 @@ class Unresolved:
     source: str
     member: str
     reason: str
+    position: int = field(default=-1, compare=False, repr=False)
 
 
 @dataclass
@@ -83,7 +93,8 @@ class Scan:
         names = {t.type_name for t in self.targets}
         for injection in self.injections:
             names.add(injection.target.type_name)
-            names.add(_strip_modifiers(injection.declared_type))
+            if not injection.argument:   # an argument is matched by name alone; its type is not compared
+                names.add(_strip_modifiers(injection.declared_type))
         return sorted(n for n in names if n)
 
 
@@ -158,8 +169,8 @@ def _match_close(text, open_index):
     return -1
 
 
-def _split_args(text):
-    """Top-level comma split, honouring brackets and strings."""
+def _split_args(text, separator=","):
+    """Top-level split on the separator (a comma by default), honouring brackets and strings."""
     parts, depth, start, i, n = [], 0, 0, 0, len(text)
     while i < n:
         c = text[i]
@@ -173,7 +184,7 @@ def _split_args(text):
             depth += 1
         elif c in ")]}>":
             depth -= 1
-        elif c == "," and depth == 0:
+        elif c == separator and depth == 0:
             parts.append(text[start:i].strip())
             start = i + 1
         i += 1
@@ -194,8 +205,12 @@ def _strip_modifiers(type_text):
 
 
 def _typeof_inner(text):
-    m = re.fullmatch(r"typeof\s*\((.+)\)", text.strip(), re.S)
-    return m.group(1).strip() if m else None
+    """X from exactly typeof(X); None for anything more, such as typeof(X<>).MakeGenericType(...)."""
+    text = text.strip()
+    m = re.match(r"typeof\s*\(", text)
+    if not m or _match_close(text, m.end() - 1) != len(text):
+        return None
+    return text[m.end():-1].strip()
 
 
 def _type_array(text):
@@ -221,7 +236,7 @@ def _member_of_nameof(text):
 class _Attribute:
     """One [HarmonyPatch(...)]'s arguments, read."""
 
-    def __init__(self, args):
+    def __init__(self, args, context=None):
         self.type_name = ""
         self.member = ""
         self.method_type = ""
@@ -252,6 +267,10 @@ class _Attribute:
             m = re.fullmatch(r"(?:HarmonyLib\.)?MethodType\.(\w+)", arg.strip())
             if m:
                 self.method_type = m.group(1)
+                continue
+            value = context.string_value(arg) if context is not None else None
+            if value is not None:
+                strings.append(value)
         if len(strings) >= 2 and not self.type_name:
             self.type_name, self.member = strings[0], strings[1]
         elif strings:
@@ -306,33 +325,51 @@ def _params_of_header(header):
     return _split_args(inner)
 
 
-def _injections_from_params(params, target, file, line, found):
+SPECIAL_INJECTION = re.compile(r"__instance|__result|___\w+")
+NOT_A_DECLARATION = re.compile(r"\b(return|await|throw|yield|if|while|var|nameof|typeof)\b|[=(.]")
+
+
+def _injections_from_params(params, target, file, line, found, by_name=False):
+    """The parameters Harmony fills itself, and with by_name (a prefix, postfix or finalizer) the ones it matches by name with the
+    original's: every name not starting with two underscores, or the name a [HarmonyArgument("...")] gives it."""
     for param in params:
+        renamed = re.search(r'\[\s*(?:HarmonyLib\.)?HarmonyArgument\s*\(\s*"(\w+)"', param)
+        by_index = re.search(r"\[\s*(?:HarmonyLib\.)?HarmonyArgument\s*\(\s*\d", param)
         param = re.sub(r"\[[^\]]*\]\s*", "", param).strip()          # a [HarmonyArgument] mark
-        m = re.fullmatch(r"(.+?)\s+(__instance|__result|___\w+)\s*(=.*)?", param, re.S)
-        if m:
-            found.append(Injection(file, line, target, m.group(2), _strip_modifiers(m.group(1))))
+        m = re.fullmatch(r"(.+?)\s+(\w+)\s*(=.*)?", param, re.S)
+        if not m:
+            continue
+        declared, name = _strip_modifiers(m.group(1)), m.group(2)
+        if SPECIAL_INJECTION.fullmatch(name):
+            found.append(Injection(file, line, target, name, declared))
+        elif by_name and not by_index and not name.startswith("__"):
+            found.append(Injection(file, line, target, renamed.group(1) if renamed else name, declared, argument=True))
+
+
+def _patch_method_name(header):
+    m = re.search(r"(\w+)\s*(?:<[^(]*>)?\s*\(", header)
+    return m.group(1) if m else ""
 
 
 ATTRIBUTE_PATTERN = re.compile(r"\[\s*HarmonyPatch\b\s*")
 
 
-def _attribute_at(text, m):
+def _attribute_at(text, m, context=None):
     """(the attribute, where its arguments end) for a match of ATTRIBUTE_PATTERN; a bare [HarmonyPatch] has no arguments."""
     if m.end() < len(text) and text[m.end()] == "(":
         end = _match_close(text, m.end())
         if end < 0:
             return None, -1
-        return _Attribute(_split_args(text[m.end() + 1:end - 1])), end
-    return _Attribute([]), m.end()
+        return _Attribute(_split_args(text[m.end() + 1:end - 1]), context), end
+    return _Attribute([], context), m.end()
 
 
-def _scan_harmony(text, file, scan, processed):
+def _scan_harmony(text, file, scan, processed, context=None):
     for m in ATTRIBUTE_PATTERN.finditer(text):
         if m.start() in processed:
             continue
         processed.add(m.start())
-        attribute, end = _attribute_at(text, m)
+        attribute, end = _attribute_at(text, m, context)
         if attribute is None:
             continue
         bracket_end = text.find("]", end)
@@ -347,30 +384,53 @@ def _scan_harmony(text, file, scan, processed):
             class_attribute = attribute
             for other in ATTRIBUTE_PATTERN.finditer(text, m.end(), body_start if body_start >= 0 else len(text)):
                 processed.add(other.start())
-                other_attribute, _ = _attribute_at(text, other)
+                other_attribute, _ = _attribute_at(text, other, context)
                 if other_attribute is not None:
                     class_attribute = class_attribute.merge(other_attribute)
-            _scan_patch_class(text, body, body_start, class_attribute, file, line, scan, processed)
+            _scan_patch_class(text, body, body_start, class_attribute, file, line, scan, processed, context)
         elif kind == "method":
             target = attribute.target(file, line)
             if attribute.type_name and (attribute.member or attribute.method_type in ("Constructor", "StaticConstructor")):
                 scan.targets.append(target)
-                _injections_from_params(_params_of_header(header), target, file, line, scan.injections)
+                by_name = _patch_method_name(header) != "Transpiler" and "HarmonyTranspiler" not in text[m.start():header_end]
+                _injections_from_params(_params_of_header(header), target, file, line, scan.injections, by_name)
 
 
-def _scan_patch_class(text, body, body_start, class_attribute, file, line, scan, processed):
+def _target_method_span(body):
+    """(start, end) in body of a TargetMethod declaration's body, expression or block; None when there is none to read."""
+    m = re.search(r"\b[\w.<>\[\]]+\??\s+TargetMethod\s*\(\s*\)\s*(=>|\{)", body)
+    if not m:
+        return None
+    if m.group(1) == "=>":
+        return m.end(), m.end() + len(_expression_at(body, m.end(), raw=True))
+    end = _match_close(body, m.end() - 1)
+    return (m.end() - 1, end) if end > 0 else None
+
+
+def _scan_patch_class(text, body, body_start, class_attribute, file, line, scan, processed, context=None):
     has_target_method = re.search(r"\bTargetMethods?\s*\(|\[\s*HarmonyTargetMethods?\s*\]", body) is not None
+    chosen = None
     if has_target_method:
-        scan.unresolved.append(Unresolved(file, line, "HarmonyPatch", class_attribute.member or "?", "the target is chosen at run time by TargetMethod"))
-    class_target = class_attribute.target(file, line)
+        # A TargetMethod whose body names exactly one member, all of it readable, patches that member.
+        span = _target_method_span(body)
+        if span is not None:
+            start, end = body_start + span[0], body_start + span[1]
+            inside = [t for t in scan.targets if t.file == file and start <= t.position < end]
+            unread = [u for u in scan.unresolved if u.file == file and start <= u.position < end]
+            if len(inside) == 1 and not unread and inside[0].member_kind in ("method", "getter", "setter", "ctor", "cctor"):
+                chosen = inside[0]
+        if chosen is None:
+            scan.unresolved.append(Unresolved(file, line, "HarmonyPatch", class_attribute.member or "?", "the target is chosen at run time by TargetMethod"))
+    class_target = chosen or class_attribute.target(file, line)
     class_complete = bool(class_attribute.type_name) and (bool(class_attribute.member) or class_attribute.method_type in ("Constructor", "StaticConstructor"))
     if class_complete:
-        scan.targets.append(class_target)
+        scan.targets.append(class_attribute.target(file, line))
+    usable = chosen is not None if has_target_method else class_complete
     # Method-level attributes inside the body refine the class's target for that method alone.
     method_level = {}
     for m in ATTRIBUTE_PATTERN.finditer(body):
         processed.add(body_start + m.start())
-        own, end = _attribute_at(body, m)
+        own, end = _attribute_at(body, m, context)
         if own is None:
             continue
         merged = class_attribute.merge(own)
@@ -382,28 +442,34 @@ def _scan_patch_class(text, body, body_start, class_attribute, file, line, scan,
         target = merged.target(file, method_line)
         if merged.type_name and (merged.member or merged.method_type in ("Constructor", "StaticConstructor")):
             scan.targets.append(target)
-            method_level[header_end] = (target, header, method_line)
+            by_name = _patch_method_name(header) != "Transpiler" and "HarmonyTranspiler" not in body[m.start():header_end]
+            method_level[header_end] = (target, header, method_line, by_name)
     # The patch methods: named Prefix/Postfix/Finalizer/Transpiler, or marked [HarmonyPrefix] and kin.
     for name_match in re.finditer(r"\b(" + "|".join(HARMONY_METHOD_NAMES) + r")\s*\(", body):
-        header_start = body.rfind("\n", 0, name_match.start()) + 1
+        header_start = max(body.rfind(c, 0, name_match.start()) for c in "\n;{}") + 1
+        before = re.sub(r"\[[^\]]*\]", "", body[header_start:name_match.start()])
+        if NOT_A_DECLARATION.search(before) or not re.search(r"[\w>\]?]\s+$", before):
+            continue   # a call or a reference, not the method's declaration (which has a return type before its name)
         end = _match_close(body, name_match.end() - 1)
         if end < 0:
             continue
         header = body[header_start:end]
         if any(k <= header_start + len(header) and k >= header_start for k in method_level):
             continue
-        if not class_complete or has_target_method:
+        if not usable:
             continue
-        _injections_from_params(_params_of_header(header), class_target, file, _line_of(text, body_start + name_match.start()), scan.injections)
+        _injections_from_params(_params_of_header(header), class_target, file, _line_of(text, body_start + name_match.start()), scan.injections,
+                                by_name=name_match.group(1) != "Transpiler")
     for marker in re.finditer(r"\[\s*(" + "|".join(MARKER_ATTRIBUTES) + r")\s*\]", body):
         kind, header, _ = _declaration_after(body, marker.end())
-        if kind != "method" or not class_complete or has_target_method:
+        if kind != "method" or not usable:
             continue
         if re.search(r"\b(" + "|".join(HARMONY_METHOD_NAMES) + r")\s*\(", header):
             continue   # counted above
-        _injections_from_params(_params_of_header(header), class_target, file, _line_of(text, body_start + marker.start()), scan.injections)
-    for _, (target, header, method_line) in method_level.items():
-        _injections_from_params(_params_of_header(header), target, file, method_line, scan.injections)
+        _injections_from_params(_params_of_header(header), class_target, file, _line_of(text, body_start + marker.start()), scan.injections,
+                                by_name=marker.group(1) != "HarmonyTranspiler")
+    for _, (target, header, method_line, by_name) in method_level.items():
+        _injections_from_params(_params_of_header(header), target, file, method_line, scan.injections, by_name)
 
 
 ACCESS_KINDS = {
@@ -417,8 +483,233 @@ ACCESS_KINDS = {
 ACCESS_PATTERN = re.compile(r"AccessTools\s*\.\s*(" + "|".join(ACCESS_KINDS) + r")\s*(<[^(]*?>)?\s*\(")
 GET_PATTERN = re.compile(r"\.\s*Get(Field|Method|Property)\s*\(")
 
+# By-name type lookups every C# project may use; a caller adds its own (a game's, or a project's helper).
+DEFAULT_TYPE_LOOKUPS = ("AccessTools.TypeByName", "Type.GetType", "System.Type.GetType")
 
-def _scan_reflection(text, file, scan):
+STRING_CONSTANT = re.compile(r"\b(?:const|static\s+readonly|readonly\s+static)\s+string\s+(\w+)\s*=\s*")
+CLASS_DECLARATION = re.compile(r"\b(?:class|struct|record|interface)\s+(\w+)")
+ASSIGNMENT = re.compile(r"(?<![\w.])([A-Za-z_]\w*)\s*=(?![=>])")
+# Names that may hold something else in part of the file: a Type parameter, a foreach or out variable, a lambda's parameter.
+SHADOWS = (
+    re.compile(r"\b(?:System\.)?Type\s*\??\s+(\w+)\s*(?=[,)]|\bin\b)"),
+    re.compile(r"\bout\s+(?:var|(?:System\.)?Type\s*\??)\s+(\w+)"),
+    re.compile(r"\bforeach\s*\(\s*[\w.<>\[\]?, ]+?\s+(\w+)\s+in\b"),
+    re.compile(r"\b(\w+)\s*=>"),
+)
+LAMBDA_PARAMETERS = re.compile(r"\(([\w\s,?<>\[\]]*)\)\s*=>")
+
+
+def _expression_at(text, start, raw=False):
+    """The expression starting at start: up to a ; or , at its own depth, or the bracket that closes around it."""
+    depth, i, n = 0, start, len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == '\\' else 1
+            i = j + 1
+            continue
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            if depth == 0:
+                break
+            depth -= 1
+        elif c in ";," and depth == 0:
+            break
+        i += 1
+    return text[start:i] if raw else text[start:i].strip()
+
+
+def _match_open(text, close_index):
+    """The index of the bracket that the one at close_index closes, walking back over strings; -1 if none."""
+    close = text[close_index]
+    opening = {")": "(", "]": "[", "}": "{"}[close]
+    depth, i = 0, close_index
+    while i >= 0:
+        c = text[i]
+        if c == '"':
+            j = i - 1
+            while j >= 0 and not (text[j] == '"' and (j == 0 or text[j - 1] != '\\')):
+                j -= 1
+            i = j - 1
+            continue
+        if c == close:
+            depth += 1
+        elif c == opening:
+            depth -= 1
+            if depth == 0:
+                return i
+        i -= 1
+    return -1
+
+
+def _receiver_before(text, index):
+    """The expression a member access at index is made on, as written: a dotted name, a call or typeof(...), without ?."""
+    j = index
+    end = None
+    while True:
+        while j > 0 and text[j - 1].isspace():
+            j -= 1
+        if j > 0 and text[j - 1] == "?":
+            j -= 1
+        if end is None:
+            end = j
+        if j > 0 and text[j - 1] == ")":
+            opened = _match_open(text, j - 1)
+            if opened < 0:
+                return None
+            j = opened
+            while j > 0 and text[j - 1].isspace():
+                j -= 1
+        k = j
+        while k > 0 and (text[k - 1].isalnum() or text[k - 1] == "_"):
+            k -= 1
+        if k == j:
+            break
+        j = k
+        t = j
+        while t > 0 and text[t - 1].isspace():
+            t -= 1
+        if t > 0 and text[t - 1] == ".":
+            j = t - 1
+            continue
+        break
+    return text[j:end].strip() or None
+
+
+def _class_spans(text):
+    spans = []
+    for m in CLASS_DECLARATION.finditer(text):
+        brace = text.find("{", m.end())
+        semicolon = text.find(";", m.end())
+        if brace < 0 or 0 <= semicolon < brace:
+            continue
+        end = _match_close(text, brace)
+        if end > 0:
+            spans.append((brace, end, m.group(1)))
+    return spans
+
+
+def _string_constants(text):
+    """(class, name, expression) for every string constant (const, static readonly) in a file."""
+    spans = _class_spans(text)
+    found = []
+    for m in STRING_CONSTANT.finditer(text):
+        inside = [s for s in spans if s[0] <= m.start() < s[1]]
+        owner = min(inside, key=lambda s: s[1] - s[0])[2] if inside else ""
+        found.append((owner, m.group(1), _expression_at(text, m.end())))
+    return found
+
+
+def _locals_of(constants):
+    """A file's constants by bare name; None where two in the file share a name and differ."""
+    local = {}
+    for _, name, expression in constants:
+        local[name] = expression if name not in local or local[name] == expression else None
+    return local
+
+
+def collect_constants(texts):
+    """Every file's string constants as Class.Name, for names one file takes from another (a comment-free text per file)."""
+    shared = {}
+    for text in texts:
+        constants = _string_constants(text)
+        local = _locals_of(constants)
+        for owner, name, expression in constants:
+            if owner:
+                shared.setdefault(f"{owner}.{name}", (expression, local))
+    return shared
+
+
+class _Context:
+    """What one file's names stand for: its string constants, other files' constants as Class.Name, by-name type lookups with a
+    fixed name, and variables that every assignment in the file sets to one such type."""
+
+    def __init__(self, text, lookups=DEFAULT_TYPE_LOOKUPS, shared=None):
+        self.local = _locals_of(_string_constants(text))
+        self.shared = shared or {}
+        names = set(lookups) | {name.split(".")[-1] for name in lookups}
+        spelled = sorted((r"\s*\.\s*".join(re.escape(part) for part in name.split(".")) for name in names), key=len, reverse=True)
+        self.lookup_pattern = re.compile(r"(?:" + "|".join(spelled) + r")\s*\(") if spelled else None
+        values = {}
+        for m in ASSIGNMENT.finditer(text):
+            values.setdefault(m.group(1), []).append(_expression_at(text, m.end()))
+        shadowed = set()
+        for pattern in SHADOWS:
+            shadowed.update(m.group(1) for m in pattern.finditer(text))
+        for m in LAMBDA_PARAMETERS.finditer(text):
+            shadowed.update(re.findall(r"\w+", m.group(1)))
+        self.bindings = {}
+        for name, expressions in values.items():
+            if name in shadowed:
+                continue
+            types = {self.type_of(expression, use_bindings=False) for expression in expressions}
+            if len(types) == 1 and None not in types:
+                self.bindings[name] = types.pop()
+
+    def string_value(self, expression, local=None, depth=0):
+        """The text a string expression always has: literals, nameof and constants joined with +; None if any part varies."""
+        if not expression or depth > 10:
+            return None
+        local = self.local if local is None else local
+        out = []
+        for part in _split_args(expression, "+"):
+            part = part.strip()
+            while part.startswith("(") and _match_close(part, 0) == len(part):
+                part = part[1:-1].strip()
+            literal = re.fullmatch(r'"((?:[^"\\]|\\.)*)"', part, re.S)
+            if literal:
+                out.append(literal.group(1).replace('\\"', '"').replace("\\\\", "\\"))
+                continue
+            name = _member_of_nameof(part)
+            if name is not None:
+                out.append(name)
+                continue
+            value = None
+            if re.fullmatch(r"[A-Za-z_]\w*", part):
+                if local.get(part) is not None:
+                    value = self.string_value(local[part], local, depth + 1)
+            elif re.fullmatch(r"[A-Za-z_][\w.]*", part):
+                found = self.shared.get(".".join(part.split(".")[-2:]))
+                if found is not None:
+                    value = self.string_value(found[0], found[1], depth + 1)
+            if value is None:
+                return None
+            out.append(value)
+        return "".join(out) if out else None
+
+    def type_of(self, expression, use_bindings=True):
+        """The type an expression always gives, as written or as a full name; None when it is worked out at run time."""
+        expression = (expression or "").strip()
+        while expression.endswith("!"):
+            expression = expression[:-1].strip()
+        if not expression:
+            return None
+        inner = _typeof_inner(expression)
+        if inner is not None:
+            return inner
+        m = self.lookup_pattern.match(expression) if self.lookup_pattern else None
+        if m and _match_close(expression, m.end() - 1) == len(expression):
+            args = _split_args(expression[m.end():-1])
+            name = self.string_value(args[0]) if args else None
+            return name.split(",")[0].strip().replace("+", ".") if name else None
+        if use_bindings and re.fullmatch(r"[A-Za-z_]\w*", expression):
+            return self.bindings.get(expression)
+        return None
+
+
+def _overload(rest):
+    arguments = None
+    for extra in rest:
+        types = _type_array(extra)
+        if types is not None:
+            arguments = types
+    return arguments
+
+
+def _scan_reflection(text, file, scan, context):
     for m in ACCESS_PATTERN.finditer(text):
         end = _match_close(text, m.end() - 1)
         if end < 0:
@@ -428,7 +719,7 @@ def _scan_reflection(text, file, scan):
         kind_name = m.group(1)
         kind = ACCESS_KINDS[kind_name]
         source = "AccessTools." + kind_name
-        type_name = None
+        joined_member = None
         generic = m.group(2)
         if generic:
             type_name = _split_args(generic.strip("<>"))[0].strip()
@@ -437,28 +728,32 @@ def _scan_reflection(text, file, scan):
         else:
             if not args:
                 continue
-            type_name = _typeof_inner(args[0])
-            if type_name is None:
-                scan.unresolved.append(Unresolved(file, line, source, _string_or_nameof(args[1]) if len(args) > 1 else "?",
-                                                  "the type is worked out at run time"))
-                continue
+            type_name = context.type_of(args[0])
             name_arg = args[1] if len(args) > 1 else ""
             rest = args[2:]
+            if type_name is None and kind != "ctor":
+                joined = context.string_value(args[0])            # Harmony's "Namespace.Type:Member" form
+                if joined is not None and joined.count(":") == 1:
+                    type_name, joined_member = joined.split(":")
+                    type_name = type_name.strip().replace("+", ".")
+                    rest = args[1:]
+            if type_name is None:
+                if ":" in args[0] and '"' in args[0]:
+                    scan.unresolved.append(Unresolved(file, line, source, "?", "the Type:Member name is put together at run time", m.start()))
+                else:
+                    scan.unresolved.append(Unresolved(file, line, source, context.string_value(name_arg) or "?",
+                                                      "the type is worked out at run time", m.start()))
+                continue
         if kind == "ctor":
             arguments = _type_array(name_arg) if name_arg else None
-            scan.targets.append(Target(file, line, type_name, "", "ctor", arguments, source))
+            scan.targets.append(Target(file, line, type_name, "", "ctor", arguments, source, position=m.start()))
             continue
-        member = _string_or_nameof(name_arg)
-        if member is None:
-            scan.unresolved.append(Unresolved(file, line, source, name_arg or "?", "the member's name is worked out at run time"))
+        member = joined_member if joined_member is not None else context.string_value(name_arg)
+        if not member:
+            scan.unresolved.append(Unresolved(file, line, source, name_arg or "?", "the member's name is worked out at run time", m.start()))
             continue
-        arguments = None
-        for extra in rest:
-            types = _type_array(extra)
-            if types is not None:
-                arguments = types
-        compiler_checked = _member_of_nameof(name_arg) is not None
-        scan.targets.append(Target(file, line, type_name, member, kind, arguments, source, compiler_checked))
+        compiler_checked = joined_member is None and _member_of_nameof(name_arg) is not None
+        scan.targets.append(Target(file, line, type_name, member, kind, _overload(rest), source, compiler_checked, position=m.start()))
     for m in GET_PATTERN.finditer(text):
         end = _match_close(text, m.end() - 1)
         if end < 0:
@@ -466,38 +761,18 @@ def _scan_reflection(text, file, scan):
         args = _split_args(text[m.end():end - 1])
         if not args:
             continue
-        member = _string_or_nameof(args[0])
+        member = context.string_value(args[0])
         if member is None:
             continue
         line = _line_of(text, m.start())
         kind = {"Field": "field", "Method": "method", "Property": "property"}[m.group(1)]
         source = "Get" + m.group(1)
-        before = text[:m.start()].rstrip()
-        receiver = None
-        if before.endswith(")"):
-            open_index = before.rfind("typeof")
-            if open_index >= 0:
-                candidate = before[open_index:]
-                if _match_close(candidate, candidate.find("(")) == len(candidate):
-                    receiver = _typeof_inner(candidate)
+        receiver = context.type_of(_receiver_before(text, m.start()))
         if receiver is None:
-            scan.unresolved.append(Unresolved(file, line, source, member, "the type is worked out at run time"))
+            scan.unresolved.append(Unresolved(file, line, source, member, "the type is worked out at run time", m.start()))
             continue
-        arguments = None
-        for extra in args[1:]:
-            types = _type_array(extra)
-            if types is not None:
-                arguments = types
-        scan.targets.append(Target(file, line, receiver, member, kind, arguments, source, _member_of_nameof(args[0]) is not None))
-
-
-def _string_or_nameof(arg):
-    if arg is None:
-        return None
-    m = re.fullmatch(r'"(.*)"', arg.strip(), re.S)
-    if m:
-        return m.group(1)
-    return _member_of_nameof(arg)
+        scan.targets.append(Target(file, line, receiver, member, kind, _overload(args[1:]), source, _member_of_nameof(args[0]) is not None,
+                                   position=m.start()))
 
 
 def _usings(text):
@@ -511,39 +786,44 @@ def _usings(text):
     return found
 
 
-def scan_file(path, root=None):
+def scan_file(path, root=None, type_lookups=DEFAULT_TYPE_LOOKUPS):
     text = Path(path).read_text(encoding="utf-8", errors="replace")
-    return scan_text(text, str(Path(path).relative_to(root)) if root else str(path))
+    return scan_text(text, str(Path(path).relative_to(root)) if root else str(path), type_lookups)
 
 
-def scan_text(text, file):
+def scan_text(text, file, type_lookups=DEFAULT_TYPE_LOOKUPS, constants=None):
+    """One file's targets. constants: other files' string constants from collect_constants, for names written Class.Name."""
     scan = Scan(files=1)
     clean = _blank_comments(text)
+    context = _Context(clean, type_lookups, constants if constants is not None else collect_constants([clean]))
     processed = set()
-    _scan_harmony(clean, file, scan, processed)
-    _scan_reflection(clean, file, scan)
+    _scan_reflection(clean, file, scan, context)   # first, so a TargetMethod body's lookup is known to its patch class
+    _scan_harmony(clean, file, scan, processed, context)
     scan.usings[file] = _usings(clean)
     return scan
 
 
-def scan_tree(root, globs=("src/**/*.cs",), exclude=("/obj/", "/bin/", "\\obj\\", "\\bin\\")):
+def scan_tree(root, globs=("src/**/*.cs",), exclude=("/obj/", "/bin/", "\\obj\\", "\\bin\\"), type_lookups=DEFAULT_TYPE_LOOKUPS):
     """Every target in the files the globs name under root, paths relative to root with forward slashes."""
     root = Path(root)
     total = Scan()
     seen = set()
+    files = []
     for pattern in globs:
         for path in sorted(root.glob(pattern)):
             text = str(path)
             if path in seen or any(part in text for part in exclude):
                 continue
             seen.add(path)
-            relative = path.relative_to(root).as_posix()
-            one = scan_text(path.read_text(encoding="utf-8", errors="replace"), relative)
-            total.targets.extend(one.targets)
-            total.injections.extend(one.injections)
-            total.unresolved.extend(one.unresolved)
-            total.usings.update(one.usings)
-            total.files += 1
+            files.append((path.relative_to(root).as_posix(), path.read_text(encoding="utf-8", errors="replace")))
+    constants = collect_constants(_blank_comments(text) for _, text in files)
+    for relative, text in files:
+        one = scan_text(text, relative, type_lookups, constants)
+        total.targets.extend(one.targets)
+        total.injections.extend(one.injections)
+        total.unresolved.extend(one.unresolved)
+        total.usings.update(one.usings)
+        total.files += 1
     return total
 
 
@@ -724,6 +1004,8 @@ def _check_injection(scan, listing, injection):
     full_name = names[0]
     label = f"{target.label} {injection.name}"
     declared = normalise(injection.declared_type)
+    if injection.argument:
+        return _check_argument(listing, injection, label, full_name)
     if injection.name == "__instance":
         chain = [normalise(n) for n in listing.chain(full_name)]
         if declared in chain or declared == "Object":
@@ -744,6 +1026,31 @@ def _check_injection(scan, listing, injection):
             return [Finding(injection.file, injection.line, "HarmonyPatch", label, "injection", "the original returns nothing, so there is no __result")]
         return [_compare_types(listing, injection, label, declared, expected, "the original returns")]
     return []
+
+
+def _originals(listing, target, full_name):
+    """The methods a patch on the target could land on: the overload named, or every one of the name when none is."""
+    kind = target.member_kind
+    if kind in ("ctor", "cctor"):
+        found = [m for o, m in listing.methods(full_name, ".cctor" if kind == "cctor" else ".ctor") if o == full_name]
+    else:
+        name = {"getter": "get_", "setter": "set_"}.get(kind, "") + target.member
+        found = [m for _, m in listing.methods(full_name, name)]
+    if target.arguments is not None:
+        found = [m for m in found if _arguments_match(target.arguments, m["parameters"])]
+    return found
+
+
+def _check_argument(listing, injection, label, full_name):
+    """Harmony gives a patch parameter the original's argument of the same name, and refuses the patch when there is none."""
+    originals = _originals(listing, injection.target, full_name)
+    if not originals or any("parameterNames" not in m for m in originals):
+        return []   # the target's own finding covers a missing member; a reader too old to name parameters cannot tell
+    if any(injection.name in m["parameterNames"] for m in originals):
+        return [Finding(injection.file, injection.line, "HarmonyPatch", label, "ok")]
+    takes = "; ".join("(" + ", ".join(n for n in m["parameterNames"] if n) + ")" for m in originals)
+    return [Finding(injection.file, injection.line, "HarmonyPatch", label, "injection",
+                    f"Harmony matches {injection.name} by name, and the original has no parameter of that name: it takes {takes}")]
 
 
 def _return_type(listing, target, full_name):

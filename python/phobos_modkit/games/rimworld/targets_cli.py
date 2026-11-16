@@ -3,10 +3,11 @@
     rimworld-targets --root .                          check src/**/*.cs against the game and the active mods
     rimworld-targets --root . --assemblies "mods/*/1.7/Assemblies/*.dll"   read these first (a fresh build of our own)
     rimworld-targets --root . --all                    list what passed too
+    rimworld-targets --root . --type-lookup OptionalMods.TypeNamed   a project's own by-name type lookup, read like TypeByName
 
 Reads only: each DLL is opened as a file and never loaded or run. The compiler checks typeof and nameof; this checks what
 it cannot: Harmony patches and reflected lookups named in strings, the overloads they ask for, and the parameters Harmony
-fills at run time (__instance, __result, ___field). Exit 1 when something named no longer exists.
+fills at run time (__instance, __result, ___field) or matches by name with the original's. Exit 1 when something named no longer exists.
 """
 from __future__ import annotations
 
@@ -19,13 +20,15 @@ import sys
 import tempfile
 
 from ...report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
-from ...targets import Listing, check_targets, scan_tree
+from ...targets import DEFAULT_TYPE_LOOKUPS, Listing, check_targets, scan_tree
 from . import loading, paths
 from .mods import ModIndex, default_roots
 from .patches import PatchesError, ensure_reader, mod_assemblies
 from ...manifest import READS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
+# The game's own by-name type lookup, beside the ones every C# project may use.
+TYPE_LOOKUPS = DEFAULT_TYPE_LOOKUPS + ("GenTypes.GetTypeInAnyAssembly",)
 
 
 def _parser():
@@ -34,6 +37,8 @@ def _parser():
     p.add_argument("--root", default=".", help="the repository holding the C# source (default: here)")
     p.add_argument("--source", action="append", help="a glob under the root (default src/**/*.cs); may repeat")
     p.add_argument("--assemblies", action="append", default=[], help="a glob under the root to read before the game's; may repeat")
+    p.add_argument("--type-lookup", action="append", default=[], metavar="NAME",
+                   help="a method that finds a type by its full name, such as a project's helper (Class.Method); may repeat")
     p.add_argument("--game", help="the RimWorld folder (else RIMWORLD_PATH, the settings file, Steam's default)")
     p.add_argument("--workshop", help="the Workshop content folder (else RIMWORLD_WORKSHOP_PATH, settings, beside the game)")
     p.add_argument("--config", help="the folder holding ModsConfig.xml (else RIMWORLD_CONFIG_PATH, settings, default)")
@@ -134,7 +139,7 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=None):
         # Our own fresh build first, so a stale installed copy never answers for it.
         files = [path for pattern in args.assemblies for path in sorted(root.glob(pattern))]
         files += managed + [dll for _, dll in mod_assemblies(active, version)]
-        scan = scan_tree(root, tuple(args.source or ["src/**/*.cs"]))
+        scan = scan_tree(root, tuple(args.source or ["src/**/*.cs"]), type_lookups=TYPE_LOOKUPS + tuple(args.type_lookup))
         options = {"run": run} if run is not None else {}
         tool = ensure_reader(environ, **options)
         records = read_members(tool, scan.type_names(), files, **options)

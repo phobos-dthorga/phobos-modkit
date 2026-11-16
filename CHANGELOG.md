@@ -4,6 +4,20 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-11-17
+
+A crash in phobos-rimworld (17 November 2026) was fixed with a patch whose target is named as a "Type:Member" string, and its parameters had to be checked against Combat Extended by hand: the target check read neither. The owner asked for the gap closed.
+
+### Added
+
+- rimworld-targets reads Harmony's "Namespace.Type:Member" names in AccessTools lookups, and types found by name with a fixed name (AccessTools.TypeByName, Type.GetType, the game's GenTypes.GetTypeInAnyAssembly, and a project's own lookups given with --type-lookup), directly or through a variable every assignment in its file sets to the same type. String constants count, joined with +, from the file itself or as Class.Name from any file scanned.
+- A patch class's TargetMethod whose body names one member gives the class that target, so its parameters are checked too.
+- Patch parameters Harmony matches by name with the original's (every name in a prefix, postfix or finalizer but Harmony's own) are checked against the original's parameter names; a name the original lacks fails, with the names it has. The assembly reader's member listing now gives each method's parameterNames.
+
+### Fixed
+
+- A typeof that a call follows, as in typeof(X<>).MakeGenericType(...), is no longer read as the type X.
+
 ## [1.9.0] - 2026-11-17
 
 The owner sees in-game tests pass but the news rarely reaches the test list, and asked for the checklist to live in D'thorga Companion (phobos-rimworld, 17 November 2026).
