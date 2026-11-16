@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-11-17
+
+The owner sees in-game tests pass but the news rarely reaches the test list, and asked for the checklist to live in D'thorga Companion (phobos-rimworld, 17 November 2026).
+
+### Added
+
+- test-pass report: a repository's in-game test list (named by its config/test-evidence.json), the rows waiting for the owner, the rows the game has seen working, and verdicts not yet written; --json gives every row's cells, sightings and verdict for a program to show. test-pass apply writes each verdict into its row, and "seen working, awaiting the owner's word" for a row the notes flag that has no verdict; a preview without --apply, and it writes only inside the test list.
+- The seen-in-play notes file and the owner's verdicts file, both JSON lines, described in docs/test-pass.md. A note never passes a row; only a verdict does. Verdicts default to D'thorga Companion's own folder, one file per repository.
+- rimworld paths: seen_in_play_path, where D'thorga Framework 0.118.0 writes its notes (PhobosSnapshots/SeenInPlay.jsonl beside the Config folder).
+
 ## [1.8.0] - 2026-11-11
 
 The owner asked for a cleanup of every temporary file the RimWorld work had left, and for the tool to live here (phobos-rimworld, 11 November 2026).

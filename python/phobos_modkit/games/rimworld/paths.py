@@ -92,3 +92,15 @@ def colony_mood_path(explicit=None, environ=None, settings_file=None):
     """The colony mood file: the one named, or where D'thorga Framework writes it. It may not exist."""
     default = Path(config_path(None, environ, settings_file)).parent.joinpath(*COLONY_MOOD_DEFAULT)
     return resolve(*COLONY_MOOD, default, explicit, environ, settings_file)
+
+
+# Seen-in-play notes: one JSON line the first time each feature is seen working in a session. phobos-rimworld's D'thorga
+# Framework (0.118.0 and later) writes them beside the colony mood file, with its setting "Note features as they are seen working".
+SEEN_IN_PLAY = ("rimworldSeenInPlayPath", "RIMWORLD_SEEN_IN_PLAY")
+SEEN_IN_PLAY_DEFAULT = ("PhobosSnapshots", "SeenInPlay.jsonl")
+
+
+def seen_in_play_path(explicit=None, environ=None, settings_file=None):
+    """The seen-in-play notes file: the one named, or where D'thorga Framework writes it. It may not exist."""
+    default = Path(config_path(None, environ, settings_file)).parent.joinpath(*SEEN_IN_PLAY_DEFAULT)
+    return resolve(*SEEN_IN_PLAY, default, explicit, environ, settings_file)

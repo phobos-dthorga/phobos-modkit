@@ -21,6 +21,7 @@ COMMANDS = {
     "release": (".release.cli", "changelog checks, version constants kept in step, history screen"),
     "code": (".code.cli", "find, outline and show C# declarations, and every line using a name"),
     "cleanup": (".cleanup_cli", "what the tools, builds and tests left behind; deletes only with --apply"),
+    "test-pass": (".testpass_cli", "what a repository's in-game test list is waiting for, from the game's notes and the owner's verdicts"),
     "gate": (".gate.cli", "run a repository's checks before a commit and report only what failed"),
     "manifest": (".manifest", "every command, its reports and options, and what each one reads or changes"),
 }
