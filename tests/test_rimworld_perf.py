@@ -111,6 +111,10 @@ class RecordingTests(unittest.TestCase):
         patched = self.rec.inclusive_methods(self.samples, lambda o, p: p)
         self.assertEqual({"Verse.Pawn.Tick": 70}, {m: round(s.total, 3) for (m, _, _), s in patched.items()})
 
+    def test_no_mod_calls_another_in_the_fixture(self):
+        self.assertEqual({}, self.rec.mod_calls(self.samples))
+        self.assertIsNone(self.rec.outermost_mod(0))
+
     def test_counters(self):
         mean, worst, count = self.rec.counter("dotnet.gc.pause.time")
         self.assertAlmostEqual(0.03, mean)

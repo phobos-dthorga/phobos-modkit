@@ -235,6 +235,7 @@ class Recording:
             self.counters = {(r[0], r[1]): (r[2], r[3], r[4]) for r in conn.execute("SELECT name, tags, mean, max, samples FROM counter")}
         self._type_owner = None
         self._labels = {}
+        self._outer = {}
 
     # Threads
 
@@ -289,6 +290,37 @@ class Recording:
                 result = own if FALLBACK_ORDER.index(own.kind) < FALLBACK_ORDER.index(inherited.kind) else inherited
             self._labels[current] = inherited = result
         return inherited
+
+    def outermost_mod(self, node):
+        """The first mod frame on the stack from the root, or None: the mod whose code led to the work."""
+        if node in self._outer:
+            return self._outer[node]
+        chain = []
+        while node >= 0 and node not in self._outer:
+            chain.append(node)
+            node = self.parent[node]
+        found = self._outer[node] if node >= 0 else None
+        for current in reversed(chain):
+            if found is None:
+                own = self.owner_of_frame(self.frame_of[current])
+                if own.kind == MOD:
+                    found = own
+            self._outer[current] = found
+        return found
+
+    def mod_calls(self, samples):
+        """{(outer mod, inner mod): Share} where one mod's code led into another's: the outermost and innermost mods differ."""
+        result = defaultdict(Share)
+        for node, kind, ms in samples:
+            outer, inner = self.outermost_mod(node), self.label(node)
+            if outer is None or inner.kind != MOD or outer == inner:
+                continue
+            share = result[(outer, inner)]
+            if kind == CPU:
+                share.cpu += ms
+            else:
+                share.native += ms
+        return dict(result)
 
     def path(self, node):
         frames = []

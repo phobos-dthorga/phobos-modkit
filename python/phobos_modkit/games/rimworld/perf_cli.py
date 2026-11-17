@@ -243,6 +243,13 @@ def summary_report(rec, folder, top):
         tick_samples = rec.in_phase(samples, phases, ticking)
         rows, total = _owner_rows(rec.by_owner(tick_samples), tick_share.total, top)
         report.section("Ticking: who caused the time", ATTRIBUTION, Table(OWNER_HEADERS, rows, total))
+        calls = sorted(rec.mod_calls(tick_samples).items(), key=lambda kv: (-kv[1].total, kv[0][0].name, kv[0][1].name))
+        if calls:
+            report.section("Ticking: one mod's code running another's",
+                           "Time a mod caused while called from another mod's code. The first mod decides when and how often; "
+                           "the second does the work. Look at both before blaming either.",
+                           Table(["Called from", "Ran in", "ms", "Share of ticking"],
+                                 [(o.name, i.name, ms(s.total), pct(s.total, tick_share.total)) for (o, i), s in calls[:top]], len(calls)))
         rows, total = _method_rows(rec.inclusive_methods(tick_samples, lambda o, p: o.kind == MOD), tick_share.total, top)
         report.section("Ticking: mods' busiest methods (including what they call)", Table(["Method", "Mod", "ms", "Share of ticking"], rows, total))
         rows, total = _method_rows(rec.self_methods(tick_samples), tick_share.total, top)

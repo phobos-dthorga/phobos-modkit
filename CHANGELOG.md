@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-11-17
+
+The first recording of the owner's game (3 minutes, many wounded) put 95.6% of ticking down to Smart Medicine, when Search and Rescue was calling it in a scoring loop; the headline named the mod doing the work, not the one deciding how often.
+
+### Fixed
+
+- rimworld-perf report: a new table, one mod's code running another's, pairs the outermost mod on each stack with the innermost, so a mod that calls another in a loop is named beside it.
+- The phase list and the guide say what the first recording of the game confirmed: the named parts matched 99.2% of the main thread, and every mod assembly with time was matched to its mod.
+
 ## [1.13.0] - 2026-11-17
 
 In phobos-rimworld (17 November 2026) a slow game with many wounded pawns could only be answered by reading code, because nothing measured the running game. RimWorld 1.7 turned out to run on Microsoft's CoreCLR with its diagnostics pipe open, so Microsoft's own tools can record it from outside; the owner asked for a tool built on that.

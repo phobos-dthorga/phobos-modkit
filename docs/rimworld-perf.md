@@ -51,6 +51,9 @@ cannot be made again.
   a Harmony prefix or postfix is its own frame and counts for the mod that wrote it. With no mod on the stack the game caused it,
   the engine's drawing included. **Work a transpiler adds inside a game method counts as the game's**, and so does a small method
   the compiler inlined into its caller.
+- **One mod's code running another's** pairs the outermost mod on a stack with the innermost one. The first decides when and how
+  often; the second does the work. The first recording of the owner's game (17 November 2026) needed it: Search and Rescue called
+  Smart Medicine's medicine search inside a scoring loop, and the caused-by table alone named only Smart Medicine.
 - **Where the thread was** is the method running when the sample was taken: the place to look for the slow line.
 - **Running managed code** against **in native code or waiting**: the runtime marks each sample. Native time is the engine,
   the operating system, garbage collection or a wait; it is still time the frame took.
@@ -68,4 +71,6 @@ cannot be made again.
   that ran for less than a millisecond in all can be missed or over-counted by chance.
 - The trace counts no calls and no ticks, so it cannot give ticks per second.
 - Overloads of one method are counted together (the report drops argument lists).
-- The phase patterns were read from the game's code, not yet checked against a recording of it.
+- The phase patterns were read from the game's code. In the first recording of the game (RimWorld 1.7.5011, 349 mods, 17 November
+  2026) they matched 99.2% of the main thread; the rest sat in the program's entry point. The interface and loading patterns saw
+  little time there and are the least checked.
