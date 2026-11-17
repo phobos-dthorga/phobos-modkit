@@ -4,6 +4,18 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-11-17
+
+In phobos-rimworld (17 November 2026), a Workshop report gave an update date some hours old for a mod updated minutes before, while its first line said nothing was reused from the cache. Details, reused for a day, were never counted. The owner asked for it fixed. This entry followed the tagged commit, which went up without it.
+
+### Added
+
+- --details-max-age H for steam-workshop and rimworld-workshop: how long fetched details (update date, version tags, subscribers) stay fresh. Default 1 hour, since details cost one request per 100 items; --max-age (default 24) now covers comments and collections only.
+
+### Fixed
+
+- The first line of a report names what came from the cache: items' details with the age of the oldest, and comment pages or collections, and says --refresh gives the newest. It used to count reused comments only, so a report built on old details looked freshly fetched.
+
 ## [1.10.0] - 2026-11-17
 
 A crash in phobos-rimworld (17 November 2026) was fixed with a patch whose target is named as a "Type:Member" string, and its parameters had to be checked against Combat Extended by hand: the target check read neither. The owner asked for the gap closed.
