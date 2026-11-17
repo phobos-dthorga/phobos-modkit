@@ -4,6 +4,17 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-11-17
+
+In phobos-rimworld (17 November 2026) a one-off audit of stand-in art took two throwaway scripts and a hand check of every "mixed" result; the owner asked for it as a reusable tool.
+
+### Added
+
+- art-audit report: every shipped image paired with its records (its own name, the name before each underscore, or its folder's name) and classed by the record's first statement of how it was made, using the repository's patterns; images drawn in code, without a record, or with a record no rule recognises; generated images whose record calls them a stand-in; and pictures used by a Def that belong to another thing or are not ours, open or accepted with a reason. --mod, --kind, --all, --json.
+- art-audit check: exits 1 when an image has no record, for a repository's gate.
+- The RimWorld adapter's art part: the names a texture answers to (facings, masks, folders), and every use in Defs (with list-item parts and ParentName inheritance), patch operations and C# literals.
+- A repository's config/art-audit.json describes its images, records, kinds and accepted borrowings; docs/art-audit.md describes it.
+
 ## [1.11.0] - 2026-11-17
 
 In phobos-rimworld (17 November 2026), a Workshop report gave an update date some hours old for a mod updated minutes before, while its first line said nothing was reused from the cache. Details, reused for a day, were never counted. The owner asked for it fixed. This entry followed the tagged commit, which went up without it.

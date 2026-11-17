@@ -22,6 +22,7 @@ COMMANDS = {
     "code": (".code.cli", "find, outline and show C# declarations, and every line using a name"),
     "cleanup": (".cleanup_cli", "what the tools, builds and tests left behind; deletes only with --apply"),
     "test-pass": (".testpass_cli", "what a repository's in-game test list is waiting for, from the game's notes and the owner's verdicts"),
+    "art-audit": (".artaudit_cli", "every shipped image with its record and how it was made, and every borrowed picture"),
     "gate": (".gate.cli", "run a repository's checks before a commit and report only what failed"),
     "manifest": (".manifest", "every command, its reports and options, and what each one reads or changes"),
 }
