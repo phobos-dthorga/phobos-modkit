@@ -45,7 +45,8 @@ mention it. `steam-workshop` takes IDs or URLs for any game.
 
 | Option | What it does |
 | --- | --- |
-| `--max-age H` | Hours a fetched item stays fresh (default 24) |
+| `--max-age H` | Hours fetched comments and collections stay fresh (default 24) |
+| `--details-max-age H` | Hours fetched details (update date, version tags, subscribers) stay fresh (default 1): one request per 100 items, so an update made since shows |
 | `--refresh` | Fetch again even when fresh |
 | `--offline` | Use the cache only, never contact Steam |
 | `--days N` | How far back "recent" comments go (default 90) |

@@ -136,6 +136,22 @@ class Cache(CacheBase):
         self.refresh(forced, now=NOW + 3600, force=True)
         self.assertEqual(len(forced.comment_calls()), 2)
 
+    def test_details_go_stale_after_an_hour_while_comments_keep_a_day(self):
+        # An update made since the last fetch must show: details are cheap, so they are asked again sooner.
+        self.refresh(FakeSteam())
+        within = FakeSteam()
+        done = self.refresh(within, now=NOW + 30 * 60)
+        self.assertEqual((within.calls, done.details_reused, done.details_oldest), ([], 2, NOW))
+        later = FakeSteam()
+        done = self.refresh(later, now=NOW + 5 * 3600)
+        self.assertEqual(sum(1 for u, _ in later.calls if u == workshop.DETAILS_URL), 1)
+        self.assertEqual(later.comment_calls(), [])
+        self.assertEqual((done.details_fetched, done.details_reused, done.details_oldest, done.reused),
+                         (2, 0, None, 2))
+        longer = FakeSteam()
+        self.refresh(longer, now=NOW + 6 * 3600, details_max_age_hours=24)
+        self.assertEqual(longer.calls, [])
+
     def test_hidden_comments_are_remembered_not_asked_again(self):
         self.refresh(FakeSteam(private={"2222222222"}))
         with closing(workshop.connect(self.cache)) as conn:
@@ -187,10 +203,10 @@ class Reports(CacheBase):
 
 
 class Commands(CacheBase):
-    def run_core(self, *args, steam=None):
+    def run_core(self, *args, steam=None, now=NOW):
         out = io.StringIO()
         code = core_cli.main([*args, "--cache", str(self.cache)], environ={}, out=out, post=steam or FakeSteam(),
-                             pacer=self.sleeps.pacer(), clock=lambda: NOW)
+                             pacer=self.sleeps.pacer(), clock=lambda: now)
         return code, out.getvalue()
 
     def test_core_report_from_ids_and_urls(self):
@@ -199,6 +215,23 @@ class Commands(CacheBase):
         self.assertEqual(code, core_cli.EXIT_OK)
         self.assertIn("2 items' details and 2 comment pages fetched now", text)
         self.assertIn("Example Old Mod", text)
+
+    def test_the_first_line_names_what_came_from_the_cache_and_how_old(self):
+        # 17 Nov 2026: details reused from hours before hid an update made since, while the line said "0 reused".
+        self.run_core("report", "1111111111")
+        out = io.StringIO()
+        core_cli.main(["report", "1111111111", "--cache", str(self.cache), "--details-max-age", "24"], environ={},
+                      out=out, post=FakeSteam(), pacer=self.sleeps.pacer(), clock=lambda: NOW + 5 * 3600)
+        self.assertIn("0 items' details and 0 comment pages fetched now; from the cache: 1 items' details, the "
+                      "oldest fetched 5 hours ago and 1 comment pages from the last 24 hours. Use --refresh for "
+                      "the newest.", out.getvalue())
+        self.assertIn("1 items' details and 0 comment pages fetched now; from the cache: 1 comment pages",
+                      self.run_core("report", "1111111111", "--max-age", "48", now=NOW + 5 * 3600)[1])
+        self.assertIn("nothing from the cache.", self.run_core("details", "2222222222")[1])
+
+    def test_ages_read_in_minutes_then_hours(self):
+        self.assertEqual([core_cli.age_text(s) for s in (30, 60, 119 * 60, 2 * 3600 + 59 * 60)],
+                         ["under a minute", "1 minute", "119 minutes", "2 hours"])
 
     def test_a_bare_id_means_report_and_bad_targets_are_refused(self):
         self.assertIn("# Workshop research", self.run_core("1111111111")[1])

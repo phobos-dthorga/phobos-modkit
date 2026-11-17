@@ -44,6 +44,9 @@ USER_AGENT = "phobos-modkit (+https://github.com/phobos-dthorga/phobos-modkit)"
 STEAMID64_BASE = 76561197960265728
 DETAILS_BATCH = 100
 COMMENTS_COUNT = 50
+# Details are one request per 100 items, so they stay fresh for an hour only: an update made since must show.
+# Comments are paced one item at a time and keep the longer --max-age.
+DETAILS_MAX_AGE_HOURS = 1
 PAUSE_SECONDS = 8
 BACKOFF_SECONDS = 150
 TIMEOUT_SECONDS = 30
@@ -321,7 +324,8 @@ def _save_unavailable(conn, item_id, reason, now):
                  (now, reason, item_id))
 
 
-def refresh_collections(ids, cache, max_age_hours=24, force=False, post=http_post, clock=time.time):
+def refresh_collections(ids, cache, max_age_hours=24, force=False, post=http_post, clock=time.time,
+                        details_max_age_hours=DETAILS_MAX_AGE_HOURS):
     """Bring the cache up to date for these collections and every item in them: the children lists, then the
     children's details (no comments). Returns (Refresh, {collection ID: child IDs or None})."""
     now = int(clock())
@@ -347,8 +351,11 @@ def refresh_collections(ids, cache, max_age_hours=24, force=False, post=http_pos
     # The collections' own details too, so a report can name each collection by its title.
     members = list(dict.fromkeys(list(ids) + [child for found in children.values() if found for child in found]))
     if members:
-        items = refresh(members, cache, max_age_hours, comments=False, force=force, post=post, clock=clock)
+        items = refresh(members, cache, max_age_hours, comments=False, force=force, post=post, clock=clock,
+                        details_max_age_hours=details_max_age_hours)
         done.details_fetched += items.details_fetched
+        done.details_reused += items.details_reused
+        done.details_oldest = items.details_oldest
         done.reused += items.reused
         done.problems += items.problems
     return done, children
@@ -356,26 +363,34 @@ def refresh_collections(ids, cache, max_age_hours=24, force=False, post=http_pos
 
 @dataclass
 class Refresh:
-    """What one refresh did."""
+    """What one refresh did. reused counts comment pages and collections; details_reused counts items' details,
+    and details_oldest is when the oldest of those was fetched (None when none was reused)."""
     details_fetched: int = 0
     comments_fetched: int = 0
     reused: int = 0
+    details_reused: int = 0
+    details_oldest: int | None = None
     rate_limited: bool = False
     problems: list = field(default_factory=list)
 
 
 def refresh(ids, cache, max_age_hours=24, comments=True, force=False, post=http_post, pacer=None,
-            clock=time.time):
-    """Bring the cache up to date for these items: details in batches, comments one item at a time, paced. Items
-    fetched within max_age_hours are reused. Returns Refresh; never raises for one item's failure."""
+            clock=time.time, details_max_age_hours=DETAILS_MAX_AGE_HOURS):
+    """Bring the cache up to date for these items: details in batches, comments one item at a time, paced. Details
+    fetched within details_max_age_hours and comments within max_age_hours are reused. Returns Refresh; never
+    raises for one item's failure."""
     now = int(clock())
     oldest = now - int(max_age_hours * 3600)
+    oldest_details = now - int(details_max_age_hours * 3600)
     pacer = pacer or Pacer()
     done = Refresh()
     with closing(connect(cache)) as conn:
         known = {row[0]: row[1:] for row in conn.execute(
             "SELECT id, fetched_at, comments_fetched_at, creator, result FROM item")}
-        stale = [i for i in ids if force or i not in known or known[i][0] < oldest]
+        stale = [i for i in ids if force or i not in known or known[i][0] < oldest_details]
+        kept = [known[i][0] for i in ids if i not in stale]
+        done.details_reused = len(kept)
+        done.details_oldest = min(kept) if kept else None
         if stale:
             try:
                 for item in fetch_details(stale, post):

@@ -7,8 +7,8 @@
     python -m phobos_modkit steam-workshop sql "SELECT title, time_updated FROM item"
 
 Details come in batches of 100 in one request, and a collection's members in one more. Comments take one request per item, about 8 s apart, because Steam
-limits quick reads; anything fetched in the last 24 hours (--max-age) is reused. Never logs in or changes anything
-on Steam. Options go after the report's name.
+limits quick reads; comments and collections fetched in the last 24 hours (--max-age) are reused, and details
+fetched in the last hour (--details-max-age), so a recent update shows. Never logs in or changes anything on Steam. Options go after the report's name.
 """
 from __future__ import annotations
 
@@ -30,7 +30,11 @@ EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 def common_options():
     common = argparse.ArgumentParser(add_help=False)
     c = common.add_argument_group("fetching")
-    c.add_argument("--max-age", type=float, default=24, help="hours a fetched item stays fresh (default 24)")
+    c.add_argument("--max-age", type=float, default=24,
+                   help="hours fetched comments and collections stay fresh (default 24)")
+    c.add_argument("--details-max-age", type=float, default=workshop.DETAILS_MAX_AGE_HOURS,
+                   help="hours fetched details (update date, versions) stay fresh "
+                        f"(default {workshop.DETAILS_MAX_AGE_HOURS:g})")
     c.add_argument("--refresh", action="store_true", help="fetch again even when the cache is fresh")
     c.add_argument("--offline", action="store_true", help="use the cache only; never contact Steam")
     c.add_argument("--cache", help="where the cache is kept (else PHOBOS_MODKIT_CACHE, settings, the temp folder)")
@@ -82,10 +86,12 @@ def run(args, ids, settings_file=None, environ=None, out=None, post=None, pacer=
                 children = workshop.collection_children(conn, ids)
         else:
             done, children = workshop.refresh_collections(ids, cache, args.max_age, force=args.refresh,
-                                                          post=post or workshop.http_post, clock=clock)
+                                                          post=post or workshop.http_post, clock=clock,
+                                                          details_max_age_hours=args.details_max_age)
     elif ids and not args.offline and args.report in ("report", "details", "comments", "versions"):
         done = workshop.refresh(ids, cache, args.max_age, comments=args.report in ("report", "comments"),
-                                force=args.refresh, post=post or workshop.http_post, pacer=pacer, clock=clock)
+                                force=args.refresh, post=post or workshop.http_post, pacer=pacer, clock=clock,
+                                details_max_age_hours=args.details_max_age)
     with closing(workshop.connect(cache)) as conn:
         try:
             report = prepare(conn, args) if prepare else None
@@ -104,8 +110,7 @@ def run(args, ids, settings_file=None, environ=None, out=None, post=None, pacer=
             print(f"The query failed: {problem}", file=sys.stderr)
             return EXIT_FAILED
     if done is not None:
-        line = (f"Steam: {done.details_fetched} items' details and {done.comments_fetched} comment pages fetched now; "
-                f"{done.reused} reused from the last {args.max_age:g} hours.")
+        line = fetch_line(done, args.report, args.max_age, clock())
         if done.rate_limited:
             line += (" Steam is limiting requests for now, so some items show older comments or none: run this "
                      "again in a few minutes.")
@@ -118,6 +123,31 @@ def run(args, ids, settings_file=None, environ=None, out=None, post=None, pacer=
     else:
         out.write(render_markdown(report, redact) + "\n")
     return EXIT_OK
+
+
+def age_text(seconds):
+    """How long ago, in whole minutes under two hours and whole hours after."""
+    minutes = max(0, int(seconds // 60))
+    if minutes < 120:
+        return "under a minute" if minutes == 0 else f"{minutes} minute{'s' if minutes != 1 else ''}"
+    return f"{minutes // 60} hours"
+
+
+def fetch_line(done, report_name, max_age, now):
+    """The report's first line: what was fetched now and what came from the cache, with the age of the oldest
+    details reused, so an update newer than the cache is never hidden behind a fresh-looking date."""
+    line = f"Steam: {done.details_fetched} items' details and {done.comments_fetched} comment pages fetched now"
+    reused = []
+    if done.details_reused:
+        reused.append(f"{done.details_reused} items' details, the oldest fetched "
+                      f"{age_text(now - done.details_oldest)} ago")
+    if done.reused:
+        what = "collections" if report_name == "collection" else "comment pages"
+        reused.append(f"{done.reused} {what} from the last {max_age:g} hours")
+    line += ("; from the cache: " + " and ".join(reused) + ".") if reused else "; nothing from the cache."
+    if done.details_reused:
+        line += " Use --refresh for the newest."
+    return line
 
 
 def normalise(argv):
