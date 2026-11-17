@@ -4,6 +4,22 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-11-17
+
+In phobos-rimworld (17 November 2026) a slow game with many wounded pawns could only be answered by reading code, because nothing measured the running game. RimWorld 1.7 turned out to run on Microsoft's CoreCLR with its diagnostics pipe open, so Microsoft's own tools can record it from outside; the owner asked for a tool built on that.
+
+### Added
+
+- rimworld-perf record: attaches dotnet-trace and dotnet-counters (10.0.750501, installed into the kit's build folder on first use) to the running game for --seconds, indexes the trace with the owners of every module against the mod list of the day, and reports it. --label, --pid, --keep-speedscope.
+- rimworld-perf report: the main thread by part of the game loop (ticking, drawing, interface, loading), who caused the time (the innermost mod on the stack), mods' busiest methods, where the thread was when sampled, game methods other mods patched, garbage collection and runtime counters, other busy threads, and time outside the named parts.
+- rimworld-perf mod, compare (as shares of the main thread and of ticking), list, and index for a trace recorded by hand.
+- The core reader of sampled stacks (sampling.py) and the diagnostics tools' runner (dotnet_diagnostics.py), with no game in them.
+- A cache policy may give its own reason for the age rule (aged); rimworld-perf's says a recording cannot be made again.
+
+### Changed
+
+- AGENTS.md: in-game instrumentation stays Phobos Scope's; sampling a game from outside belongs here.
+
 ## [1.12.0] - 2026-11-17
 
 In phobos-rimworld (17 November 2026) a one-off audit of stand-in art took two throwaway scripts and a hand check of every "mixed" result; the owner asked for it as a reusable tool.

@@ -1,0 +1,452 @@
+"""rimworld-perf: where a running RimWorld spends its time, by mod, by method and by part of the main loop, from outside the game.
+
+    rimworld-perf record                     record the running game for 30 seconds, then report it
+    rimworld-perf record --seconds 60 --label "many wounded"
+    rimworld-perf report                     the newest recording again (or name one: 20261117-1845, or its label)
+    rimworld-perf mod "Combat Extended"      one mod in a recording: its busiest methods and where its time went
+    rimworld-perf compare                    the last two recordings, as shares of the main thread and of ticking
+    rimworld-perf list                       every recording kept
+    rimworld-perf index FILE.speedscope.json [--counters FILE.json]   a trace recorded by hand
+
+Recording attaches Microsoft's dotnet-trace and dotnet-counters to the game through its .NET diagnostics pipe: nothing is
+installed in the game and nothing of the game is changed. The first recording installs both tools (a pinned version) into the kit's
+build folder, which needs the .NET SDK. Recordings stay in the kit's cache, outside every repository.
+"""
+from __future__ import annotations
+
+import argparse
+from contextlib import closing
+from datetime import datetime
+import fnmatch
+from pathlib import Path
+import re
+import shutil
+import sqlite3
+import subprocess
+import sys
+
+from ... import __version__
+from ... import cache as derived
+from ... import dotnet_diagnostics as dd
+from ...manifest import READS, RUNS
+from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
+from ...sampling import CPU, MOD, UNKNOWN, Recording, SamplingError, index_speedscope, modules, read_counters, write_counters, write_owners
+from . import paths, perf
+
+EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
+REPORTS = ("report", "record", "index", "mod", "compare", "list")
+CACHE_FOLDER = "rimworld-perf"
+INDEX_NAME = "index.sqlite"
+DEFAULT_SECONDS = 30
+MIN_SECONDS, MAX_SECONDS = 5, 600
+PAUSED_SHARE = 0.01                 # ticking under 1 % of the main thread: the game was paused or not in play
+ATTRIBUTION = ("**Caused by** is the innermost mod on the stack: a mod's code calling the game's counts for the mod, and a Harmony "
+               "prefix or postfix counts for the mod that wrote it. Work a transpiler adds inside a game method counts as the game's.")
+CAVEAT = ("A recording shows what the game did while it ran: what was on screen, the game speed and pausing all change it. It "
+          "measures; it is not an in-game test of whether anything works.")
+SHARE_NOTE = ("Compared as shares, not milliseconds: a faster game ticks more often, so a mod's milliseconds per second can rise "
+              "when the game speeds up.")
+
+
+class PerfError(RuntimeError):
+    pass
+
+
+def _parser():
+    common = argparse.ArgumentParser(add_help=False)
+    w = common.add_argument_group("where things are")
+    w.add_argument("--cache", help="where recordings are kept (else PHOBOS_MODKIT_CACHE, the settings file, the temp folder)")
+    w.add_argument("--game", help="the RimWorld folder (else RIMWORLD_PATH, the settings file, Steam's default)")
+    w.add_argument("--workshop", help="the Workshop content folder (else RIMWORLD_WORKSHOP_PATH, settings, beside the game)")
+    w.add_argument("--config", help="the folder holding ModsConfig.xml (else RIMWORLD_CONFIG_PATH, settings, default)")
+    w.add_argument("--settings", help="a JSON settings file with the paths above")
+    o = common.add_argument_group("output")
+    o.add_argument("--top", type=int, default=15, help="rows per table (default 15)")
+    o.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
+    o.add_argument("--no-redact", action="store_true", help="show the home folder instead of ~")
+    p = argparse.ArgumentParser(prog="rimworld-perf", description=__doc__.split("\n\n")[0],
+                                formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__.split("\n\n", 1)[1])
+    sub = p.add_subparsers(dest="report", metavar="report")
+    r = sub.add_parser("report", parents=[common], help="a recording: phases, who caused the time, busiest methods, garbage collection")
+    r.add_argument("recording", nargs="?", help="a recording's ID (its start is enough) or label; the newest when left out")
+    c = sub.add_parser("record", parents=[common], help="record the running game, then report it")
+    c.add_argument("--seconds", type=int, default=DEFAULT_SECONDS, help=f"how long to record (default {DEFAULT_SECONDS})")
+    c.add_argument("--label", help="a few words to find the recording by, such as what was happening")
+    c.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
+    c.add_argument("--keep-speedscope", action="store_true", help="keep the converted trace beside the index (large)")
+    i = sub.add_parser("index", parents=[common], help="index a speedscope file recorded by hand with dotnet-trace")
+    i.add_argument("file", help="a .speedscope.json file from dotnet-trace")
+    i.add_argument("--counters", help="dotnet-counters' JSON file from the same time")
+    i.add_argument("--label", help="a few words to find the recording by")
+    m = sub.add_parser("mod", parents=[common], help="one mod in a recording")
+    m.add_argument("name", help="a mod's name; * and ? are wildcards")
+    m.add_argument("recording", nargs="?", help="a recording's ID or label; the newest when left out")
+    k = sub.add_parser("compare", parents=[common], help="two recordings, as shares of the main thread and of ticking")
+    k.add_argument("first", nargs="?", help="the earlier recording; the second newest when both are left out")
+    k.add_argument("second", nargs="?", help="the later recording; the newest when both are left out")
+    sub.add_parser("list", parents=[common], help="every recording kept")
+    return p
+
+
+# ---- Numbers ----
+
+def ms(value):
+    return f"{value:,.0f}"
+
+
+def pct(part, whole):
+    return f"{100 * part / whole:.1f}%" if whole else "0.0%"
+
+
+def points(value):
+    return f"{value:+.1f}"
+
+
+def size(value):
+    """Bytes in the largest unit that keeps a figure of at least 1."""
+    for unit, scale in (("GB", 1e9), ("MB", 1e6), ("KB", 1e3)):
+        if abs(value) >= scale:
+            return f"{value / scale:,.1f} {unit}"
+    return f"{value:,.0f} bytes"
+
+
+# ---- Recordings on disk ----
+
+def recordings_root(args, environ, settings_file):
+    return derived.folder(CACHE_FOLDER, args.cache, environ, settings_file)
+
+
+def recordings(root):
+    root = Path(root)
+    if not root.is_dir():
+        return []
+    return sorted(p for p in root.iterdir() if (p / INDEX_NAME).is_file())
+
+
+def find(root, text):
+    found = recordings(root)
+    if not found:
+        raise PerfError(f"No recordings in {root}. Make one with: rimworld-perf record")
+    if not text:
+        return found[-1]
+    wanted = text.lower()
+    matches = [p for p in found if p.name.lower().startswith(wanted)]
+    if not matches:
+        matches = [p for p in found if wanted in (derived.read_meta(p / INDEX_NAME).get("label") or "").lower()]
+    if len(matches) != 1:
+        raise PerfError(f'"{text}" matches {len(matches)} recordings. Recordings: ' + ", ".join(p.name for p in found) + ".")
+    return matches[0]
+
+
+def new_folder(root, label, now):
+    slug = re.sub(r"[^a-z0-9]+", "-", (label or "").lower()).strip("-")[:40]
+    name = now.strftime("%Y%m%d-%H%M%S") + (f"-{slug}" if slug else "")
+    folder = Path(root) / name
+    if folder.exists():
+        raise PerfError(f"A recording named {name} already exists; wait a second and try again.")
+    return folder
+
+
+def build_index(folder, speedscope, counters_file, meta, args, environ, settings_file):
+    """Index a trace into folder, record who owns each module against today's mod list, and add the counters. Returns notes."""
+    index = Path(folder) / INDEX_NAME
+    index_speedscope(speedscope, index, meta)
+    notes = []
+    game = config = workshop = None
+    try:
+        game = paths.game_path(args.game, environ, settings_file)
+        workshop = paths.workshop_path(game, args.workshop, environ, settings_file)
+        config = paths.config_path(args.config, environ, settings_file)
+        mod_owners, shared = perf.active_mod_assemblies(game, workshop, config)
+        if shared:
+            notes.append(f"{len(shared)} assembly names are shipped by more than one active mod; each counts for the first in load order.")
+    except Exception as error:  # best effort: a report without mod names beats no report
+        mod_owners = {}
+        notes.append(f"The mod list could not be read ({error}), so no time is put down to a mod.")
+    owners = perf.classify(modules(index), perf.install_assemblies(game), mod_owners)
+    write_owners(index, owners)
+    write_counters(index, read_counters(counters_file) if counters_file else {})
+    with closing(sqlite3.connect(index)) as conn:
+        derived.write_meta(conn, {"notes": "\n".join(notes), "mods_matched": len(mod_owners)})
+        conn.commit()
+    return notes
+
+
+# ---- Reports ----
+
+def _owner_rows(shares, whole, top):
+    ordered = sorted(shares.items(), key=lambda kv: (-kv[1].total, kv[0].name))
+    rows = [(o.name, o.kind, ms(s.total), pct(s.total, whole), ms(s.cpu), ms(s.native)) for o, s in ordered[:top]]
+    return rows, len(ordered)
+
+
+OWNER_HEADERS = ["Caused by", "Kind", "ms", "Share", "Running managed code (ms)", "In native code or waiting (ms)"]
+
+
+def _method_rows(methods, whole, top, show_owner=True):
+    ordered = sorted(methods.items(), key=lambda kv: (-kv[1].total, kv[0][0]))
+    rows = []
+    for (method, owner, patched), share in ordered[:top]:
+        name = method + (" (patched)" if patched else "")
+        rows.append((name, owner.name, ms(share.total), pct(share.total, whole)) if show_owner else (name, ms(share.total), pct(share.total, whole)))
+    return rows, len(ordered)
+
+
+def _counter_rows(rec):
+    rows = []
+    pause = rec.counter("dotnet.gc.pause.time")
+    if pause:
+        rows.append(("Time paused for garbage collection", f"{100 * pause[0]:.1f}% of the time", f"worst second {100 * pause[1]:.1f}%"))
+    for tags, (mean, worst, _) in sorted(rec.counters_named("dotnet.gc.collections").items()):
+        generation = tags.split("=", 1)[-1] if tags else "all"
+        rows.append((f"Collections, {generation}", f"{mean:.1f} a second", f"most in a second {worst:.0f}"))
+    allocated = rec.counter("dotnet.gc.heap.total_allocated")
+    if allocated:
+        rows.append(("Memory allocated", f"{size(allocated[0])} a second", f"most in a second {size(allocated[1])}"))
+    jit = rec.counter("dotnet.jit.compilation.time")
+    if jit:
+        rows.append(("Compiling code (JIT)", f"{100 * jit[0]:.1f}% of the time", f"worst second {100 * jit[1]:.1f}%"))
+    locks = rec.counter("dotnet.monitor.lock_contentions")
+    if locks:
+        rows.append(("Threads waiting on a lock", f"{locks[0]:,.0f} a second", f"most in a second {locks[1]:,.0f}"))
+    cpu = rec.counter("dotnet.process.cpu.time")
+    if cpu:
+        rows.append(("Processor cores busy", f"{cpu[0]:.1f} on average", f"most {cpu[1]:.1f}"))
+    memory = rec.counter("dotnet.process.memory.working_set")
+    if memory:
+        rows.append(("Memory in use (working set)", f"{size(memory[0])} on average", f"most {size(memory[1])}"))
+    return rows
+
+
+def summary_report(rec, folder, top):
+    phases, ticking = perf.phases()
+    main = rec.main_thread()
+    samples = rec.thread_samples(main)
+    whole = rec.duration_ms(main)
+    meta = rec.meta
+    report = Report(f"rimworld-perf: {folder.name}")
+    label = f' ("{meta["label"]}")' if meta.get("label") else ""
+    report.lines.append(f"Recorded {float(meta.get('seconds') or whole / 1000):.0f} s{label} at {meta.get('recorded_at', '?')}: "
+                        f"{len(rec.threads)} threads; the main thread is {rec.thread_label(main)}, the busiest running managed code.")
+    report.lines.append(CAVEAT)
+    by_phase = rec.by_phase(samples, phases)
+    tick_share = by_phase.get(ticking)
+    if tick_share is None or tick_share.total < PAUSED_SHARE * whole:
+        report.lines.append("**The simulation hardly ran in this recording: was the game paused, or on the main menu?** Record "
+                            "again with the game running at the speed that feels slow.")
+    for note in (meta.get("notes") or "").splitlines():
+        report.lines.append(note)
+    phase_rows = [(name or "other (outside the named parts)", ms(s.total), pct(s.total, whole), pct(s.cpu, s.total) if s.total else "-")
+                  for name, s in sorted(by_phase.items(), key=lambda kv: (-kv[1].total, kv[0] or "~"))]
+    report.section("The main thread, by part of the game loop", Table(["Part", "ms", "Share of the main thread", "Of it, running managed code"], phase_rows))
+    if tick_share and tick_share.total:
+        tick_samples = rec.in_phase(samples, phases, ticking)
+        rows, total = _owner_rows(rec.by_owner(tick_samples), tick_share.total, top)
+        report.section("Ticking: who caused the time", ATTRIBUTION, Table(OWNER_HEADERS, rows, total))
+        rows, total = _method_rows(rec.inclusive_methods(tick_samples, lambda o, p: o.kind == MOD), tick_share.total, top)
+        report.section("Ticking: mods' busiest methods (including what they call)", Table(["Method", "Mod", "ms", "Share of ticking"], rows, total))
+        rows, total = _method_rows(rec.self_methods(tick_samples), tick_share.total, top)
+        report.section("Ticking: where the thread was when sampled", Table(["Method", "Owner", "ms", "Share of ticking"], rows, total))
+        rows, total = _method_rows(rec.inclusive_methods(tick_samples, lambda o, p: p), tick_share.total, top, show_owner=False)
+        if rows:
+            report.section("Ticking: game methods other mods have patched (including what they call)",
+                           Table(["Method", "ms", "Share of ticking"], rows, total))
+    rows, total = _owner_rows(rec.by_owner(samples), whole, top)
+    report.section("The whole main thread: who caused the time", Table(OWNER_HEADERS, rows, total))
+    counters = _counter_rows(rec)
+    report.section("Garbage collection and the runtime", Table(["Measure", "Average", "Worst"], counters) if counters
+                   else "No counters were recorded.")
+    others = sorted((t for t in rec.threads if t != main), key=lambda t: (-rec.threads[t][3], t))
+    rows = []
+    for thread in others[:top]:
+        cpu_ms = rec.threads[thread][3]
+        if cpu_ms <= 0:
+            continue
+        shares = rec.by_owner(rec.thread_samples(thread))
+        busiest = max(shares.items(), key=lambda kv: (kv[1].cpu, kv[0].name))[0].name if shares else "-"
+        rows.append((rec.thread_label(thread), ms(cpu_ms), busiest))
+    if rows:
+        report.section("Other threads running managed code", Table(["Thread", "Running managed code (ms)", "Mostly caused by"], rows))
+    outside = rec.in_phase(samples, phases, None)
+    if outside:
+        firsts = {}
+        for node, kind, value in outside:
+            first = next((rec.frames[f][2] for f in rec.path(node) if rec.owner_of_frame(f).kind != "runtime"), "(only .NET frames)")
+            firsts[first] = firsts.get(first, 0.0) + value
+        rows = [(name, ms(v), pct(v, whole)) for name, v in sorted(firsts.items(), key=lambda kv: (-kv[1], kv[0]))[:top]]
+        report.section("Outside the named parts: the first method of ours, the game's or a mod's on the stack",
+                       "If a large share sits here, the list of parts (perf-phases.json) needs another entry.",
+                       Table(["Method", "ms", "Share of the main thread"], rows, len(firsts)))
+    unknown = {o.name: s for o, s in rec.by_owner([(n, k, v) for _, n, k, v in rec.samples]).items() if o.kind == UNKNOWN}
+    if unknown:
+        rows = [(name, ms(s.total)) for name, s in sorted(unknown.items(), key=lambda kv: (-kv[1].total, kv[0]))[:top]]
+        report.section("Modules no mod or game file was matched to", Table(["Module", "ms, all threads"], rows, len(unknown)))
+    return report
+
+
+def mod_report(rec, folder, pattern, top):
+    phases, ticking = perf.phases()
+    main = rec.main_thread()
+    samples = rec.thread_samples(main)
+    whole = rec.duration_ms(main)
+    names = sorted({o.name for o in rec.owners.values() if o.kind == MOD and fnmatch.fnmatchcase(o.name.lower(), pattern.lower())})
+    if not names:
+        raise PerfError(f'No mod in this recording matches "{pattern}". A mod whose code never ran while recording is not in it.')
+    report = Report(f"rimworld-perf: {pattern} in {folder.name}", [ATTRIBUTION])
+    for name in names[:top]:
+        mine = [s for s in samples if rec.label(s[0]).name == name and rec.label(s[0]).kind == MOD]
+        total = sum(v for _, _, v in mine)
+        tick = sum(v for _, _, v in rec.in_phase(mine, phases, ticking))
+        everywhere = sum(v for _, n, _, v in rec.samples if rec.label(n).kind == MOD and rec.label(n).name == name)
+        section = report.section(name, f"Caused {ms(total)} ms on the main thread ({pct(total, whole)} of it), {ms(tick)} ms of it while "
+                                        f"ticking; {ms(everywhere)} ms on all threads.")
+        rows, count = _method_rows(rec.inclusive_methods(samples, lambda o, p, n=name: o.kind == MOD and o.name == n), whole, top, show_owner=False)
+        section.blocks.append(Table(["Its methods (including what they call)", "ms", "Share of the main thread"], rows, count))
+        rows, count = _method_rows(rec.self_methods(mine), whole, top)
+        section.blocks.append(Table(["Where its time was spent", "Owner", "ms", "Share of the main thread"], rows, count))
+    return report
+
+
+def _shares(rec):
+    phases, ticking = perf.phases()
+    main = rec.main_thread()
+    samples = rec.thread_samples(main)
+    whole = rec.duration_ms(main)
+    by_phase = {name: s.total / whole if whole else 0.0 for name, s in rec.by_phase(samples, phases).items()}
+    tick_samples = rec.in_phase(samples, phases, ticking)
+    tick_total = sum(v for _, _, v in tick_samples)
+    owners = {o: s.total / tick_total for o, s in rec.by_owner(tick_samples).items()} if tick_total else {}
+    pause = rec.counter("dotnet.gc.pause.time")
+    return by_phase, owners, pause[0] if pause else None
+
+
+def compare_report(before, after, names, top):
+    phases_before, owners_before, pause_before = _shares(before)
+    phases_after, owners_after, pause_after = _shares(after)
+    report = Report(f"rimworld-perf: {names[0]} against {names[1]}", [SHARE_NOTE, CAVEAT])
+    keys = sorted(set(phases_before) | set(phases_after), key=lambda k: k or "~")
+    report.section("Parts of the main loop, as shares of the main thread", Table(["Part", "Before", "After", "Change (points)"], [
+        (k or "other", f"{100 * phases_before.get(k, 0):.1f}%", f"{100 * phases_after.get(k, 0):.1f}%",
+         points(100 * (phases_after.get(k, 0) - phases_before.get(k, 0)))) for k in keys]))
+    owners = set(owners_before) | set(owners_after)
+    changes = sorted(owners, key=lambda o: (-abs(owners_after.get(o, 0) - owners_before.get(o, 0)), o.name))
+    report.section("Who caused the ticking time, largest changes first", Table(["Caused by", "Kind", "Before", "After", "Change (points)"], [
+        (o.name, o.kind, f"{100 * owners_before.get(o, 0):.1f}%", f"{100 * owners_after.get(o, 0):.1f}%",
+         points(100 * (owners_after.get(o, 0) - owners_before.get(o, 0)))) for o in changes[:top]], len(changes)))
+    if pause_before is not None and pause_after is not None:
+        report.lines.append(f"Time paused for garbage collection: {100 * pause_before:.1f}%, then {100 * pause_after:.1f}%.")
+    return report
+
+
+def list_report(root):
+    found = recordings(root)
+    report = Report("rimworld-perf: recordings", [f"{len(found)} recordings in {root}."])
+    rows = []
+    for folder in reversed(found):
+        meta = derived.read_meta(folder / INDEX_NAME)
+        rows.append((folder.name, meta.get("recorded_at", "?"), meta.get("seconds", "?"), meta.get("label", "")))
+    if rows:
+        report.section("Newest first", Table(["Recording", "Recorded at", "Seconds", "Label"], rows))
+    return report
+
+
+# ---- Running ----
+
+def _record(args, root, environ, settings_file, run, popen, now):
+    if not MIN_SECONDS <= args.seconds <= MAX_SECONDS:
+        raise PerfError(f"--seconds must be between {MIN_SECONDS} and {MAX_SECONDS}.")
+    pid = args.pid
+    if pid is None:
+        running = dd.find_processes(perf.PROCESS_NAME, run)
+        if not running:
+            raise PerfError("RimWorld is not running. Start it, load the save, unpause at the speed that feels slow, then record.")
+        if len(running) > 1:
+            raise PerfError("More than one RimWorld is running (" + ", ".join(str(p) for p, _ in running) + "); name one with --pid.")
+        pid = running[0][0]
+    trace_tool, counters_tool, installed = dd.ensure_tools(environ, run)
+    folder = new_folder(root, args.label, now)
+    speedscope, counters_file, notes = dd.record(pid, args.seconds, folder, trace_tool, counters_tool, popen)
+    meta = {"kit_version": __version__, "recorded_at": now.strftime("%Y-%m-%d %H:%M:%S"), "seconds": args.seconds,
+            "label": args.label or "", "pid": pid, "game_name": perf.GAME_NAME, "tools_version": dd.TOOLS_VERSION}
+    notes = notes + build_index(folder, speedscope, counters_file, meta, args, environ, settings_file)
+    if not args.keep_speedscope:
+        derived.remove(speedscope)
+    if installed:
+        notes.insert(0, f"Installed dotnet-trace and dotnet-counters {dd.TOOLS_VERSION} into {dd.tools_folder(environ)} first.")
+    return folder, notes
+
+
+def _index(args, root, environ, settings_file, now):
+    source = Path(args.file)
+    if not source.is_file():
+        raise PerfError(f"No file at {source}.")
+    folder = new_folder(root, args.label, now)
+    folder.mkdir(parents=True)
+    meta = {"kit_version": __version__, "recorded_at": now.strftime("%Y-%m-%d %H:%M:%S"), "seconds": "",
+            "label": args.label or "", "game_name": perf.GAME_NAME, "source": str(source)}
+    try:
+        notes = build_index(folder, source, Path(args.counters) if args.counters else None, meta, args, environ, settings_file)
+    except Exception:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise
+    return folder, notes
+
+
+def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.run, popen=subprocess.Popen, now=None):
+    out = out or sys.stdout
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv or (argv[0] not in REPORTS and argv[0] not in ("-h", "--help")):
+        argv.insert(0, "report")
+    try:
+        args = _parser().parse_args(argv)
+    except SystemExit as stop:
+        return EXIT_USAGE if stop.code else EXIT_OK
+    settings_file = args.settings or settings_file
+    redact = keep if args.no_redact else home_redactor()
+    code = EXIT_OK
+    root = recordings_root(args, environ, settings_file)
+    try:
+        if args.report == "list":
+            report = list_report(root)
+        elif args.report == "compare":
+            if bool(args.first) != bool(args.second):
+                raise PerfError("Name two recordings, or none for the last two.")
+            found = recordings(root)
+            if not args.first and len(found) < 2:
+                raise PerfError("Fewer than two recordings are kept, so there is nothing to compare.")
+            first = find(root, args.first) if args.first else found[-2]
+            second = find(root, args.second) if args.second else found[-1]
+            report = compare_report(Recording(first / INDEX_NAME), Recording(second / INDEX_NAME), (first.name, second.name), args.top)
+        elif args.report == "mod":
+            folder = find(root, args.recording)
+            report = mod_report(Recording(folder / INDEX_NAME), folder, args.name, args.top)
+        else:
+            notes = []
+            if args.report == "record":
+                folder, notes = _record(args, root, environ, settings_file, run, popen, now or datetime.now())
+            elif args.report == "index":
+                folder, notes = _index(args, root, environ, settings_file, now or datetime.now())
+            else:
+                folder = find(root, args.recording)
+            report = summary_report(Recording(folder / INDEX_NAME), folder, args.top)
+            for note in notes:
+                if note not in report.lines:
+                    report.lines.insert(1, note)
+    except (PerfError, SamplingError, dd.DiagnosticsError) as error:
+        report, code = Report("rimworld-perf: error", [str(error)]), EXIT_FAILED
+    print(envelope_text("rimworld-perf", report, redact) if args.json else render_markdown(report, redact), file=out)
+    return code
+
+
+CACHE_POLICIES = [{"folder": CACHE_FOLDER,
+                   "aged": "a recording of the game, unchanged for {days} days; it cannot be made again, so compare against it first if it matters"}]
+
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
+            "note": "Recording attaches Microsoft's dotnet-trace and dotnet-counters to the running game; it changes nothing in it.",
+            "reports": {
+    "report": {"question": "Where does my game spend its time, and which mods cause it?"},
+    "record": {"effect": RUNS, "question": "What is my running game doing right now?"},
+    "index": {"question": "What does a trace I recorded by hand say?"},
+    "mod": {"question": "What does one mod cost while the game runs?"},
+    "compare": {"question": "Did a change make the game faster?"},
+}}

@@ -4,6 +4,12 @@ No third-party code is copied into this repository. The Rust tools download thes
 they are built, at the versions `Cargo.lock` pins; their licences are as their authors publish them. Nothing
 from any game is included.
 
+## Tools installed at run time, not shipped
+
+rimworld-perf installs Microsoft's [dotnet-trace](https://www.nuget.org/packages/dotnet-trace) and
+[dotnet-counters](https://www.nuget.org/packages/dotnet-counters) (MIT, part of [dotnet/diagnostics](https://github.com/dotnet/diagnostics))
+with `dotnet tool install` into the kit's build folder on first use, and runs them. Nothing of theirs is in this repository.
+
 ## Direct dependencies of xml-index
 
 | Crate | Licence | Why it is used |

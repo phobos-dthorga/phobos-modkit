@@ -130,6 +130,14 @@ class Cache(unittest.TestCase):
         self.assertIn("unchanged for 20 days", found["old.sqlite"])
         self.assertEqual(["Kept the fetched cache: slow to fetch."], notes)
 
+    def test_a_policy_says_why_old_entries_go(self):
+        touch(self.cache / "recordings" / "20261101-100000" / "index.sqlite", age_days=40)
+        os.utime(self.cache / "recordings" / "20261101-100000", (NOW - 40 * cleanup.DAY,) * 2)
+        policies = {"recordings": {"folder": "recordings", "aged": "a recording, unchanged for {days} days; it cannot be made again"}}
+        items, _ = cleanup.cache_items(self.cache, policies, 14, NOW)
+        self.assertEqual(["a recording, unchanged for 40 days; it cannot be made again"], [i.why for i in items])
+        self.assertIn("rimworld-perf", cleanup.cache_policies())
+
     def test_a_save_index_is_stale_once_its_save_changes(self):
         from phobos_modkit.games.rimworld import save as saves
         saves_folder = Path(self.temp.name) / "Saves"

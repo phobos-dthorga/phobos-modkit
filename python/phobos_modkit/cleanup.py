@@ -5,7 +5,8 @@ Three sources, each saying why a thing may go:
 - **The kit's cache** (phobos_modkit.paths.cache_root): every tool's derived data. A tool may declare a CACHE_POLICY for
   its folder: `stale`, a function naming why one file is no longer any use (its source has gone or changed), and `keep`,
   a reason the folder is never cleared (fetched pages, paced and slow to fetch again). Anything else goes once it has
-  not changed for `older_than` days; the tools rebuild it on their next run. Frozen copies a crashed run left behind
+  not changed for `older_than` days; the tools rebuild it on their next run, or, for what cannot be rebuilt (a recording
+  of a running game), the policy's `aged` text says so, with {days} for the age. Frozen copies a crashed run left behind
   go after an hour.
 - **The kit's build folder** (phobos_modkit.native.build_dir): the debug profile, which only the kit's own tests and
   development builds use. The release programs the tools run are never touched.
@@ -154,7 +155,7 @@ def cache_items(root, policies, older_than_days, now, environ=None, settings_fil
                     notes.append(f"Could not judge {entry.name} in {folder.name}: {error}")
             if not why and modified(entry) < cutoff:
                 days = int((now - modified(entry)) // DAY)
-                why = f"unchanged for {days} days; rebuilt when next needed"
+                why = policy["aged"].format(days=days) if policy.get("aged") else f"unchanged for {days} days; rebuilt when next needed"
             if why:
                 items.append(Item(f"Cache: {folder.name}", entry, size_of(entry), why))
     return items, notes

@@ -13,6 +13,9 @@ questions in a short summary instead of a long read. One shared home for code th
   [Workshop publishing](docs/workshop-publishing.md), [release chores](docs/release.md), [the gate](docs/gate.md),
   [mod settings](docs/rimworld-settings.md), [the code index](docs/code.md), [Harmony patches](docs/rimworld-patches.md),
   [startup sessions](docs/rimworld-startup.md), [the readiness scan](docs/rimworld-readiness.md) and [the target check](docs/rimworld-targets.md).
+- **rimworld-perf (1.13.0) records a running RimWorld 1.7 from outside** with Microsoft's dotnet-trace and dotnet-counters, which
+  its first recording installs (needs the .NET SDK); save the game first, as attaching can hitch it for a moment. See
+  [rimworld-perf](docs/rimworld-perf.md).
 - **The Harmony patch reader needs the .NET SDK** (10 or newer) for its first build, into the same folder outside the
   repository as the Rust tools.
 - **The save index needs one Rust build:** add `--build-indexer` to its first command, with Rust from
@@ -51,6 +54,7 @@ python -m phobos_modkit release constants --check     every copy of each version
 python -m phobos_modkit rimworld-settings --mod "X*"   the player's settings for matching mods; also snapshot, compare
 python -m phobos_modkit rimworld-patches who "Pawn.Kill"   which active mods patch a method; also mod, hotspots
 python -m phobos_modkit rimworld-startup                 load-time history and the costliest mods; also compare, mod
+python -m phobos_modkit rimworld-perf record             where the running game spends its time, by mod; also report, mod, compare
 python -m phobos_modkit rimworld-readiness               which active mods are ready for a game version
 python -m phobos_modkit code --each-in DIR show Type.Member   a C# member's source by name; also find, outline, refs
 python -m phobos_modkit code compare OLD.dll NEW.dll   what changed between two builds, member by member
@@ -84,6 +88,7 @@ in order of expected saving.
 | 13 | [Cleanup](docs/cleanup.md) | What the tools, builds and tests left behind, how big it is and why it may go; deleted only on request | Python | Built: 1.8.0 |
 | 14 | [Test pass](docs/test-pass.md) | A repository's in-game test list, what the game has seen working and the owner's verdicts; writes verdicts into the list on request | Python | Built: 1.9.0 |
 | 15 | [Art audit](docs/art-audit.md) | Every shipped image with its record and how it was made; images drawn in code or without a record; pictures a Def borrows from another thing or another mod | Python | Built: 1.12.0 |
+| 16 | [Performance in play](docs/rimworld-perf.md) (RimWorld 1.7) | Where the running game spends its time: by part of the game loop, by the mod that caused it, by method, with garbage collection; and whether a change made it faster | Python, with Microsoft's dotnet-trace and dotnet-counters | Built: 1.13.0 |
 | 9 | [Workshop publishing](docs/workshop-publishing.md) | Release notes from changelogs, offline staging, the owner-run uploader, pulling Steam's state back | Python | Built: 0.10.0, from phobos-ostranauts |
 
 ## How a repository uses it
@@ -112,6 +117,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/code.md](docs/code.md) | The code index: find, outline, show and refs over C# trees, what the scanner reads, and compare for two builds |
 | [docs/rimworld-settings.md](docs/rimworld-settings.md) | The player's mod settings: matching files to mods, defaults, snapshots |
 | [docs/rimworld-startup.md](docs/rimworld-startup.md) | Start-up times from Loading Progress's sessions: launches, costliest mods, comparisons |
+| [docs/rimworld-perf.md](docs/rimworld-perf.md) | Recording a running RimWorld from outside: what is recorded, how time is put down to mods, and the limits |
 | [docs/rimworld-readiness.md](docs/rimworld-readiness.md) | Which active mods declare a game version, and how closely each depends on the game |
 | [docs/manifest.md](docs/manifest.md) | The JSON envelope every command prints, and the manifest of commands, options and effects |
 | [docs/crash-dump.md](docs/crash-dump.md) | Windows crash dumps: the exception, a call loop that ran away, and what a small dump cannot say |
@@ -119,7 +125,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/test-pass.md](docs/test-pass.md) | The test pass: the repository's evidence map, the seen-in-play notes and verdict files, and what apply writes |
 | [docs/art-audit.md](docs/art-audit.md) | The art audit: how images find their records, how a record's first statement sets the kind, the config, and what counts as borrowed |
 | [docs/gate.md](docs/gate.md) | The gate: a repository's checks from config/gate.json, and what each output parser keeps |
-| `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `query.py` (report filters), `steam/` (Workshop research; `publish/` for publishing), `release/` (changelogs, constants, history screen), `gate/` (the check runner and its output parsers), `code/` (the C# declaration scanner and index), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema), `games/ostranauts/` (publishing only) |
+| `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `sampling.py` and `dotnet_diagnostics.py` (sampled call stacks and Microsoft's diagnostics tools), `query.py` (report filters), `steam/` (Workshop research; `publish/` for publishing), `release/` (changelogs, constants, history screen), `gate/` (the check runner and its output parsers), `code/` (the C# declaration scanner and index), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema), `games/ostranauts/` (publishing only) |
 | `crates/xml-index/` | Rust: streams any large XML file into SQLite, driven by a schema file; `cargo test` |
 | `dotnet/` | C# tools: `PhobosModKit.Assemblies`, the assembly metadata reader (System.Reflection.Metadata; builds outside the repository) |
 | `fixtures/`, `tests/` | Hand-written test data and the tests: `python -m unittest discover -s tests` |

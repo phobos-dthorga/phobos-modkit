@@ -50,6 +50,13 @@ DirtRoad piece runs from tile 120 to 154 and one River piece from 130 to 168, ea
 in tile 120's or 130's neighbour list, in the game's order. Tile 120 carries one mutator, Caves, by its short hash. Faction 1 (the player) and Faction 2 (the raiders) are hostile; Faction 3,
 Example Traders, leaves its relation to the player at the defaults (neutral).
 
+## RimWorld performance recordings
+
+| File | Follows | How faithful |
+| --- | --- | --- |
+| `rimworld/perf/main-loop.speedscope.json` | dotnet-trace 10.0.750501's speedscope export: evented profiles per thread, frames named `module!Namespace.Type.Method(arguments)`, the `CPU_TIME` and `UNMANAGED_CODE_TIME` leaf markers, the process and thread frames at the root, and a Harmony-rewritten method as `dynamicClass.DMD<Type::Method>` | Shapes checked against a trace of a small program of our own (November 2026), not of the game. The game's method names come from RimWorld 1.7's main loop; the timings are made up to give round answers. |
+| `rimworld/perf/counters.json` | dotnet-counters 10.0.750501's JSON: an `Events` list of timestamped counters with the runtime's meter names and units | Names checked against the same program's counters; values made up. |
+
 ## Steam
 
 `steam/details.json` and `steam/comments-render.json` follow the shapes of Steam's GetPublishedFileDetails response

@@ -1,0 +1,38 @@
+{"exporter": "Microsoft.Diagnostics.Tracing.TraceEvent@3.1.23.0", "name": "main-loop.speedscope", "activeProfileIndex": 0, "$schema": "https://www.speedscope.app/file-format-schema.json", "shared": { "frames": [
+  { "name": "Process64 RimWorld.exe (4242) Args:  " },
+  { "name": "Threads" },
+  { "name": "Thread (100)" },
+  { "name": "Assembly-CSharp!Verse.Root_Play.Update()" },
+  { "name": "Assembly-CSharp!Verse.TickManager.DoSingleTick()" },
+  { "name": "Assembly-CSharp!dynamicClass.DMD<Verse.Pawn::Tick>(class Verse.Pawn)" },
+  { "name": "ExampleMedical!Example.Dosing.DoseService.MakeJob(class Verse.Pawn,class Verse.Pawn,bool)" },
+  { "name": "Assembly-CSharp!Verse.PawnCapacityUtility.CalculateCapacityLevel(class Verse.HediffSet,class Verse.PawnCapacityDef)" },
+  { "name": "CPU_TIME" },
+  { "name": "OtherMod!Other.Patches.Pawn_Tick.Postfix(class Verse.Pawn)" },
+  { "name": "System.Private.CoreLib.il!System.Collections.Generic.List`1[System.__Canon].Add(!0)" },
+  { "name": "Assembly-CSharp!Verse.Map.MapUpdate()" },
+  { "name": "Waylith!Waylith.Rendering.Submit()" },
+  { "name": "UNMANAGED_CODE_TIME" },
+  { "name": "Thread (200)" },
+  { "name": "System.Private.CoreLib.il!System.Threading.WaitHandle.WaitOne(int32)" }
+]}, "profiles": [
+{ "type": "evented", "name": "Thread (100)", "unit": "milliseconds", "startValue": 0, "endValue": 110, "events": [
+  { "type": "O", "frame": 0, "at": 0 }, { "type": "O", "frame": 1, "at": 0 }, { "type": "O", "frame": 2, "at": 0 },
+  { "type": "O", "frame": 3, "at": 0 }, { "type": "O", "frame": 4, "at": 0 }, { "type": "O", "frame": 5, "at": 0 },
+  { "type": "O", "frame": 6, "at": 0 }, { "type": "O", "frame": 7, "at": 0 }, { "type": "O", "frame": 8, "at": 0 },
+  { "type": "C", "frame": 8, "at": 40 }, { "type": "C", "frame": 7, "at": 40 }, { "type": "C", "frame": 6, "at": 40 },
+  { "type": "O", "frame": 9, "at": 40 }, { "type": "O", "frame": 10, "at": 40 }, { "type": "O", "frame": 8, "at": 40 },
+  { "type": "C", "frame": 8, "at": 60 }, { "type": "C", "frame": 10, "at": 60 }, { "type": "C", "frame": 9, "at": 60 },
+  { "type": "O", "frame": 8, "at": 60 },
+  { "type": "C", "frame": 8, "at": 70 }, { "type": "C", "frame": 5, "at": 70 }, { "type": "C", "frame": 4, "at": 70 },
+  { "type": "O", "frame": 11, "at": 70 }, { "type": "O", "frame": 12, "at": 70 }, { "type": "O", "frame": 13, "at": 70 },
+  { "type": "C", "frame": 13, "at": 100 }, { "type": "C", "frame": 12, "at": 100 }, { "type": "C", "frame": 11, "at": 100 },
+  { "type": "O", "frame": 8, "at": 100 },
+  { "type": "C", "frame": 8, "at": 110 }, { "type": "C", "frame": 3, "at": 110 }, { "type": "C", "frame": 2, "at": 110 },
+  { "type": "C", "frame": 1, "at": 110 }, { "type": "C", "frame": 0, "at": 110 }]},
+{ "type": "evented", "name": "Thread (200)", "unit": "milliseconds", "startValue": 0, "endValue": 100, "events": [
+  { "type": "O", "frame": 0, "at": 0 }, { "type": "O", "frame": 1, "at": 0 }, { "type": "O", "frame": 14, "at": 0 },
+  { "type": "O", "frame": 15, "at": 0 }, { "type": "O", "frame": 13, "at": 0 },
+  { "type": "C", "frame": 13, "at": 100 }, { "type": "C", "frame": 15, "at": 100 }, { "type": "C", "frame": 14, "at": 100 },
+  { "type": "C", "frame": 1, "at": 100 }, { "type": "C", "frame": 0, "at": 100 }]}
+] }

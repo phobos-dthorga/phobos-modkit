@@ -1,0 +1,10 @@
+{"TargetProcess": "RimWorld", "StartTime": "2026-11-17T18:00:00+11:00", "Events": [
+  {"timestamp": "2026-11-17T18:00:01+11:00", "provider": "System.Runtime", "name": "dotnet.gc.pause.time (s / 1 sec)", "tags": "", "counterType": "Rate", "value": 0.02},
+  {"timestamp": "2026-11-17T18:00:01+11:00", "provider": "System.Runtime", "name": "dotnet.gc.collections ({collection} / 1 sec)", "tags": "gc.heap.generation=gen0", "counterType": "Rate", "value": 3},
+  {"timestamp": "2026-11-17T18:00:01+11:00", "provider": "System.Runtime", "name": "dotnet.gc.heap.total_allocated (By / 1 sec)", "tags": "", "counterType": "Rate", "value": 200000000},
+  {"timestamp": "2026-11-17T18:00:01+11:00", "provider": "System.Runtime", "name": "dotnet.process.memory.working_set (By)", "tags": "", "counterType": "Metric", "value": 5000000000},
+  {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "System.Runtime", "name": "dotnet.gc.pause.time (s / 1 sec)", "tags": "", "counterType": "Rate", "value": 0.04},
+  {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "System.Runtime", "name": "dotnet.gc.collections ({collection} / 1 sec)", "tags": "gc.heap.generation=gen0", "counterType": "Rate", "value": 5},
+  {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "System.Runtime", "name": "dotnet.gc.heap.total_allocated (By / 1 sec)", "tags": "", "counterType": "Rate", "value": 400000000},
+  {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "System.Runtime", "name": "dotnet.process.memory.working_set (By)", "tags": "", "counterType": "Metric", "value": 5200000000}
+]}

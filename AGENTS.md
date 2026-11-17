@@ -27,8 +27,10 @@ adapted to a tooling repository. The repository was created on 7 November 2026 a
 - **An adapter holds format facts, in our own words.** Facts learned by decompiling a game are summarised,
   never copied; the decompile itself stays on the researcher's machine.
 - **Runtime mod libraries are out of scope.** Code that runs inside a game stays in that game's repository.
-- **Profiling is Phobos Scope's.** Measurement inside a running game belongs to
-  [Phobos Scope](https://github.com/phobos-dthorga/phobos-scope), not here.
+- **In-game instrumentation is Phobos Scope's.** Recorders that run inside a game and time the sections a mod marks belong to
+  [Phobos Scope](https://github.com/phobos-dthorga/phobos-scope), not here. **Sampling a game from outside belongs here**
+  (owner's go-ahead, 17 November 2026, for rimworld-perf): Microsoft's diagnostics tools attach through the runtime's own pipe,
+  nothing of ours runs in the game, and the kit reads what they write, as it reads a log.
 
 ## Safety rules for every tool
 

@@ -13,6 +13,7 @@ COMMANDS = {
                           "the player's RimWorld mod settings, files left behind, changes since a snapshot"),
     "rimworld-patches": (".games.rimworld.patches_cli", "which active mods patch which methods with Harmony, from their metadata"),
     "rimworld-targets": (".games.rimworld.targets_cli", "whether every member our C# names by string still exists in the game and the mods"),
+    "rimworld-perf": (".games.rimworld.perf_cli", "where a running RimWorld spends its time, by mod, method and part of the game loop"),
     "rimworld-startup": (".games.rimworld.startup_cli", "how long RimWorld takes to start, the costliest mods, what changed between launches"),
     "rimworld-readiness": (".games.rimworld.readiness_cli", "which active mods are ready for a game version, and which are likeliest to break"),
     "rimworld-workshop": (".games.rimworld.workshop_cli", "what players report about RimWorld mods on the Workshop lately"),

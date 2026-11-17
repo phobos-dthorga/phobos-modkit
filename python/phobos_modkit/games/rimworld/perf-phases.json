@@ -1,0 +1,10 @@
+{
+  "description": "The named parts of RimWorld's main loop, for rimworld-perf. Each phase is the first whose pattern matches a method on the stack, walking from the root; * and ? are wildcards over Namespace.Type.Method. Read from RimWorld 1.7.5011's Root_Play.Update and Game.UpdatePlay (November 2026); the interface and loading patterns are not yet checked against a recording of the game.",
+  "phases": [
+    ["ticking (the simulation)", ["Verse.TickManager.DoSingleTick"]],
+    ["map and world drawing", ["Verse.Map.MapUpdate", "RimWorld.Planet.World.WorldUpdate"]],
+    ["interface", ["Verse.Root*.OnGUI", "Verse.UIRoot*.UIRootOnGUI", "Verse.Map.MapOnGUI", "Verse.GameComponentUtility.GameComponentOnGUI"]],
+    ["loading, saving and long events", ["Verse.LongEventHandler.*", "Verse.GameDataSaveLoader.*", "Verse.SaveGameFilesUtility.*"]]
+  ],
+  "ticking": "ticking (the simulation)"
+}
