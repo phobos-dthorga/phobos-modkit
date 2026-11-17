@@ -48,6 +48,24 @@ class FrameNameTests(unittest.TestCase):
         self.assertEqual(("Assembly-CSharp", "Verse.Pawn.Tick", True),
                          sampling.split_frame("Assembly-CSharp!dynamicClass.DMD<Verse.Pawn::Tick>(class Verse.Pawn)"))
 
+    def test_a_method_harmony_3_rewrote(self):
+        # Harmony 3 on .NET: the original's name with a patch count, and the glue it adds for a patched method.
+        self.assertEqual(("0Harmony", "Verse.TickManager.DoSingleTick", True),
+                         sampling.split_frame("0Harmony!dynamicClass.Verse.TickManager.DoSingleTick_Patch6(pMT: 00007FFBE8CD49D0)"))
+        self.assertEqual(("0Harmony", "Verse.AI.Pawn_JobTracker.DetermineNextConstantThinkTreeJob", True),
+                         sampling.split_frame("0Harmony!dynamicClass.Glue:AbiFixup<Verse.AI.ThinkResult Verse.AI.Pawn_JobTracker:"
+                                              "DetermineNextConstantThinkTreeJob(),Verse.AI.ThinkResult Verse.AI.Pawn_JobTracker."
+                                              "DetermineNextConstantThinkTreeJob()>(pMT: 00007FF)"))
+        # A method whose own name only ends in a number is not a patch.
+        self.assertEqual(("Assembly-CSharp", "Verse.Gen.Patch2", False), sampling.split_frame("Assembly-CSharp!Verse.Gen.Patch2()"))
+
+    def test_the_game_loop_is_found_through_harmony_3s_names(self):
+        # The loop's own methods under Harmony 3's names, as in the owner's recording of 18 November 2026.
+        phases, ticking = perf.phases()
+        for name in ("0Harmony!dynamicClass.Verse.TickManager.DoSingleTick_Patch6(pMT: 1)", "0Harmony!dynamicClass.Verse.Map.MapUpdate_Patch5(pMT: 1)"):
+            method = sampling.split_frame(name)[1]
+            self.assertTrue(any(__import__("fnmatch").fnmatchcase(method, p) for _, patterns in phases for p in patterns), name)
+
     def test_a_marker_without_a_module(self):
         self.assertEqual(("", "Threads", False), sampling.split_frame("Threads"))
 

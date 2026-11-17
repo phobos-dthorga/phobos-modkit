@@ -4,6 +4,20 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-11-18
+
+A tooling round asked for by the owner in phobos-rimworld (18 November 2026), for three gaps met that day: a part-pass written into the test list by hand, a profile that could not find the game loop, and a scratch script for heights.
+
+### Added
+
+- test-pass: a `partial` verdict, written "Passed in part", for a row of which only some has been seen; and `--verdict ROW:WORD[:NOTE]` on report and apply, for a verdict the owner gives an agent in conversation, written "in conversation" and replacing the file's for its row. Verdict lines may say `via`.
+- rimworld-save terrain: how high the land stands and how rough it is; land heights and hilliness across the world, the player's places with their height, the steps between neighbouring land tiles, and with --near the heights in rings round a place.
+- rimworld-perf: the alerts column, sound and music, and the engine's own frame drawing are named parts of the loop.
+
+### Fixed
+
+- rimworld-perf: Harmony 3's names for rewritten methods (`Type.Method_PatchN` and its `Glue:AbiFixup` glue) read as the original method, so a patched game loop is found. The owner's recording of 18 November 2026 had put two thirds of the main thread outside every named part; it now names all but 2%. Recordings already indexed are read the new way.
+
 ## [1.13.1] - 2026-11-17
 
 The first recording of the owner's game (3 minutes, many wounded) put 95.6% of ticking down to Smart Medicine, when Search and Rescue was calling it in a scoring loop; the headline named the mod doing the work, not the one deciding how often.

@@ -3,6 +3,8 @@
     test-pass report --root REPO              rows waiting for the owner, rows the game has seen working, verdicts not yet written
     test-pass apply --root REPO               what apply would write into the test list (a preview)
     test-pass apply --root REPO --apply       write it
+    test-pass apply --verdict "55:partial:the landing only" --apply
+                                              write a verdict the owner gave in conversation
 
 The repository's config/test-evidence.json names the test list and maps rows to evidence. The notes file comes from --seen, or
 from the game the config names (its adapter knows where the mod writes it). Verdicts come from --verdicts, the environment
@@ -12,6 +14,7 @@ passes a row; only a verdict does. apply writes only inside the test list.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 from importlib import import_module
 import os
 from pathlib import Path
@@ -68,6 +71,8 @@ def _parser():
         s.add_argument("--seen", action="append", help="a seen-in-play notes file (repeatable; default: from the config's game)")
         s.add_argument("--verdicts", help="the owner's verdicts file (default: D'thorga Companion's, for this repository)")
         s.add_argument("--settings", help="a JSON settings file naming paths")
+        s.add_argument("--verdict", action="append", default=[], metavar="ROW:WORD[:NOTE]",
+                       help="a verdict the owner gave in conversation (WORD passed, partial or failed; repeatable)")
         s.add_argument("--all", action="store_true", help="list every row, not only those waiting")
         s.add_argument("--top", type=int, default=40, help="rows per table (default 40)")
         s.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
@@ -84,7 +89,8 @@ def _row_data(row, evidence):
             "seen": [{"key": s.key, "first": s.first, "last": s.last, "count": s.count, "mod": s.mod, "version": s.version,
                       "detail": s.detail} for s in evidence.sightings(row.id)],
             "evidence_keys": evidence.mapping.get(row.id, []),
-            "verdict": None if verdict is None else {"verdict": verdict.verdict, "time": verdict.time, "note": verdict.note},
+            "verdict": None if verdict is None else {"verdict": verdict.verdict, "time": verdict.time, "note": verdict.note,
+                                                     "via": verdict.via},
             "pending": evidence.pending(row)}
 
 
@@ -137,7 +143,7 @@ def build_report(evidence, changed=None, applied=False, everything=False, top=40
     return report
 
 
-def main(argv=None, environ=None, out=None):
+def main(argv=None, environ=None, out=None, now=None):
     out = out or sys.stdout
     environ = os.environ if environ is None else environ
     try:
@@ -150,7 +156,9 @@ def main(argv=None, environ=None, out=None):
         config = testpass.load_config(root)
         seen = seen_paths(config, args.seen, environ, args.settings)
         verdicts = verdicts_path(root, args.verdicts, environ, args.settings)
-        evidence = testpass.gather(root, seen, [verdicts], config)
+        stamp = (now or datetime.now(timezone.utc)).isoformat()
+        given = [testpass.parse_verdict(text, stamp) for text in args.verdict]
+        evidence = testpass.gather(root, seen, [verdicts], config, given)
     except testpass.TestPassError as error:
         print(redact(str(error)), file=sys.stderr)
         return EXIT_USAGE

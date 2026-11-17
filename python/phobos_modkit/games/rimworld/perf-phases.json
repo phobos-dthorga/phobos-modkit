@@ -1,9 +1,12 @@
 {
-  "description": "The named parts of RimWorld's main loop, for rimworld-perf. Each phase is the first whose pattern matches a method on the stack, walking from the root; * and ? are wildcards over Namespace.Type.Method. Read from RimWorld 1.7.5011's Root_Play.Update and Game.UpdatePlay (November 2026); in the first recording of the game (17 November 2026, 349 mods) they matched 99.2% of the main thread; the interface and loading patterns saw little time and are the least checked.",
+  "description": "The named parts of RimWorld's main loop, for rimworld-perf. Each phase is the first whose pattern matches a method on the stack, walking from the root; * and ? are wildcards over Namespace.Type.Method. Read from RimWorld 1.7.5011's Root_Play.Update and Game.UpdatePlay (November 2026); in the first recording of the game (17 November 2026, 349 mods) they matched 99.2% of the main thread. A second recording (18 November 2026), with the loop's methods under Harmony 3's names, added the alerts column, sound and the engine's own frame drawing: with them all but about 2% of its main thread is named. The loading patterns saw little time and are the least checked.",
   "phases": [
     ["ticking (the simulation)", ["Verse.TickManager.DoSingleTick"]],
     ["map and world drawing", ["Verse.Map.MapUpdate", "RimWorld.Planet.World.WorldUpdate"]],
-    ["interface", ["Verse.Root*.OnGUI", "Verse.UIRoot*.UIRootOnGUI", "Verse.Map.MapOnGUI", "Verse.GameComponentUtility.GameComponentOnGUI"]],
+    ["the alerts column", ["RimWorld.AlertsReadout.*"]],
+    ["interface", ["Verse.Root*.OnGUI", "Verse.UIRoot*.UIRootOnGUI", "Verse.Map.MapOnGUI", "Verse.GameComponentUtility.GameComponentOnGUI", "RimWorldWaylith.Imgui.*"]],
+    ["sound and music", ["Verse.Sound.*", "RimWorld.MusicManager*", "UnityEngine.AudioSource.*"]],
+    ["the engine's frame drawing", ["Waylith.Rendering.*", "RimWorldWaylith.Rendering.*"]],
     ["loading, saving and long events", ["Verse.LongEventHandler.*", "Verse.GameDataSaveLoader.*", "Verse.SaveGameFilesUtility.*"]]
   ],
   "ticking": "ticking (the simulation)"

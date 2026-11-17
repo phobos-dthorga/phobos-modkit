@@ -48,18 +48,31 @@ beside the Config folder, written by phobos-rimworld's D'thorga Framework 0.118.
 JSON lines, one per click, written by D'thorga Companion's Tests page: by default
 `org.phobosdthorga.companion/test-verdicts/<repository folder>.jsonl` in the system's local application data (`LOCALAPPDATA` on
 Windows), or `PHOBOS_TEST_VERDICTS`, or a settings file's `companionTestVerdictsPath`. The latest line for a row wins;
-`cleared` takes a verdict back.
+`cleared` takes a verdict back. A verdict is `passed`, `partial` (part of the row passed, the note saying which), `failed` or
+`cleared`; an optional `via` says where it was given (`companion`, the default, or `conversation`).
 
 ```json
 {"format":1,"time":"2026-11-17T12:05:00Z","row":"127","verdict":"passed","note":"re-fitted on the M1A2"}
 ```
+
+**A verdict the owner gives an agent in conversation** goes in on the command line, never copied into the list by hand:
+
+```text
+python -m phobos_modkit test-pass apply --root REPO --verdict "55:partial:the landing; placing by hand not seen" --apply
+```
+
+`--verdict ROW:WORD[:NOTE]` is repeatable, takes `passed`, `partial` or `failed`, is stamped with the time it is run, replaces any
+verdict in the file for its row, and is written "in conversation". `report` takes it too, to preview. A badly written one is
+refused with what to give.
 
 ## What apply writes
 
 | Case | Sentence added to the row's last cell |
 | --- | --- |
 | A verdict, passed | `**Passed: the owner, 17 Nov 2026, through D'thorga Companion: note.**` |
+| A verdict, passed in part | `**Passed in part: the owner, 17 Nov 2026, through D'thorga Companion: note.**` |
 | A verdict, failed | `**Failed: the owner, 17 Nov 2026, through D'thorga Companion: note.**` |
+| A verdict given in conversation | the same, with `in conversation` in place of `through D'thorga Companion` |
 | Seen, no verdict, row open or passed in part | `**Seen working by the game, 17 Nov 2026 (D'thorga Framework 0.118.0); awaiting the owner's word.**` |
 
 A sentence already in the cell is not added again, so running apply twice changes nothing the second time.

@@ -37,6 +37,11 @@ MOD, GAME, ENGINE, RUNTIME, LIBRARY, UNKNOWN = "mod", "game", "engine", "runtime
 FALLBACK_ORDER = (GAME, ENGINE, LIBRARY, UNKNOWN, RUNTIME)
 
 _DMD = re.compile(r"^dynamicClass\.DMD<(?P<type>.+)::(?P<method>[^>]+)>")
+# Harmony 3 on .NET names a rewritten method after the original with a patch count, and the glue it adds for one by the original's
+# Type:Method inside angle brackets (seen in a trace of RimWorld 1.7, 18 November 2026: "dynamicClass.Verse.TickManager.DoSingleTick_
+# Patch6(pMT: ...)" and "dynamicClass.Glue:AbiFixup<Verse.AI.ThinkResult Verse.AI.Pawn_JobTracker:DetermineNextConstantThinkTreeJob(),...").
+_PATCHED = re.compile(r"^dynamicClass\.(?P<method>[^(<>\s]+?)_Patch\d+$")
+_GLUE = re.compile(r"^dynamicClass\.Glue:\w+<(?:[^\s:<>]+ )?(?P<type>[^\s:<>]+):(?P<method>[^(\s<>]+)\(")
 _MODULE_SUFFIX = re.compile(r"\.(il|ni|dll|exe)$", re.IGNORECASE)
 _EVENT = re.compile(r'\{\s*"type"\s*:\s*"(?P<kind>[OC])"\s*,\s*"frame"\s*:\s*(?P<frame>\d+)\s*,\s*"at"\s*:\s*(?P<at>[-+0-9.eE]+)\s*\}')
 _EVENTS_KEY = re.compile(r'"events"\s*:\s*\[')
@@ -63,7 +68,14 @@ def split_frame(name):
     found = _DMD.match(rest)
     if found:
         return module, f"{found.group('type')}.{found.group('method')}", True
-    return module, rest.split("(", 1)[0], False
+    found = _GLUE.match(rest)
+    if found:
+        return module, f"{found.group('type')}.{found.group('method')}", True
+    method = rest.split("(", 1)[0]
+    found = _PATCHED.match(method)
+    if found:
+        return module, found.group("method"), True
+    return module, method, False
 
 
 def type_of(method):
@@ -225,7 +237,8 @@ class Recording:
             self.meta = dict(conn.execute("SELECT key, value FROM meta"))
             if self.meta.get("index_format") != INDEX_FORMAT:
                 raise SamplingError(f"{self.index} was built by another version of this tool; record again.")
-            self.frames = {r[0]: r[1:] for r in conn.execute("SELECT id, name, module, method, patched FROM frame")}
+            # Split again from the name, so a recording indexed by an older version reads names this one knows (Harmony 3's).
+            self.frames = {r[0]: (r[1], *split_frame(r[1])) for r in conn.execute("SELECT id, name FROM frame")}
             self.parent, self.frame_of = {}, {}
             for node, parent, frame in conn.execute("SELECT id, parent, frame FROM node"):
                 self.parent[node], self.frame_of[node] = parent, frame

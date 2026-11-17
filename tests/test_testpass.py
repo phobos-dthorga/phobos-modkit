@@ -180,6 +180,59 @@ class Applying(unittest.TestCase):
             repo.close()
 
 
+class PartsAndConversation(unittest.TestCase):
+    def test_a_part_pass_is_written_as_one_and_read_back_as_one(self):
+        repo = Repo(verdicts=[verdict("1", "partial", "2026-11-18T09:00:00Z", "the take-off only")])
+        try:
+            text, _ = testpass.apply_to_text(repo.doc(), repo.evidence())
+            line = next(l for l in text.splitlines() if l.startswith("| 1 |"))
+            self.assertTrue(line.endswith("**Passed in part: the owner, 18 Nov 2026, through D'thorga Companion: the take-off only.** |"))
+            self.assertEqual(testpass.parse_rows(text)[0].status, "partial")
+        finally:
+            repo.close()
+
+    def test_a_verdict_given_in_conversation_says_so(self):
+        given = testpass.parse_verdict("2:passed:the turret turned by hand", "2026-11-18T10:00:00+00:00")
+        self.assertEqual((given.row, given.verdict, given.via), ("2", "passed", "conversation"))
+        self.assertEqual(testpass.verdict_text(given),
+                         "**Passed: the owner, 18 Nov 2026, in conversation: the turret turned by hand.**")
+        # A note may hold colons of its own.
+        self.assertEqual(testpass.parse_verdict("P1:failed:at 10:30 it fell", "t").note, "at 10:30 it fell")
+
+    def test_a_badly_written_verdict_says_what_to_give(self):
+        for text in ("2", "2:maybe", ":passed"):
+            with self.assertRaises(testpass.TestPassError):
+                testpass.parse_verdict(text, "t")
+
+    def test_the_command_line_writes_a_conversation_verdict(self):
+        from datetime import datetime, timezone
+        repo = Repo(verdicts=[verdict("1", "failed", "2026-11-17T10:00:00Z")])
+        try:
+            out = io.StringIO()
+            code = testpass_cli.main(["apply", "--root", str(repo.root), "--seen", str(repo.seen), "--verdicts", str(repo.verdicts),
+                                      "--verdict", "1:partial:it stops, but slowly", "--apply"], environ={}, out=out,
+                                     now=datetime(2026, 11, 18, 12, 0, tzinfo=timezone.utc))
+            self.assertEqual(code, 0)
+            line = next(l for l in repo.doc().splitlines() if l.startswith("| 1 |"))
+            # The one given on the command line replaces the file's for its row.
+            self.assertNotIn("Failed", line)
+            self.assertTrue(line.endswith("**Passed in part: the owner, 18 Nov 2026, in conversation: it stops, but slowly.** |"))
+        finally:
+            repo.close()
+
+    def test_a_bad_verdict_on_the_command_line_is_a_usage_error(self):
+        import contextlib
+        repo = Repo()
+        try:
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                code, _ = repo.run("apply", "--verdict", "1:maybe")
+            self.assertEqual(code, testpass_cli.EXIT_USAGE)
+            self.assertIn("ROW:WORD", err.getvalue())
+        finally:
+            repo.close()
+
+
 class CommandLine(unittest.TestCase):
     def test_report_names_what_waits(self):
         repo = Repo(seen=[note("vehicles.track-thrown", "2026-11-17T10:00:00Z")])

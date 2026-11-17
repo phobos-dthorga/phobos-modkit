@@ -45,7 +45,8 @@ cannot be made again.
 
 - **The main thread** is the thread that spent most time running managed code: RimWorld's game loop.
 - **Parts of the game loop** come from `games/rimworld/perf-phases.json`: ticking (`Verse.TickManager.DoSingleTick`, the
-  simulation), map and world drawing, the interface, and loading or saving. Each sample belongs to the first part whose method is
+  simulation), map and world drawing, the alerts column, the interface, sound and music, the engine's own frame drawing, and
+  loading or saving. Each sample belongs to the first part whose method is
   on its stack, from the root down. Time outside them is listed by its first non-.NET method, so a missing part shows itself.
 - **Caused by** is the innermost frame on the stack that belongs to a mod. A mod's code calling the game's counts for the mod;
   a Harmony prefix or postfix is its own frame and counts for the mod that wrote it. With no mod on the stack the game caused it,
@@ -57,7 +58,11 @@ cannot be made again.
 - **Where the thread was** is the method running when the sample was taken: the place to look for the slow line.
 - **Running managed code** against **in native code or waiting**: the runtime marks each sample. Native time is the engine,
   the operating system, garbage collection or a wait; it is still time the frame took.
-- **Patched game methods** are methods Harmony rewrote (`dynamicClass.DMD<Type::Method>` in the trace), with everything they call.
+- **Patched game methods** are methods Harmony rewrote, with everything they call. Harmony 2 names them
+  `dynamicClass.DMD<Type::Method>`; Harmony 3 on .NET names them after the original with a patch count
+  (`dynamicClass.Verse.TickManager.DoSingleTick_Patch6`), and adds glue named `dynamicClass.Glue:AbiFixup<... Type:Method(...)>`.
+  All three read as the original method, so a patched part of the loop is still found. Recordings indexed by an older version
+  are read the same way: their frame names are split again when they load.
 - **Owners**: `Assembly-CSharp` and `RimWorld` are the game; other DLLs in the install folder are the engine and Ludeon's
   libraries (Waylith, Brutal, Steamworks); `System.*` and `Microsoft.*` are .NET; Harmony and MonoMod are libraries; every active
   mod's assemblies for the game's version are that mod's, the first in load order winning when two ship one name. A module no
@@ -72,5 +77,7 @@ cannot be made again.
 - The trace counts no calls and no ticks, so it cannot give ticks per second.
 - Overloads of one method are counted together (the report drops argument lists).
 - The phase patterns were read from the game's code. In the first recording of the game (RimWorld 1.7.5011, 349 mods, 17 November
-  2026) they matched 99.2% of the main thread; the rest sat in the program's entry point. The interface and loading patterns saw
+  2026) they matched 99.2% of the main thread; the rest sat in the program's entry point. A second recording (18 November 2026)
+  matched only 66.7% until Harmony 3's names were read, then all but 2% once the alerts column, sound and the engine's frame
+  drawing were named: the game's loop methods had Harmony patches that day and not the day before. The loading patterns saw
   little time there and are the least checked.

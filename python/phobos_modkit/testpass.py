@@ -7,8 +7,10 @@ Three inputs, each written by someone else:
   with `prefixes` for keys built at run time), and may name the game whose adapter knows where the notes are (`game`).
 - **Seen-in-play notes**: JSON lines a mod writes when a feature is first seen working in a session (`key`, `time`, `mod`,
   `version`, `detail`). A note says the code ran without an error, never that the result looked right.
-- **Verdicts**: JSON lines the owner's clicks write (D'thorga Companion's Tests page): `row`, `verdict` (`passed`, `failed` or
-  `cleared`), `time` and an optional `note`. Only a verdict passes or fails a row.
+- **Verdicts**: JSON lines the owner's clicks write (D'thorga Companion's Tests page): `row`, `verdict` (`passed`, `partial`,
+  `failed` or `cleared`), `time`, an optional `note`, and an optional `via` (`companion`, the default, or `conversation`). Only a
+  verdict passes or fails a row. A verdict the owner gives an agent in conversation comes in on the command line instead
+  (`apply --verdict ROW:WORD:NOTE`), and is written the same way, saying so.
 
 `apply` writes each new verdict into its row's last cell, and "seen working, awaiting the owner's word" for a row the notes flag
 that has no verdict. It writes nothing else, and only inside the test list. Game-free: a game enters through the repository's file.
@@ -22,7 +24,10 @@ from pathlib import Path
 import re
 
 CONFIG = Path("config") / "test-evidence.json"
-VERDICTS = ("passed", "failed", "cleared")
+VERDICTS = ("passed", "partial", "failed", "cleared")
+# Where a verdict was given, and how the test list says so.
+VIA = {"companion": "through D'thorga Companion", "conversation": "in conversation"}
+_WORDS = {"passed": "Passed", "partial": "Passed in part", "failed": "Failed"}
 SEEN_TEXT = "Seen working by the game"
 _SEEN_MARK = re.compile(r"\s*\*\*Seen working by the game[^*]*awaiting the owner's word\.\*\*")
 # A part of a row passed is written in lower case ("Diagnose passed: the owner, 11 Nov 2026"), a whole row with a capital.
@@ -80,6 +85,7 @@ class Verdict:
     verdict: str
     time: str
     note: str = ""
+    via: str = "companion"
 
 
 @dataclass
@@ -212,11 +218,23 @@ def read_verdicts(paths):
                 continue
             if row in latest and latest[row].time > time:
                 continue
-            latest[row] = Verdict(row, verdict, time, " ".join(str(entry.get("note") or "").split()))
+            via = str(entry.get("via") or "companion")
+            latest[row] = Verdict(row, verdict, time, " ".join(str(entry.get("note") or "").split()), via if via in VIA else "companion")
     return {r: v for r, v in latest.items() if v.verdict != "cleared"}, bad
 
 
-def gather(root, seen_paths, verdict_paths, config=None):
+def parse_verdict(text, time):
+    """A verdict given on the command line, "ROW:WORD" or "ROW:WORD:NOTE" (WORD passed, partial or failed), stamped with
+    <time> and marked as given in conversation. Raises TestPassError, saying what is wrong, for anything else."""
+    parts = text.split(":", 2)
+    if len(parts) < 2 or not parts[0].strip() or parts[1].strip() not in _WORDS:
+        raise TestPassError(f"--verdict {text!r}: give ROW:WORD or ROW:WORD:NOTE, WORD one of " + ", ".join(_WORDS))
+    note = " ".join(parts[2].split()) if len(parts) == 3 else ""
+    return Verdict(parts[0].strip(), parts[1].strip(), time, note, "conversation")
+
+
+def gather(root, seen_paths, verdict_paths, config=None, given=()):
+    """Everything the reports need. <given> are verdicts from the command line; each replaces the file's for its row."""
     config = config or load_config(root)
     doc = Path(root) / config["doc"]
     try:
@@ -227,6 +245,8 @@ def gather(root, seen_paths, verdict_paths, config=None):
     prefixes = tuple(config.get("prefixes", {}))
     seen, bad_seen = read_seen(seen_paths)
     verdicts, bad_verdicts = read_verdicts(verdict_paths)
+    for verdict in given:
+        verdicts[verdict.row] = verdict
     mapped = {k for keys in mapping.values() for k in keys}
     unmapped = sorted(k for k in seen if k not in mapped)
     return Evidence(rows, seen, verdicts, mapping, prefixes, bad_seen + bad_verdicts, unmapped)
@@ -248,9 +268,9 @@ def _clean(text):
 
 
 def verdict_text(verdict):
-    word = "Passed" if verdict.verdict == "passed" else "Failed"
+    word = _WORDS.get(verdict.verdict, "Failed")
     note = f": {_clean(verdict.note)}" if verdict.note else ""
-    return f"**{word}: the owner, {day(verdict.time)}, through D'thorga Companion{note}.**"
+    return f"**{word}: the owner, {day(verdict.time)}, {VIA.get(verdict.via, VIA['companion'])}{note}.**"
 
 
 def seen_text(sightings):
