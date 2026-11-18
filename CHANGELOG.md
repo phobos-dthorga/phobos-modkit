@@ -4,6 +4,20 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.26.0] - 2026-11-19
+
+From the owner's look at the Companion's Mods page (19 November 2026): "It seems to see changes in DLLs, across the board, where there might not be any", and a tidier page with fewer repeated buttons.
+
+### Added
+
+- changes.entry_commits: every entry a changelog ever held, with the commit that first added its first line, from one pass over its history (about 0.4 s for seven changelogs). changes list and installs status give each entry its commit, so a program can offer one "show the code" for all the entries one commit wrote; changes entry takes its commit from the same pass, so both always agree.
+- installs status marks a changed assembly as rebuilt when its project's own sources (its folder, its compiled includes, the shared build files) have not changed since the installed commit, committed or not, with no new source files. Found on the owner's PC: .NET stamps the current git commit into every assembly it builds, so every commit anywhere changed every rebuilt assembly by about 100 bytes. A rebuilt assembly still counts as a change.
+- Two states for a mod whose changelogs agree but whose files differ: rebuilt (every changed file only rebuilt) and unlogged (something else changed that no entry describes). A mod in this case read as up to date before.
+
+### Changed
+
+- installs status says what it is doing while it matches entries to their commits.
+
 ## [1.25.1] - 2026-11-19
 
 ### Changed

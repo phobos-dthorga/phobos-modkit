@@ -27,17 +27,20 @@ python -m phobos_modkit changes entry --root REPO --changelog mods/Thing/CHANGEL
 
 ## How an entry's commit is found
 
-1. The entry is looked up in the changelog as it stands, by its text or its bold opening.
-2. git lists, oldest first, the commits in which the entry's opening appears in that changelog a different number of times than
-   before (`git log -S`). The first is the commit that wrote it. Openings of 80, 48 and 28 characters and the bold opening are
-   tried, longest first, since an entry may run over several lines and git looks for text as the file holds it.
+1. **One pass over the changelog's history** (`git log -p`, about 0.1 s for a changelog of 200 versions) notes, for every line
+   that opens an entry, the oldest commit that added it. An entry's commit is the one that added its first line, as the file
+   holds it (1.26.0). `changes list` gives every entry its commit this way, and so does `installs status`, so a program can show
+   one "the code behind these" for all the entries one commit wrote.
+2. `changes entry` looks the entry up in the changelog as it stands, by its text or its bold opening, and takes its commit from
+   the same pass. Only an entry the pass cannot place is searched for by its opening (`git log -S`, openings of 80, 48 and 28
+   characters and the bold opening, longest first).
 3. That commit's diff is read (`git show`), or `git diff HEAD` when no commit holds the entry.
 
 ## What the answer holds (`data`)
 
 | Field | What it holds |
 | --- | --- |
-| `commit` | `hash`, `time`, `author`, `subject`; null when the entry is in no commit yet |
+| `commit` | `hash`, `time`, `author`, `subject`; null when the entry is in no commit yet. In `changes list`, each entry's `commit` is its hash's first 12 characters, or null |
 | `writtenWith` | The other entries the same commit wrote into this changelog, as written |
 | `files` | Each file but the changelog itself: `path`, `oldPath` (a rename), `change` (added, changed, removed, renamed), `kind` (code, data, words, other), `language`, `binary`, `additions`, `deletions`, `hunks`, `truncated` |
 | `hunks` | `header` (the function or section git names) and `lines`: `kind` (`+`, `-` or a space), `old` and `new` line numbers, `text` |

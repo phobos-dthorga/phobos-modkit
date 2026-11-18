@@ -153,10 +153,58 @@ def build_states(root, config):
         built, _ = _newest(dlls)
         newest, which = _newest(project_inputs(csproj, text) + shared)
         states.setdefault(mod, []).append({
-            "project": csproj.stem, "needsBuild": not dlls or newest > built + BUILD_SLACK_SECONDS,
+            "project": csproj.stem, "assembly": assembly, "inputs": input_paths(root, csproj, text, shared),
+            "needsBuild": not dlls or newest > built + BUILD_SLACK_SECONDS,
             "built": built or None, "newest": newest or None,
             "newestFile": Path(which).relative_to(root).as_posix() if which and Path(which).is_relative_to(root) else None})
     return states
+
+
+def input_paths(root, csproj, text, shared):
+    """The folders and files a project builds from, as paths relative to the repository, for asking git what changed in them."""
+    root = Path(root)
+    folder = Path(csproj).parent
+    found = [folder]
+    for include in re.findall(r'<Compile\s+Include="([^"]+)"', text):
+        if ".." in include:
+            found.append(Path(os.path.normpath(folder / Path(include.replace("\\", "/")).parent)))
+    found += [Path(p) for p in shared]
+    relative = []
+    for path in found:
+        try:
+            relative.append(path.resolve().relative_to(root.resolve()).as_posix())
+        except ValueError:
+            continue
+    return sorted(set(relative))
+
+
+def sources_changed(root, commit, paths):
+    """Whether any of the paths changed since commit: committed or not, and new files git has not been told of. True when git
+    cannot say (an unknown commit), so a doubt never hides a change."""
+    if not commit or not paths:
+        return True
+    diff = _git(root, "diff", "--name-only", commit, "--", *paths)
+    if diff is None:
+        return True
+    if diff.strip():
+        return True
+    untracked = _git(root, "ls-files", "--others", "--exclude-standard", "--", *paths)
+    return bool(untracked and untracked.strip())
+
+
+def mark_rebuilt(files, builds, root, commit):
+    """Marks each changed assembly whose project's own sources are unchanged since commit as only rebuilt: it differs because it was
+    built against newer code it uses (another mod's assembly, a new version of it), not because its own code changed. Returns how
+    many it marked. Such a file still counts as a change: an assembly built against older code it uses can fail against the new."""
+    by_assembly = {f"{b['assembly']}.dll".lower(): b for b in builds}
+    marked = 0
+    for change in files["paths"]:
+        build = by_assembly.get(change["path"].rsplit("/", 1)[-1].lower())
+        if change["change"] == "changed" and build and not sources_changed(root, commit, build["inputs"]):
+            change["rebuilt"] = True
+            marked += 1
+    files["rebuilt"] = marked
+    return marked
 
 
 # ---------------------------------------------------------------- the installed commit

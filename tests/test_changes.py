@@ -69,6 +69,43 @@ class ChangelogsTests(unittest.TestCase):
         self.assertEqual(changes_cli._product("", "CHANGELOG.md", Path("some/repo")), "repo")
 
 
+class CommitMapTests(unittest.TestCase):
+    def test_every_entry_is_given_the_commit_that_wrote_it_from_one_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = repository(tmp)
+            commits = changes.entry_commits(root, "mods/Thing/CHANGELOG.md")
+            log = changes.read(root, "mods/Thing/CHANGELOG.md")
+            subjects = {e.lead: changes.describe(root, changes.commit_of(e, commits)).subject for e in log.entries}
+            self.assertEqual(subjects, {"Boats float.": "Thing 0.2.0: boats", "Sails.": "Thing 0.2.0: boats",
+                                        "Safe with a running save.": "Thing 0.2.0: boats", "Wheels turn.": "Thing 0.1.0: wheels"})
+
+    def test_an_entry_running_over_two_lines_is_found_by_its_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = repository(tmp)
+            log = changes.read(root, "mods/Thing/CHANGELOG.md")
+            boats = next(e for e in log.entries if e.lead == "Boats float.")
+            self.assertEqual(boats.first, "**Boats float.** On water,")
+            self.assertIsNotNone(changes.commit_of(boats, changes.entry_commits(root, "mods/Thing/CHANGELOG.md")))
+
+    def test_an_entry_in_no_commit_has_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = repository(tmp)
+            write(root / "mods" / "Thing" / "CHANGELOG.md", HEAD.rstrip("\n") + "\n\n- **Oars.** Boats row.\n\n" + V2 + V1)
+            log = changes.read(root, "mods/Thing/CHANGELOG.md")
+            oars = next(e for e in log.entries if e.lead == "Oars.")
+            self.assertIsNone(changes.commit_of(oars, changes.entry_commits(root, "mods/Thing/CHANGELOG.md")))
+
+    def test_the_list_gives_each_entry_its_commit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = io.StringIO()
+            changes_cli.main(["list", "--root", str(repository(tmp)), "--json"], environ={}, out=out)
+            versions = json.loads(out.getvalue())["data"]["changelogs"][0]["versions"]
+            newest = {e["commit"] for e in versions[0]["entries"]}
+            self.assertEqual(len(newest), 1)
+            self.assertNotIn(None, newest)
+            self.assertNotEqual(newest, {e["commit"] for e in versions[1]["entries"]})
+
+
 class EntryTests(unittest.TestCase):
     def test_an_entry_shows_the_commit_that_wrote_it_code_first(self):
         with tempfile.TemporaryDirectory() as tmp:

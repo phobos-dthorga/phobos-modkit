@@ -21,7 +21,7 @@ import os
 from pathlib import Path
 import sys
 
-from . import installs
+from . import changes, installs
 from .manifest import READS, RUNS, WRITES
 from .progress import Progress
 from .report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
@@ -58,21 +58,22 @@ def _parser():
 
 # ---------------------------------------------------------------- data for programs
 
-def _entry(entry):
+def _entry(entry, commits=None):
+    commit = changes.commit_of(entry, commits) if commits else None
     return {"version": entry.version, "section": entry.section, "text": entry.text, "lead": entry.lead,
-            "aboutSaves": entry.about_saves}
+            "aboutSaves": entry.about_saves, "commit": commit[:12] if commit else None}
 
 
-def _delta(delta, *logs):
+def _delta(delta, *logs, commits=None):
     summaries = {}
     for log in logs:
         if log is not None:
             for version, line in log.summaries.items():
                 summaries.setdefault(version, line)
     used = {e.version for e in delta.gain + delta.lose} | {pair[1].version for pair in delta.reworded}
-    return {"gain": [_entry(e) for e in delta.gain], "lose": [_entry(e) for e in delta.lose],
-            "reworded": [{"now": _entry(a), "would": _entry(b)} for a, b in delta.reworded],
-            "saveNotes": [_entry(e) for e in delta.save_notes],
+    return {"gain": [_entry(e, commits) for e in delta.gain], "lose": [_entry(e, commits) for e in delta.lose],
+            "reworded": [{"now": _entry(a, commits), "would": _entry(b, commits)} for a, b in delta.reworded],
+            "saveNotes": [_entry(e, commits) for e in delta.save_notes],
             "summaries": {v: s for v, s in summaries.items() if v in used}}
 
 
@@ -86,7 +87,14 @@ def state_of(state, update):
     if state.installed is None:
         return "not-installed"
     if not (update.gain or update.lose or update.reworded):
-        return "up-to-date"
+        files = state.files or {"total": 0}
+        if not files["total"]:
+            return "up-to-date"
+        # Only the files the comparison kept are known: when it kept them all and every one was only rebuilt, say so.
+        shown = files.get("paths", [])
+        if len(shown) == files["total"] and all(p.get("rebuilt") for p in shown):
+            return "rebuilt"
+        return "unlogged"
     if update.gain and not update.lose:
         return "behind"
     if update.lose and not update.gain:
@@ -103,19 +111,22 @@ def _iso(stamp):
     return datetime.fromtimestamp(stamp, timezone.utc).isoformat(timespec="seconds") if stamp else None
 
 
-def mod_data(state):
+def mod_data(state, root=None):
     installed = state.installed
+    # Every entry the mod's changelog ever held, with the commit that wrote it: lost entries too, since the history keeps them.
+    commits = changes.entry_commits(root, state.changelog) if root and state.changelog else None
     update = installs.compare(installed.changelog, state.repository.changelog) if installed else installs.Delta()
     backups = []
     for b in state.backups:
         moved = installs.compare(installed.changelog, b.changelog) if installed else installs.Delta()
-        backups.append({**_copy(b, installed), "delta": _delta(moved, installed.changelog if installed else None, b.changelog)})
+        backups.append({**_copy(b, installed),
+                        "delta": _delta(moved, installed.changelog if installed else None, b.changelog, commits=commits)})
     return {"mod": state.mod, "name": state.repository.name or (installed.name if installed else "") or state.mod,
             "changelog": state.changelog,
             "state": state_of(state, update),
             "repository": _copy(state.repository, installed),
             "installed": _copy(installed) if installed else None,
-            "update": _delta(update, installed.changelog if installed else None, state.repository.changelog),
+            "update": _delta(update, installed.changelog if installed else None, state.repository.changelog, commits=commits),
             "uncommitted": state.uncommitted[:50], "uncommittedCount": len(state.uncommitted),
             "commitsSince": state.commits_since, "backups": backups,
             "installedCommit": {"commit": state.commit, "exact": state.commit_exact} if state.commit else None,
@@ -126,15 +137,20 @@ def mod_data(state):
 # ---------------------------------------------------------------- words for people
 
 _STATE_WORDS = {"not-installed": "not installed", "up-to-date": "up to date", "behind": "repository has more",
-                "ahead": "installed copy has entries the repository lacks", "differs": "both have entries the other lacks"}
+                "ahead": "installed copy has entries the repository lacks", "differs": "both have entries the other lacks",
+                "rebuilt": "only rebuilt: its own code is unchanged", "unlogged": "files differ; the changelog says nothing new"}
 
 
 def _size(size):
     return "" if size is None else f"{size / MB:,.0f} MB"
 
 
-def status_report(where, states, running, top):
-    datas = [mod_data(s) for s in states]
+def status_report(where, states, running, top, progress=None):
+    datas = []
+    for position, state in enumerate(states, 1):
+        if progress:
+            progress(f"Matching {state.repository.name or state.mod}'s changelog entries to their commits", position, len(states))
+        datas.append(mod_data(state, where.root))
     behind = sum(d["state"] in ("behind", "differs") for d in datas)
     report = Report(f"Installs: {len(datas):,} mod{'' if len(datas) == 1 else 's'}, {behind:,} with changes in the repository "
                     "not yet installed")
@@ -201,7 +217,7 @@ def main(argv=None, environ=None, out=None, now=None, running=None, run=None):
             if args.mod and args.mod not in installs.mods_of(where.root, where.config):
                 raise installs.InstallsError(f"{args.mod!r} is not one of this repository's mods.")
             states = installs.survey(where, mods, progress=progress)
-            report, data = status_report(where, states, running(where.game.PROCESSES), args.top)
+            report, data = status_report(where, states, running(where.game.PROCESSES), args.top, progress)
         elif args.report == "backup":
             progress(f"Copying the installed {args.mod} into the backups")
             name = installs.backup(where, args.mod, now)

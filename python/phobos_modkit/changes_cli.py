@@ -46,9 +46,10 @@ def _parser():
     return p
 
 
-def _entry(entry):
+def _entry(entry, commits=None):
+    commit = changes.commit_of(entry, commits) if commits is not None else None
     return {"version": entry.version, "section": entry.section, "text": entry.text, "lead": entry.lead,
-            "aboutSaves": entry.about_saves}
+            "aboutSaves": entry.about_saves, "commit": commit[:12] if commit else None}
 
 
 def list_report(root, versions, top, progress):
@@ -57,12 +58,13 @@ def list_report(root, versions, top, progress):
     for position, path in enumerate(found, 1):
         progress(f"Reading {path}", position, len(found))
         log = changes.read(root, path)
+        commits = changes.entry_commits(root, path)
         order = [v for v in log.headings if v == UNRELEASED and any(e.version == v for e in log.entries)]
         order += [v for v in log.headings if v != UNRELEASED][:max(1, versions)]
         logs.append({"changelog": path, "product": _product(log.title, path, root),
                      "versionsInAll": sum(v != UNRELEASED for v in log.headings),
                      "versions": [{"version": v, "heading": log.headings.get(v, ""), "summary": log.summaries.get(v, ""),
-                                   "entries": [_entry(e) for e in log.entries if e.version == v]} for v in order]})
+                                   "entries": [_entry(e, commits) for e in log.entries if e.version == v]} for v in order]})
     report = Report(f"Changes: {len(logs):,} changelog{'' if len(logs) == 1 else 's'}")
     report.lines.append("Each entry's code is the commit that wrote it: changes entry --changelog PATH --text \"its opening\".")
     report.section("Changelogs", Table(

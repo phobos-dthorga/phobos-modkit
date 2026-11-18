@@ -19,6 +19,7 @@ from .installs import CHANGELOG, parse_changelog
 
 SKIP_FOLDERS = {"node_modules", "external", "obj", "bin", "target", "dist", "artifacts", "__pycache__"}
 SEARCH_DEPTH = 3                 # folders below the repository's root a changelog may sit in
+KEY_LENGTH = 100                 # characters of an entry's first line that name it
 NEEDLE_LENGTHS = (80, 48, 28)    # characters of an entry's opening tried, longest first
 MIN_NEEDLE = 12                  # an opening shorter than this could be anyone's
 MAX_FILES = 400                  # files listed for one commit
@@ -108,6 +109,37 @@ def needles(text):
         if len(needle) >= MIN_NEEDLE and needle not in found:
             found.append(needle)
     return sorted(found, key=len, reverse=True) or ([flat] if flat else [])
+
+
+def line_key(line):
+    """An entry's first line as a key: spacing ignored, cut to KEY_LENGTH characters."""
+    return " ".join(line.split())[:KEY_LENGTH]
+
+
+def entry_commits(root, changelog):
+    """{first-line key: commit hash} for every entry the changelog's history ever wrote: the oldest commit that added a line
+    opening that way. One pass over the history (git log -p), about 0.1 s for a changelog of 200 versions."""
+    out = git(root, "log", "-p", "--reverse", "--format=%x00%H", "--unified=0", "--no-color", "--no-ext-diff", "--", changelog,
+              check=False)
+    found, commit = {}, None
+    for line in out.split("\n"):
+        if line.startswith("\x00"):
+            commit = line[1:].strip()
+        elif commit and line.startswith(("+- ", "+* ")):
+            found.setdefault(line_key(line[3:]), commit)
+    return found
+
+
+def commit_of(entry, commits):
+    """The commit that wrote an entry, from entry_commits; None when no commit holds its first line yet."""
+    return commits.get(line_key(entry.first or entry.text))
+
+
+def describe(root, commit):
+    """A commit's hash, time, author and subject."""
+    out = git(root, "show", "-s", "--format=%H%x1f%at%x1f%an%x1f%s", commit).strip()
+    parts = out.split("\x1f")
+    return Commit(parts[0], int(parts[1] or 0), parts[2], parts[3]) if len(parts) == 4 else None
 
 
 def first_commit(root, changelog, text):
@@ -238,7 +270,9 @@ def entry_code(root, changelog, text):
     if entry is None:
         raise ChangesError("That entry is not in this changelog as it stands now.")
     text = entry.text
-    commit = first_commit(root, changelog, text)
+    # The same answer the list gives: the commit that first added the entry's first line, else a search for its opening.
+    known = commit_of(entry, entry_commits(root, changelog))
+    commit = describe(root, known) if known else first_commit(root, changelog, text)
     if commit is None:
         diff = git(root, "diff", "HEAD", "--find-renames", "--unified=3", "--no-color", "--no-ext-diff")
         written = entries_written(git(root, "diff", "HEAD", "--unified=0", "--no-color", "--no-ext-diff", "--", changelog))

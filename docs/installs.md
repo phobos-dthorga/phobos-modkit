@@ -60,10 +60,11 @@ Add `--json` for the envelope. A refusal is still an envelope, with `data.ok` fa
 
 | Field | What it says |
 | --- | --- |
-| `files` | Files installing would add, change or remove, counted by kind (code, Defs, patches, textures, text, sounds, About, other), with up to 60 paths. Equal size and date is equal; otherwise bytes are compared |
+| `files` | Files installing would add, change or remove, counted by kind (code, Defs, patches, textures, text, sounds, About, other), with up to 60 paths. Equal size and date is equal; otherwise bytes are compared. **A changed assembly whose project's own sources are unchanged since the installed commit is marked `rebuilt`** (1.26.0), and `rebuilt` counts them: it differs because it was built at another commit (.NET stamps the commit into an assembly unless told not to) or against newer code it uses. It still counts as a change, since an assembly built against older code it uses can fail against the new |
 | `build` | Per C# project of the mod: whether its sources are newer than the assembly it built. It counts the project's folder, its `Compile Include` files from elsewhere and the `shared` files, never referenced projects, whose changes need not rebuild it |
 | `installedCommit` | The install record's commit (`exact`), or for older installs the commit that first gave the mod its installed version (approximate) |
 | `settings` | The settings changes since that commit for this mod, from `settingsChanges`; read once per commit, only for mods not already in step |
+| `state` | `up-to-date`, `behind`, `ahead` or `differs` by the changelogs; when they agree but files differ, `rebuilt` (every changed file only rebuilt) or `unlogged` (1.26.0) |
 | `lookOut` | Test-list rows still waiting whose named version of the mod lies after the installed version and no later than the repository's (test-pass's `versionNames`) |
 
 `build` runs the repository's build command; it writes only inside the repository, so it does not wait for the game to close.

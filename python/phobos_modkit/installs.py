@@ -61,6 +61,7 @@ class Entry:
     section: str          # Added, Fixed, Save compatibility...; empty when the entry sits under no section
     text: str             # the entry as written, its lines joined
     lead: str             # its bold opening, or its first words
+    first: str = ""       # its first line as the file holds it, for finding the commit that wrote it (changes.entry_commits)
 
     @property
     def key(self):
@@ -99,7 +100,7 @@ def parse_changelog(text):
         if current is not None and version is not None:
             joined = " ".join(part.strip() for part in current).strip()
             if joined:
-                log.entries.append(Entry(version, section, joined, _lead(joined)))
+                log.entries.append(Entry(version, section, joined, _lead(joined), current[0].strip()))
         current = None
 
     for line in text.lstrip("﻿").splitlines():
@@ -421,6 +422,7 @@ def survey(where, mods=None, measure=True, run=subprocess.run, progress=None):
                          commit_exact=exact, changelog=f"{where.config['mods']}/{mod}/{CHANGELOG}")
         if installed is not None:
             state.files = checks.compare_files(installed.folder, repository.folder, install_only)
+            checks.mark_rebuilt(state.files, state.builds, where.root, commit)
             state.look_out = checks.look_out(where.root, repository.name, installed.version, repository.version)
         states.append(state)
     progress("Reading what settings an install would change", len(names) + 1, len(names) + 1)

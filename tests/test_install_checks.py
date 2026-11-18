@@ -4,6 +4,7 @@ from datetime import datetime
 import io
 import json
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 import time
@@ -131,6 +132,55 @@ class SettingsTests(unittest.TestCase):
         found, note = checks.settings_changes("repo", {"settingsChanges": ["x", "{commit}"]}, "abc", lambda *a, **k: Result())
         self.assertIsNone(found)
         self.assertIn("git could not read", note)
+
+
+class RebuiltTests(unittest.TestCase):
+    """An assembly whose own sources are unchanged since the installed commit was only rebuilt."""
+
+    def repository(self, tmp):
+        root = Path(tmp)
+        for args in (["init", "-q"], ["config", "core.fsmonitor", "false"], ["config", "user.email", "t@example.com"],
+                     ["config", "user.name", "T"]):
+            subprocess.run(["git", "-c", "core.fsmonitor=false", *args], cwd=root, check=True, capture_output=True)
+        write(root / "src" / "Thing" / "Thing.csproj", "<Project><PropertyGroup><ModFolder>Thing</ModFolder>"
+              "<AssemblyName>Thing</AssemblyName></PropertyGroup></Project>")
+        write(root / "src" / "Thing" / "Boat.cs", "class Boat {}")
+        write(root / "src" / "Other" / "Other.csproj", "<Project><PropertyGroup><ModFolder>Thing</ModFolder>"
+              "<AssemblyName>Other</AssemblyName></PropertyGroup></Project>")
+        write(root / "src" / "Other" / "Oar.cs", "class Oar {}")
+        subprocess.run(["git", "-c", "core.fsmonitor=false", "add", "src"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "-c", "core.fsmonitor=false", "commit", "-q", "-m", "one"], cwd=root, check=True, capture_output=True)
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+        config = {"mods": "mods", "build": {"projects": "src/*/*.csproj", "modProperty": "ModFolder"}}
+        return root, config, commit
+
+    def files(self, *names):
+        return {"total": len(names), "counts": {"code": len(names)},
+                "paths": [{"path": f"1.7/Assemblies/{n}", "change": "changed", "category": "code"} for n in names]}
+
+    def test_an_assembly_whose_own_code_is_unchanged_is_marked_rebuilt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, config, commit = self.repository(tmp)
+            write(root / "src" / "Other" / "Oar.cs", "class Oar { int blades = 2; }")
+            builds = checks.build_states(root, config)["Thing"]
+            files = self.files("Thing.dll", "Other.dll")
+            self.assertEqual(checks.mark_rebuilt(files, builds, root, commit), 1)
+            self.assertEqual([p.get("rebuilt", False) for p in files["paths"]], [True, False])
+            self.assertEqual(files["rebuilt"], 1)
+
+    def test_a_new_source_file_git_has_not_seen_counts_as_a_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, config, commit = self.repository(tmp)
+            write(root / "src" / "Thing" / "Sail.cs", "class Sail {}")
+            files = self.files("Thing.dll")
+            checks.mark_rebuilt(files, checks.build_states(root, config)["Thing"], root, commit)
+            self.assertNotIn("rebuilt", files["paths"][0])
+
+    def test_without_a_known_commit_nothing_is_called_rebuilt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, config, _ = self.repository(tmp)
+            files = self.files("Thing.dll")
+            self.assertEqual(checks.mark_rebuilt(files, checks.build_states(root, config)["Thing"], root, None), 0)
 
 
 class MovesTests(unittest.TestCase):
