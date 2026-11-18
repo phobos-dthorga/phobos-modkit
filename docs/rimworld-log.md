@@ -37,6 +37,7 @@ this kit provide their own short command (phobos-rimworld: `python scripts/triag
 | `--top N` | How many signatures to list (default 20) |
 | `--levels ERROR,WARN` | Which levels to list; add `INFO` for everything |
 | `--json FILE` | Also write everything as JSON, in the envelope with the signatures under `data`; `--json -` prints only JSON |
+| `--brief` | With `--json`: only the `--top` signatures of the listed levels, without the list of lines each occurs on, and as many of each comparison list (with `counts` for all): a page's worth, about 300 KB from a 200,000-line log. D'thorga Companion's Logs page reads this (1.35.0) |
 | `--logs`, `--game`, `--workshop` | Where the logs, the game and the Workshop folder are |
 | `--settings FILE` | A JSON file with `rimworldLogsPath`, `rimworldPath` and `workshopPath` |
 | `--no-mods` | Do not read installed mods; clues stay unnamed |
@@ -55,6 +56,13 @@ defaults are Unity's and Steam's usual places and have not been checked.
    each with a short ID for `--show`.
 4. **One exception, several messages:** signatures whose first messages share an exception trace.
 5. **Compared with the previous run:** new, gone and changed signatures.
+
+## Stack frames (1.35.0)
+
+Each signature's JSON carries `frames`: its first message's stack, nearest the fault first, at most 16. Each frame has `method`
+(`Namespace.Type.Method`, with Harmony's `_PatchN` taken off), `file` and `line` where the trace names its source, and `assembly`
+where it names a DLL; what the log does not give is empty or 0. A message with no exception trace gives the stack that logged it,
+less the game's own `Verse.Log` frames. A program can look a frame's method up in its code (phobos-modkit's `connections`).
 
 ## How mods are named
 

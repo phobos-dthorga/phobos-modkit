@@ -3,7 +3,7 @@ import unittest
 
 from support import fixture_text
 from phobos_modkit.games.rimworld import log as rimworld_log
-from phobos_modkit.logs.model import LogFile, Notice
+from phobos_modkit.logs.model import Entry, LogFile, Notice
 
 
 def parse_fixture(name):
@@ -126,6 +126,28 @@ class Layout16(unittest.TestCase):
 
 
 class Frames(unittest.TestCase):
+    def test_a_trace_gives_its_frames_nearest_the_fault_first(self):
+        log = parse_fixture("player-1.7.log")
+        alice = next(e for e in log.entries if "for Alice" in e.headline)
+        self.assertEqual([(f["method"], f["assembly"]) for f in alice.frames], [
+            ("RimWorld.Pawn_GuestTracker.get_SlaveIsSecure", "Assembly-CSharp.dll"),
+            ("ExampleWidgets.Marks.Solve", "ExampleWidgets.dll"),
+            ("Verse.PawnUIOverlay.DrawPawnGUIOverlay", "")])
+
+    def test_a_frame_with_its_source_names_the_file_and_line(self):
+        entry = Entry(line=1, level="ERROR", category="Verse", headline="Boom: System.Exception", body=[
+            r"   at Boats.Hull.Tick(Int32 ticks) in C:\src\Boats\Hull.cs:line 307",
+            "    at Verse.Log.Error(String text) [0x10]",
+            "    at Verse.TickManager.DoSingleTick() [0x20]"])
+        self.assertEqual(rimworld_log.frames(entry), [
+            {"method": "Boats.Hull.Tick", "file": r"C:\src\Boats\Hull.cs", "line": 307, "assembly": ""}])
+
+    def test_without_a_trace_the_logging_stack_is_the_frames_less_the_logger(self):
+        entry = Entry(line=1, level="ERROR", category="Verse", headline="Something odd", body=[
+            "    at Verse.Log.Error(String text) [0x10]",
+            "    at Boats.Hull.Check(Hull this) [0x20]"])
+        self.assertEqual([f["method"] for f in rimworld_log.frames(entry)], ["Boats.Hull.Check"])
+
     def test_namespace_roots(self):
         cases = {
             "Verse.Root+<>c.<Start>b__10_1()": "Verse",

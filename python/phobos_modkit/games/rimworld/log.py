@@ -156,6 +156,35 @@ def _frame_method(frame):
     return re.sub(r"_Patch\d+$", "", name)
 
 
+SOURCE_PLACE = re.compile(r" in (.+?):line (\d+)\s*$")
+FRAMES_KEPT = 16
+
+
+def frames(entry):
+    """The message's stack, nearest the fault first: the exception's own trace, or else the stack that logged it.
+
+    Each frame is a dict of method (as `_frame_method` names it), file and line (where the trace names its source),
+    and assembly (where it names a DLL); a part the log does not give is "" or 0.
+    """
+    found, logging = [], []
+    for line in entry.body:
+        if line.startswith("    at "):
+            match = LOGGER_FRAME.match(line)
+            if match and len(logging) < FRAMES_KEPT:
+                logging.append({"method": _frame_method(match.group(1)), "file": "", "line": 0, "assembly": ""})
+            continue
+        match = EXCEPTION_FRAME.match(line)
+        if not match:
+            continue
+        text, assembly = match.group(1), match.group(2) or ""
+        place = SOURCE_PLACE.search(text)
+        found.append({"method": _frame_method(text), "file": place.group(1) if place else "",
+                      "line": int(place.group(2)) if place else 0, "assembly": assembly})
+        if len(found) == FRAMES_KEPT:
+            break
+    return [f for f in (found or logging) if f["method"] and not f["method"].startswith("Verse.Log.")]
+
+
 def fingerprint(entry):
     """The exception's type and its top frames, or "" when the message carries no exception trace.
 
@@ -328,6 +357,7 @@ def parse(text, name="Player.log"):
         entry.headline = _headline(entry.headline, entry.body)
         entry.evidence = evidence_for(entry)
         entry.fingerprint = fingerprint(entry)
+        entry.frames = frames(entry)
     log = LogFile(name=name, layout=layout, entries=entries, header=header, limits=limits, line_total=len(lines))
     log.notices = _notices(entries)
     return log

@@ -87,6 +87,20 @@ class Json(unittest.TestCase):
         self.assertIn("save-loaded", kinds)
 
 
+    def test_brief_keeps_a_pages_worth_with_frames_and_no_line_lists(self):
+        full = render.to_json(report())
+        brief = json.loads(json.dumps(render.to_json(report(), brief=(1, ("ERROR",)))))
+        self.assertEqual(len(brief["groups"]), 1)
+        self.assertEqual(brief["groups"][0]["level"], "ERROR")
+        self.assertNotIn("lines", brief["groups"][0])
+        self.assertIn("lines", full["groups"][0])
+        self.assertEqual(brief["brief"], {"shown": 1, "of": sum(1 for g in full["groups"] if g["level"] == "ERROR")})
+        self.assertLessEqual(len(brief["comparison"]["new"]), 1)
+        self.assertEqual(brief["comparison"]["counts"]["new"], len(full["comparison"]["new"]))
+        alice = next(g for g in full["groups"] if "for Alice" in g["example"]["headline"])
+        self.assertEqual(alice["frames"][1]["method"], "ExampleWidgets.Marks.Solve")
+
+
 class Redaction(unittest.TestCase):
     def test_either_slash_and_any_case(self):
         redact = render.home_redactor(HOME)

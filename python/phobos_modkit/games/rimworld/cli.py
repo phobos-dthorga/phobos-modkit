@@ -37,6 +37,8 @@ def _parser():
     p.add_argument("--levels", default=",".join(render.DEFAULT_LEVELS),
                    help="levels to list, comma-separated (default %(default)s; add INFO for everything)")
     p.add_argument("--json", metavar="FILE", help="also write the full report as JSON to FILE; - prints only JSON")
+    p.add_argument("--brief", action="store_true", help="with --json, keep only the --top signatures of the listed "
+                                                        "levels, without their line lists: a page's worth")
     p.add_argument("--logs", help="the logs folder (else RIMWORLD_LOGS_PATH, the settings file, the default)")
     p.add_argument("--game", help="the RimWorld folder, for naming mods (else RIMWORLD_PATH, settings, default)")
     p.add_argument("--workshop", help="the Workshop content folder (else RIMWORLD_WORKSHOP_PATH, settings, beside "
@@ -106,7 +108,8 @@ def main(argv=None, settings_file=None, environ=None, out=None):
 
     if args.json:
         data = envelope_text("rimworld-log", render.summary_report(report, args.top, levels), redact,
-                             render.to_json(report, redact=redact))
+                             render.to_json(report, redact=redact,
+                                            brief=(args.top, levels) if args.brief else None))
         if args.json == "-":
             out.write(data + "\n")
             return EXIT_OK
@@ -116,4 +119,4 @@ def main(argv=None, settings_file=None, environ=None, out=None):
 
 
 MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
-            "question": "Why did the game log errors?"}
+            "question": "Why did the game log errors?", "surface": "log"}

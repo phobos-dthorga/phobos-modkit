@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.35.0] - 2026-11-19
+
+For D'thorga Companion's cross-links (19 November 2026, docs/cross-links.md there, L1): the game's log as a page, its stack lines leading to code.
+
+### Added
+
+- rimworld-log: each signature's JSON names its stack frames (method, source file and line where the log gives them, assembly), nearest the fault first; a message without an exception gives the stack that logged it.
+- rimworld-log --brief: with --json, only the top signatures of the listed levels, without their line lists, and as many of each comparison list with counts for all: a page's worth (about 300 KB instead of 4 MB from a 200,000-line log).
+- The manifest marks rimworld-log as a log reader (surface log), so a program can offer a log page for any game whose tools have one.
 ## [1.34.0] - 2026-11-19
 
 For D'thorga Companion's cross-links (19 November 2026, docs/cross-links.md there, L2): a thing's own history.

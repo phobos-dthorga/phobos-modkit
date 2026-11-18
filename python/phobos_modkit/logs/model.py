@@ -41,6 +41,9 @@ class Entry:
     time: str = ""                 # as written, "" when the log has no times
     evidence: list = field(default_factory=list)   # Evidence, strongest kind first, then in the order found
     fingerprint: str = ""          # the exception behind the message, when the adapter can tell; "" otherwise
+    frames: list = field(default_factory=list)     # its stack, nearest the fault first: dicts of method, file, line,
+                                                   # assembly (each "" or 0 when the log does not say), when the adapter
+                                                   # can read them
 
     @property
     def line_count(self):

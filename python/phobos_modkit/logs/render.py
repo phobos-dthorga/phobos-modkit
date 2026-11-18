@@ -17,6 +17,7 @@ CLUSTERS_SHOWN = 10
 CHANGES_SHOWN = 10
 DETAIL_LINES = 60
 JSON_BODY_LINES = 80
+BRIEF_BODY_LINES = 40
 JSON_FORMAT = 1
 POINTS_AT_WIDTH = 100
 EXCEPTION_WIDTH = 160
@@ -164,24 +165,37 @@ def _evidence_json(group):
             for e, n in sorted(group.evidence.items(), key=lambda item: (item[0].rank, -item[1]))]
 
 
-def _group_json(group, redact):
+def _group_json(group, redact, brief=False):
     entry = group.example
-    return {
+    body = entry.body[:BRIEF_BODY_LINES if brief else JSON_BODY_LINES]
+    result = {
         "id": group.id, "level": group.level, "category": group.category,
         "signature": redact(group.signature), "fingerprint": redact(entry.fingerprint), "count": group.count,
         "first": {"line": group.first_line, "time": group.first_time},
         "last": {"line": group.last_line, "time": group.last_time},
         "lines": group.lines,
-        "example": {"headline": redact(entry.headline), "body": [redact(l) for l in entry.body[:JSON_BODY_LINES]],
+        "example": {"headline": redact(entry.headline), "body": [redact(l) for l in body],
                     "bodyLines": len(entry.body)},
         "evidence": [{**item, "value": redact(item["value"])} for item in _evidence_json(group)],
+        "frames": [{**f, "file": redact(f["file"])} for f in entry.frames],
     }
+    if brief:
+        del result["lines"]
+    return result
 
 
-def to_json(report, redact=None):
-    """Everything the report holds, with stable keys."""
+def to_json(report, redact=None, brief=None):
+    """Everything the report holds, with stable keys.
+
+    `brief`, a (top, levels) pair, keeps only the first `top` signatures of those levels, without their line lists,
+    and as many of each comparison list: a page's worth, for a program that shows one (D'thorga Companion's Logs page).
+    """
     redact = redact or _keep
     log = report.log
+    groups = report.groups
+    if brief:
+        top, levels = brief
+        groups = [g for g in groups if g.level in levels][:top]
     result = {
         "format": JSON_FORMAT,
         "log": {"name": log.name, "layout": log.layout, "lines": log.line_total, "messages": len(log.entries),
@@ -189,14 +203,19 @@ def to_json(report, redact=None):
         "notices": [{"kind": n.kind, "text": redact(n.text), "data": n.data} for n in log.notices],
         "limits": [redact(limit) for limit in log.limits],
         "levels": {level: {"messages": e, "signatures": s} for level, (e, s) in report.level_counts().items()},
-        "groups": [_group_json(g, redact) for g in report.groups],
+        "groups": [_group_json(g, redact, bool(brief)) for g in groups],
         "clusters": [{"fingerprint": redact(c.fingerprint), "messages": c.count, "groups": [g.id for g in c.groups]}
-                     for c in clusters(report.groups)],
+                     for c in clusters(report.groups)][:CLUSTERS_SHOWN if brief else None],
     }
+    if brief:
+        result["brief"] = {"shown": len(groups), "of": sum(1 for g in report.groups if g.level in brief[1])}
     if report.comparison is not None:
         c = report.comparison
         change = lambda ch: {"id": ch.group.id, "level": ch.group.level, "previous": ch.previous,
                              "current": ch.current, "headline": redact(ch.group.example.headline)}
-        result["comparison"] = {"previous": c.previous_name, "new": [change(x) for x in c.new],
-                                "gone": [change(x) for x in c.gone], "changed": [change(x) for x in c.changed]}
+        cut = brief[0] if brief else None
+        result["comparison"] = {"previous": c.previous_name, "new": [change(x) for x in c.new[:cut]],
+                                "gone": [change(x) for x in c.gone[:cut]],
+                                "changed": [change(x) for x in c.changed[:cut]],
+                                "counts": {"new": len(c.new), "gone": len(c.gone), "changed": len(c.changed)}}
     return result
