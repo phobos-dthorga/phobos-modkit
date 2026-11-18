@@ -32,6 +32,11 @@ missing from the table.
 | Does not pin the kit yet | Nothing until it is next worked on: then it pins the kit and adds the two lines. Until then, the owner's own instructions on their machine point every session at this folder in the kit's own checkout |
 | Is this kit | `@rules/every-session.md` in its `CLAUDE.md`, and the pointer in its `AGENTS.md` |
 
+**Name the path in backticks, never as a Markdown link** (learnt on the first day, 19 Nov 2026): on GitHub a pinned kit's folder
+is a pointer to this repository, so a link into it leads nowhere, and a repository's own link check rightly refuses it. For a
+person reading on GitHub, link to this repository instead:
+`https://github.com/phobos-dthorga/phobos-modkit/blob/main/rules/every-session.md`.
+
 **`python -m phobos_modkit rules check --root REPO` says whether a repository has both lines**, and fails when one is missing. Add
 it to the repository's gate (`config/gate.json`), so a repository cannot stop reading the rules without a check saying so:
 

@@ -4,6 +4,12 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.25.1] - 2026-11-19
+
+### Changed
+
+- rules/README.md says to name the shared rules' path in backticks, never as a Markdown link: on GitHub a pinned kit's folder is a pointer to this repository, and a link into it leads nowhere. Found when phobos-rimworld's link check refused the first such link. No rule changed.
+
 ## [1.25.0] - 2026-11-19
 
 Asked for by the owner (19 November 2026), on choosing how commits are cut for the Companion's code viewer: "a central point from which global rules for all mods can be read and modified", as a folder in this repository to be used as the root for such rules from now on.
