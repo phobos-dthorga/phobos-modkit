@@ -19,6 +19,7 @@ import sys
 
 from ...installs import game_running
 from ...manifest import READS, WRITES
+from ... import history
 from ...progress import Progress
 from ...report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
 from . import loading, textures
@@ -159,6 +160,8 @@ def main(argv=None, environ=None, out=None, running=None, run=None, mods=None, n
                 results.append({"name": mod.name, "packageId": mod.package_id, "exitCode": exit_code, "line": line,
                                 "staleAfter": len(after.stale), "missingAfter": len(after.missing)})
             ok = all(r["exitCode"] == 0 for r in results)
+            history.record("rimworld", "encoded", environ, args.settings, ok=ok, count=len(results),
+                           mods=[r["name"] for r in results][:20])
             code = EXIT_OK if ok else EXIT_REFUSED
             report = Report(f"Encoded the textures of {len(results):,} mods" if ok else "Some textures could not be encoded")
             report.section("Mods", Table(["Mod", "Exit", "Stale after", "Never encoded after"],

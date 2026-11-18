@@ -4,6 +4,23 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.30.0] - 2026-11-19
+
+The owner asked for it (19 November 2026): "a timeline ... that records/shows how updates were applied, changed, removed, etc. over time ... I like coming back and reading the CHANGELOGs from a particular update-in-moment but I can't because it is now lost to time", with the history kept in D'thorga Companion's own folder and "a central settings page where everything or at least, most, of these sorts of things are managed".
+
+### Added
+
+- history timeline: every fact about a game's products over time, newest first. From git, back to each repository's first commit: a changelog started, a version written, released or removed, entries added, reworded or removed, a product renamed, a product ended and the product it was merged into. From this PC's history log: installed, went back, backed up, built, textures encoded. Facts from git are cached, so only new commits are read after the first time (about 4 s, then under a second, for phobos-rimworld).
+- history at: any changelog as it stood at a commit or a moment, each entry marked kept, reworded (with its words now) or removed, and a count of what was added since. A removed changelog can still be read.
+- The history log: one JSON line a fact, one file a game, in the history folder of D'thorga Companion's own folder (historyPath, PHOBOS_HISTORY). installs writes installed, backed up, went back and built; an install through a repository's deploy writes installed through the install record; rimworld-textures encode writes encoded. Recorded from 19 November 2026 on; earlier installs were not recovered (owner's choice).
+- The central settings file: settings.json in D'thorga Companion's own folder (PHOBOS_SETTINGS names another), read after a repository's own settings file and before the default, for every path the tools read.
+- settings list: every setting the tools read, its value, and whether it comes from the environment, a repository's own file, the central file or the default; a repository declares its own scripts' settings in config/settings.json. settings set writes one into the central file, or clears it.
+- changes entry --commit: one commit's code with every entry it wrote, for a fact on the timeline.
+
+### Changed
+
+- paths.where says which layer a value comes from; paths.companion_data and changes.product_name moved to where every tool can use them.
+- The tests point the history log and the central settings file into a folder of their own. Found while building it: two test runs had written stand-in installs into the owner's real history log; those lines were removed before anything else read them.
 ## [1.29.0] - 2026-11-19
 
 The owner asked for it (19 November 2026), after D'thorga Companion read every mod as changed because .NET stamped the git commit into each assembly.

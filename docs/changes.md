@@ -20,7 +20,11 @@
 python -m phobos_modkit changes list --root REPO
 python -m phobos_modkit changes list --root REPO --versions 10
 python -m phobos_modkit changes entry --root REPO --changelog mods/Thing/CHANGELOG.md --text "Boats float."
+python -m phobos_modkit changes entry --root REPO --changelog mods/Thing/CHANGELOG.md --commit 401c6a93
 ```
+
+`--commit` (1.30.0) shows one commit's code with every entry it wrote into the changelog, for a fact on the timeline whose
+entries may since have been reworded or removed (docs/history.md); the changelog may be one the repository no longer has.
 
 `--text` takes the entry's whole text or its bold opening. Add `--json` for the envelope; a refusal is still an envelope, with
 `data.ok` false and `data.refusal` saying why.

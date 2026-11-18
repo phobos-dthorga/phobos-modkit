@@ -211,7 +211,8 @@ class MovesTests(unittest.TestCase):
             return Result()
 
         out = io.StringIO()
-        code = installs_cli.main([*argv, "--root", str(repo), "--json"], environ={}, out=out, now=datetime(2026, 11, 18),
+        code = installs_cli.main([*argv, "--root", str(repo), "--json"], environ=support.isolated_environ(repo.parent), out=out,
+                                 now=datetime(2026, 11, 18),
                                  running=running, run=run)
         return code, json.loads(out.getvalue()), seen
 

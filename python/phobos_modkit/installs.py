@@ -274,14 +274,34 @@ def record_for(root, config, mod, version, now=None):
     mods = config["mods"]
     changed = uncommitted(root, [f"{mods}/{mod}", *config.get("sharedSources", [])])
     return {"format": RECORD_FORMAT, "mod": mod, "version": version, "repository": Path(root).resolve().name,
+            "game": config.get("game"), "product": _product_of(root, config, mod), "changelog": f"{mods}/{mod}/{CHANGELOG}",
             "commit": head(root), "uncommitted": changed[:50], "uncommittedCount": len(changed),
             "installed": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds")}
 
 
-def write_record(target, record):
+def _product_of(root, config, mod):
+    """A mod's name as its changelog gives it, for the history log; its folder's name when it has none."""
+    log = read_changelog(Path(root) / config["mods"] / mod)
+    from .changes import product_name
+    return product_name(log.title, f"{config['mods']}/{mod}/{CHANGELOG}", root) if log and log.title else mod
+
+
+def write_record(target, record, settings=None, environ=None):
+    """Writes the install record into the installed copy, and notes the install in the game's history log."""
     with open(Path(target) / RECORD, "w", encoding="utf-8", newline="\n") as handle:
         json.dump(record, handle, indent=2)
         handle.write("\n")
+    if record.get("game"):
+        from . import history
+        history.record(record["game"], "installed", environ, settings, repository=record.get("repository"), mod=record.get("mod"),
+                       product=record.get("product"), version=record.get("version"), commit=record.get("commit"),
+                       uncommittedCount=record.get("uncommittedCount") or None, changelog=record.get("changelog"))
+
+
+def note(where, kind, **fields):
+    """Notes a move in the game's history log (the install helper's moves: backed up, went back, built). Never raises."""
+    from . import history
+    return history.record(where.config["game"], kind, where.environ, where.settings, repository=where.root.name, **fields)
 
 
 def read_record(folder):
@@ -349,6 +369,7 @@ class Place:
     target: Path              # the game's folder of installed mods
     backups: Path
     settings: Path = None
+    environ: dict = None       # the environment the caller gave, for every path worked out later (the history log)
 
     def installed(self, mod):
         return self.target / mod
@@ -363,7 +384,7 @@ def place(root, settings=None, environ=None):
     game = adapter(config)
     named = settings_file(root, config, settings)
     target = Path(game.installed_mods(named, environ))
-    return Place(root, config, game, target, root / config["backups"], named)
+    return Place(root, config, game, target, root / config["backups"], named, environ)
 
 
 @dataclass
@@ -505,6 +526,8 @@ def backup(where, mod, now=None):
         if partial.exists():
             remove(partial)
         raise InstallsError(f"The backup could not be made ({error}). Nothing was changed.") from None
+    copy = read_copy("backup", where.backups / name, where.game)
+    note(where, "backed-up", mod=mod, product=copy.name or mod, version=copy.version, backup=name)
     return name
 
 
@@ -549,6 +572,10 @@ def restore(where, mod, name, now=None, running=game_running):
     if replaced:
         where.backups.mkdir(parents=True, exist_ok=True)
         shutil.move(str(aside), str(where.backups / replaced))
+    restored = read_copy("installed", target, where.game)
+    replaced_copy = read_copy("backup", where.backups / replaced, where.game) if replaced else None
+    note(where, "went-back", mod=mod, product=restored.name or mod, version=restored.version, backup=name,
+         fromVersion=replaced_copy.version if replaced_copy else None, keptAs=replaced)
     return replaced
 
 
@@ -607,4 +634,6 @@ def build(where, run=None, progress=None):
     command = (where.config.get("build") or {}).get("command")
     if not command:
         raise InstallsError("This repository's installs.json names no build command.")
-    return _run_command(where, [sys.executable if part == "{python}" else part for part in command], "build", run, progress)
+    code, lines = _run_command(where, [sys.executable if part == "{python}" else part for part in command], "build", run, progress)
+    note(where, "built", ok=code == 0, exitCode=code)
+    return code, lines

@@ -39,7 +39,8 @@ def _parser():
             s.add_argument("--versions", type=int, default=5, help="versions of each changelog to list, newest first (default 5)")
         else:
             s.add_argument("--changelog", required=True, help="the changelog's path in the repository, as list gives it")
-            s.add_argument("--text", required=True, help="the entry's text, or its bold opening")
+            s.add_argument("--text", help="the entry's text, or its bold opening")
+            s.add_argument("--commit", help="instead of an entry, a commit: what it changed, with every entry it wrote")
         s.add_argument("--top", type=int, default=40, help="rows per table (default 40)")
         s.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
         s.add_argument("--no-redact", action="store_true", help="show the home folder instead of ~")
@@ -61,7 +62,7 @@ def list_report(root, versions, top, progress):
         commits = changes.entry_commits(root, path)
         order = [v for v in log.headings if v == UNRELEASED and any(e.version == v for e in log.entries)]
         order += [v for v in log.headings if v != UNRELEASED][:max(1, versions)]
-        logs.append({"changelog": path, "product": _product(log.title, path, root),
+        logs.append({"changelog": path, "product": changes.product_name(log.title, path, root),
                      "versionsInAll": sum(v != UNRELEASED for v in log.headings),
                      "versions": [{"version": v, "heading": log.headings.get(v, ""), "summary": log.summaries.get(v, ""),
                                    "entries": [_entry(e, commits) for e in log.entries if e.version == v]} for v in order]})
@@ -72,17 +73,6 @@ def list_report(root, versions, top, progress):
         [[log["product"], log["changelog"], _newest(log), f"{_newest_count(log):,}", f"{log['versionsInAll']:,}"] for log in logs[:top]],
         total=len(logs)))
     return report, {"repository": Path(root).name, "changelogs": logs}
-
-
-def _product(title, path, root):
-    """"D'thorga Framework changelog" names D'thorga Framework and "Changelog (PhobosLib)" PhobosLib; a bare "Changelog" is named
-    by its folder, or by the repository."""
-    name = title.strip()
-    if name.lower().endswith("changelog"):
-        name = name[:-len("changelog")].strip()
-    elif name.lower().startswith("changelog"):
-        name = name[len("changelog"):].strip(" ()-:")
-    return name or Path(path).parent.name or Path(root).name
 
 
 def _newest(log):
@@ -99,9 +89,9 @@ def _when(seconds):
     return datetime.fromtimestamp(seconds, timezone.utc).isoformat(timespec="seconds") if seconds else None
 
 
-def entry_report(root, changelog, text, top, progress):
-    progress("Finding the commit that wrote this entry", 1, 2)
-    found = changes.entry_code(root, changelog, text)
+def entry_report(root, changelog, text, top, progress, commit=None):
+    progress("Finding the commit that wrote this entry" if not commit else "Reading the commit", 1, 2)
+    found = changes.commit_code(root, changelog, commit) if commit else changes.entry_code(root, changelog, text)
     progress("Reading what it changed", 2, 2)
     commit = found.commit
     files = [{"path": f.path, "oldPath": f.old_path if f.change == "renamed" else None, "change": f.change, "kind": f.kind,
@@ -145,9 +135,11 @@ def main(argv=None, environ=None, out=None):
         if args.report == "list":
             report, data = list_report(root, args.versions, args.top, progress)
         else:
-            if len(args.text) > MAX_TEXT:
+            if not args.text and not args.commit:
+                raise changes.ChangesError("Name an entry (--text) or a commit (--commit).")
+            if args.text and len(args.text) > MAX_TEXT:
                 raise changes.ChangesError("That entry's text is too long to look for.")
-            report, data = entry_report(root, args.changelog.replace("\\", "/"), args.text, args.top, progress)
+            report, data = entry_report(root, args.changelog.replace("\\", "/"), args.text, args.top, progress, args.commit)
     except (changes.ChangesError, OSError) as error:
         if not args.json:
             print(redact(str(error)), file=sys.stderr)

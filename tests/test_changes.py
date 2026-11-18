@@ -64,9 +64,9 @@ class ChangelogsTests(unittest.TestCase):
             self.assertEqual([e["lead"] for e in version["entries"]], ["Boats float.", "Sails.", "Safe with a running save."])
 
     def test_a_bare_changelog_title_is_named_by_what_follows_or_its_folder(self):
-        self.assertEqual(changes_cli._product("Changelog (PhobosLib)", "CHANGELOG.md", "repo"), "PhobosLib")
-        self.assertEqual(changes_cli._product("Changelog", "mods/Cat Ledger/CHANGELOG.md", "repo"), "Cat Ledger")
-        self.assertEqual(changes_cli._product("", "CHANGELOG.md", Path("some/repo")), "repo")
+        self.assertEqual(changes.product_name("Changelog (PhobosLib)", "CHANGELOG.md", "repo"), "PhobosLib")
+        self.assertEqual(changes.product_name("Changelog", "mods/Cat Ledger/CHANGELOG.md", "repo"), "Cat Ledger")
+        self.assertEqual(changes.product_name("", "CHANGELOG.md", Path("some/repo")), "repo")
 
 
 class CommitMapTests(unittest.TestCase):

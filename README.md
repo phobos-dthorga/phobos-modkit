@@ -74,6 +74,8 @@ python -m phobos_modkit test-pass report --root REPO   in-game tests waiting for
 python -m phobos_modkit installs status --root REPO    what updating or going back gains or loses; also backup, restore, install, build
 python -m phobos_modkit rimworld-textures status       whether any active mod would show an old picture; encode fixes it
 python -m phobos_modkit changes list --root REPO       what the changelogs say changed lately; entry shows one entry's code
+python -m phobos_modkit history timeline --root REPO   what happened to every product over time; at reads a changelog as it stood
+python -m phobos_modkit settings list                  every path the tools read, and where each value comes from
 python -m phobos_modkit rules list                     the rules every repository shares; check says whether one reads them
 python -m phobos_modkit art-audit report --root REPO   images drawn in code, without a record, or borrowed
 python -m phobos_modkit gate --root ..         this repository's checks before a commit; only what failed
@@ -102,6 +104,8 @@ in order of expected saving.
 | 10 | [The gate](docs/gate.md) | Every build, test and check before a commit, from the repository's own list; only what failed, with the errors and failed tests | Python | Built: 0.11.0 |
 | 13 | [Cleanup](docs/cleanup.md) | What the tools, builds and tests left behind, how big it is and why it may go; deleted only on request | Python | Built: 1.8.0 |
 | 14 | [Test pass](docs/test-pass.md) | A repository's in-game test list, what the game has seen working and the owner's verdicts; writes verdicts into the list on request | Python | Built: 1.9.0; part passes and verdicts given in conversation 1.14.0 |
+| 22 | [Settings](docs/settings.md) | Every path the tools read, its value and where that comes from (the environment, a repository's own file, the central settings file or the default); sets one in the central file on request | Python | Built: 1.30.0 |
+| 21 | [History](docs/history.md) | What happened to a game's products over time, as facts from git back to each repository's first commit (versions written, released, removed; entries added, reworded, removed; mods renamed or merged away) and from this PC's history log (installs, go-backs, backups, builds, encoded textures); any changelog as it stood at any moment | Python, with git | Built: 1.30.0 |
 | 20 | [Shared rules](rules/README.md) | The owner's rules for every game, mod and tool repository, in one place, and a check that a repository reads them | Markdown, with a Python check | Built: 1.25.0 |
 | 19 | [Changes](docs/changes.md) | What a repository's changelogs say changed lately, and the code behind any one entry: the commit that wrote it and its diff, file by file. Any game, any repository with a changelog | Python, with git | Built: 1.24.0 |
 | 18 | [Textures](docs/rimworld-textures.md) (RimWorld) | Whether every active mod's encoded textures match its pictures (a stale one shows the old picture), and encoding those that don't with RimSort's own todds preset, on request | Python, with RimSort's todds | Built: 1.21.0 |
@@ -138,6 +142,8 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/rimworld-startup.md](docs/rimworld-startup.md) | Start-up times from Loading Progress's sessions: launches, costliest mods, comparisons |
 | [rules/README.md](rules/README.md) | The shared rules: what the folder holds, how a repository takes them up, how a rule is changed, and what is waiting to move there |
 | [docs/changes.md](docs/changes.md) | Changes: how an entry's commit is found, what the answer holds, and what it cannot know |
+| [docs/history.md](docs/history.md) | History: the facts from git and from the history log, a changelog as it stood, and the limits |
+| [docs/settings.md](docs/settings.md) | Settings: the order every path is read in, the central settings file, and a repository's own settings |
 | [docs/rimworld-textures.md](docs/rimworld-textures.md) | Textures: the game's rule for a .dds beside a .png, what counts as stale, the Workshop dates checked, and encoding |
 | [docs/rimworld-perf.md](docs/rimworld-perf.md) | Recording a running RimWorld from outside: what is recorded, how time is put down to mods, and the limits |
 | [docs/rimworld-readiness.md](docs/rimworld-readiness.md) | Which active mods declare a game version, and how closely each depends on the game |

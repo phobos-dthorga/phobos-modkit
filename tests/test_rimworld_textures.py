@@ -59,7 +59,8 @@ def installed(folder, name="Sample Mod", package="test.sample", source="Workshop
 class CliTests(unittest.TestCase):
     def run_cli(self, argv, mods, running=lambda names: [], run=None):
         out = io.StringIO()
-        code = textures_cli.main([*argv, "--json", "--todds", __file__], environ={}, out=out, running=running, run=run, mods=mods)
+        code = textures_cli.main([*argv, "--json", "--todds", __file__], environ=support.isolated_environ(), out=out, running=running,
+                                 run=run, mods=mods)
         return code, json.loads(out.getvalue())
 
     def test_status_names_the_mods_that_would_show_old_pictures(self):

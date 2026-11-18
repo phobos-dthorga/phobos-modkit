@@ -89,6 +89,19 @@ def read(root, changelog):
     return parse_changelog((Path(root) / changelog).read_text(encoding="utf-8", errors="replace"))
 
 
+# ---------------------------------------------------------------- naming a product
+
+def product_name(title, path, root):
+    """"D'thorga Framework changelog" names D'thorga Framework and "Changelog (PhobosLib)" PhobosLib; a bare "Changelog" is named
+    by its folder, or by the repository."""
+    name = title.strip()
+    if name.lower().endswith("changelog"):
+        name = name[:-len("changelog")].strip()
+    elif name.lower().startswith("changelog"):
+        name = name[len("changelog"):].strip(" ()-:")
+    return name or Path(path).parent.name or Path(root).name
+
+
 # ---------------------------------------------------------------- the commit that wrote an entry
 
 @dataclass
@@ -290,6 +303,21 @@ class EntryCode:
     files: list = field(default_factory=list)
     written_with: list = field(default_factory=list)   # openings of the other entries the same commit wrote
     files_left_out: int = 0
+
+
+def commit_code(root, changelog, commit_hash):
+    """What one commit changed, as entry_code gives it, with every entry it wrote into the changelog: for a fact on the timeline,
+    whose entries may since have been reworded or removed. changelog may be one the repository no longer has."""
+    if not re.fullmatch(r"[0-9a-f]{7,40}", commit_hash or ""):
+        raise ChangesError(f"{commit_hash!r} is not a commit.")
+    commit = describe(root, commit_hash)
+    if commit is None:
+        raise ChangesError(f"{commit_hash[:12]} is not a commit of this repository.")
+    diff = git(root, "show", commit.hash, "--format=", "--find-renames", "--unified=3", "--no-color", "--no-ext-diff")
+    written = entries_written(git(root, "show", commit.hash, "--format=", "--unified=0", "--no-color", "--no-ext-diff", "--",
+                                  changelog))
+    files = ordered(parse_diff(diff), changelog)
+    return EntryCode(commit, files[:MAX_FILES], written, max(0, len(files) - MAX_FILES))
 
 
 def entry_code(root, changelog, text):

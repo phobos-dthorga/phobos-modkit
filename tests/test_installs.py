@@ -145,11 +145,12 @@ class Fixture:
         installs.write_record(self.game / "Mods" / "Thing", {"format": 1, "mod": "Thing", "version": "0.2.0", "commit": None})
         write_mod(self.repo / ".local" / "backups" / "Thing-20261101-120000", "0.1.0", "# Thing changelog\n\n## [Unreleased]\n\n"
                   "## [0.1.0] - 2026-11-01 - Draft\n\n### Fixed\n\n- **Wheels turn.** As they should.\n")
-        self.where = installs.place(self.repo, environ={})
+        self.where = installs.place(self.repo, environ=support.isolated_environ(tmp))
 
     def run(self, *argv, running=lambda names: [], run=None):
         out = io.StringIO()
-        code = installs_cli.main([*argv, "--root", str(self.repo), "--json", "--no-redact"], environ={}, out=out,
+        code = installs_cli.main([*argv, "--root", str(self.repo), "--json", "--no-redact"], environ=support.isolated_environ(self.tmp),
+                                 out=out,
                                  now=datetime(2026, 11, 18, 21, 0, 0), running=running, run=run)
         return code, json.loads(out.getvalue())
 

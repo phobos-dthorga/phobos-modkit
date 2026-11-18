@@ -24,24 +24,15 @@ import sys
 
 from . import testpass
 from .manifest import READS, WRITES
-from .paths import resolve
+from .paths import COMPANION_ID, companion_data, resolve  # noqa: F401  (COMPANION_ID: read by callers)
 from .report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 VERDICTS = ("companionTestVerdictsPath", "PHOBOS_TEST_VERDICTS")
 DECISIONS = ("companionTestKeyDecisionsPath", "PHOBOS_TEST_KEY_DECISIONS")
-COMPANION_ID = "org.phobosdthorga.companion"
 _DECIDED = {"make-row": "make a row", "no-row": "no row needed"}
 
 
-def companion_data(environ=None):
-    """D'thorga Companion's own data folder, where Tauri keeps an app's local data."""
-    environ = os.environ if environ is None else environ
-    if sys.platform == "win32" and environ.get("LOCALAPPDATA"):
-        return Path(environ["LOCALAPPDATA"]) / COMPANION_ID
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / COMPANION_ID
-    return Path(environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / COMPANION_ID
 
 
 def verdicts_path(root, explicit=None, environ=None, settings=None):
