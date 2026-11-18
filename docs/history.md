@@ -55,7 +55,7 @@ its identity and a moved entry is neither gained nor lost.
 
 `data` holds `product`, `commit` (hash, time, author, subject), `stillThere` (whether the repository still has the file), and
 `versions`, each with its `entries`. Each entry carries `since`: **kept**, **reworded** (with `now`, its words today) or
-**removed**; `since` at the top counts the entries added, reworded and removed since. A removed changelog (a mod merged into
+**removed**, and `commit`, the commit that wrote it as the changelog stood then (1.31.0; first 12 characters, or null); `since` at the top counts the entries added, reworded and removed since. A removed changelog (a mod merged into
 another) can still be read at any commit that had it.
 
 ## The history log

@@ -139,6 +139,17 @@ class AsItStoodTests(unittest.TestCase):
             self.assertEqual(entries["Wheels turn."]["now"], "**Wheels turn.** As they should, now on ice too.")
             self.assertEqual(entries["Lamps."]["since"], "removed")
             self.assertEqual(stood["since"], {"added": 2, "reworded": 1, "removed": 1})
+            self.assertEqual({e["commit"] for e in entries.values()}, {first[:12]})
+
+    def test_each_entry_as_it_stood_has_the_commit_that_wrote_it_then(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = repository(tmp)
+            commits = [c[0] for c in history.commits_of(root, "mods/Thing/CHANGELOG.md")]
+            stood = history.as_it_stood(root, "mods/Thing/CHANGELOG.md", commits[2])
+            entries = {e["lead"]: e["commit"] for v in stood["versions"] for e in v["entries"]}
+            self.assertEqual(entries["Boats float."], commits[1][:12])
+            self.assertEqual(entries["Oars."], commits[2][:12])
+            self.assertEqual(entries["Wheels turn."], commits[1][:12])   # reworded then; releasing 0.1.0 changed only its heading
 
     def test_a_moment_finds_the_commit_and_a_removed_changelog_can_still_be_read(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-11-19
+
+From the owner's first look at D'thorga Companion's Timeline (19 November 2026): "I'm unable to view the applicable changes to the code, as you can in normal views".
+
+### Added
+
+- history at gives each entry the commit that wrote it, as the changelog stood then (its first 12 characters, or null), so a program can offer the code behind any entry of an old changelog, as changes list does for today's.
+- changes.entry_commits reads a changelog as it stood at a commit when given one (at).
 ## [1.30.0] - 2026-11-19
 
 The owner asked for it (19 November 2026): "a timeline ... that records/shows how updates were applied, changed, removed, etc. over time ... I like coming back and reading the CHANGELOGs from a particular update-in-moment but I can't because it is now lost to time", with the history kept in D'thorga Companion's own folder and "a central settings page where everything or at least, most, of these sorts of things are managed".

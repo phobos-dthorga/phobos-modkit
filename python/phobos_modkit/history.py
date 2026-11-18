@@ -323,14 +323,16 @@ def describe(root, commit):
 
 
 def as_it_stood(root, path, commit):
-    """The changelog at a commit, each entry marked by what happened to it since: kept, reworded (with its words now) or removed;
-    and how many entries were added since. None when the file was not there at that commit."""
+    """The changelog at a commit, each entry marked by what happened to it since: kept, reworded (with its words now) or removed,
+    with the commit that wrote it (as it stood then); and how many entries were added since. None when the file was not there at
+    that commit."""
     root = Path(root).resolve()
     with Blobs(root) as blobs:
         text = blobs.read(commit, path)
     if text is None:
         return None
     then = parse_changelog(text)
+    commits = changes.entry_commits(root, path, at=commit)
     current = root / path
     now = parse_changelog(current.read_text(encoding="utf-8", errors="replace")) if current.is_file() else None
     delta = compare(then, now) if now is not None else None
@@ -342,8 +344,9 @@ def as_it_stood(root, path, commit):
         entries = []
         for entry in [e for e in then.entries if e.version == version]:
             fate = "reworded" if entry.key in reworded else "removed" if entry.key in removed else "kept"
+            written = changes.commit_of(entry, commits)
             entries.append({"section": entry.section, "text": entry.text, "lead": entry.lead, "since": fate,
-                            "now": reworded.get(entry.key)})
+                            "now": reworded.get(entry.key), "commit": written[:12] if written else None})
         versions.append({"version": version, "heading": rest, "summary": then.summaries.get(version, ""), "entries": entries})
     return {"product": changes.product_name(then.title, path, root), "commit": describe(root, commit), "changelog": path,
             "stillThere": now is not None, "versions": versions,

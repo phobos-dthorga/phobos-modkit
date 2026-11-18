@@ -132,7 +132,7 @@ def line_key(line):
 NOT_COMMITTED = "0" * 40
 
 
-def entry_commits(root, changelog):
+def entry_commits(root, changelog, at=None):
     """Every entry's commit, two ways, in one map:
 
     - (version, first-line key) -> the commit that last wrote that line where it stands now (git blame, about 0.1 s a changelog).
@@ -140,17 +140,20 @@ def entry_commits(root, changelog):
       in game.") gets each version's own commit. A line no commit holds yet maps to None.
     - first-line key -> the oldest commit that ever added a line opening that way (git log -p), for an entry no longer in the
       changelog, such as one an installed copy has and the repository has since dropped.
+
+    With at (a commit), both are read as the changelog stood at that commit: history up to it, and blame of the file there.
     """
     found = {}
-    history = git(root, "log", "-p", "--reverse", "--format=%x00%H", "--unified=0", "--no-color", "--no-ext-diff", "--", changelog,
-                  check=False)
+    upto = [at] if at else []
+    history = git(root, "log", "-p", "--reverse", "--format=%x00%H", "--unified=0", "--no-color", "--no-ext-diff", *upto, "--",
+                  changelog, check=False)
     commit = None
     for line in history.split("\n"):
         if line.startswith("\x00"):
             commit = line[1:].strip()
         elif commit and line.startswith(("+- ", "+* ")):
             found.setdefault(line_key(line[3:]), commit)
-    blame = git(root, "blame", "--line-porcelain", "--", changelog, check=False)
+    blame = git(root, "blame", "--line-porcelain", *upto, "--", changelog, check=False)
     version, commit, seen_version = None, None, False
     for line in blame.split("\n"):
         if line.startswith("\t"):
