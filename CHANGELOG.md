@@ -4,6 +4,17 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.38.0] - 2026-11-19
+
+For D'thorga Companion's cross-links (19 November 2026, docs/cross-links.md there, S2): pins as installs.
+
+### Added
+
+- pins status: which version of this kit each repository pins (the commit its HEAD records), how many versions newer this kit is, and what moving the pin would bring, version by version, from this kit's changelog.
+
+### Fixed
+
+- The connections tests' .NET fixture no longer fails the gate now and then: the gate runs the tests under two Pythons at once, and the second build could find the first's DLL still open. It now waits and builds again.
 ## [1.37.1] - 2026-11-19
 
 ### Fixed

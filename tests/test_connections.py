@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 
 import support  # noqa: F401  (puts the package on the path)
@@ -16,6 +17,8 @@ from phobos_modkit import connections, connections_cli, native
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "dotnet" / "ConnectionsFixture"
 HAVE_DOTNET = shutil.which("dotnet") is not None
 REQUIRE = bool(os.environ.get("PHOBOS_REQUIRE_NATIVE"))
+BUILD_ATTEMPTS = 4
+BUILD_PAUSE_SECONDS = 2
 
 DEFS = """<?xml version="1.0" encoding="utf-8"?>
 <Defs>
@@ -234,8 +237,14 @@ class ExactTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         out = native.build_dir() / "dotnet" / "fixtures" / "ConnectionsFixture"
-        result = subprocess.run(["dotnet", "build", str(FIXTURE / "ConnectionsFixture.csproj"), "-c", "Release", "-o", str(out),
-                                 "--nologo", "-v", "q"], capture_output=True, text=True, check=False)
+        # The gate runs these tests under two Pythons at once, and both build this fixture into the same folders: the second build
+        # can find the first's DLL still open (CS2012, "used by another process"). It waits and builds again.
+        for attempt in range(BUILD_ATTEMPTS):
+            result = subprocess.run(["dotnet", "build", str(FIXTURE / "ConnectionsFixture.csproj"), "-c", "Release", "-o",
+                                     str(out), "--nologo", "-v", "q"], capture_output=True, text=True, check=False)
+            if result.returncode == 0 or "used by another process" not in result.stdout:
+                break
+            time.sleep(BUILD_PAUSE_SECONDS * (attempt + 1))
         if result.returncode != 0:
             raise AssertionError("the fixture did not build:\n" + result.stdout[-2000:])
         cls.dll = out / "ConnectionsFixture.dll"

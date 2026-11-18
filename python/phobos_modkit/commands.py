@@ -34,6 +34,7 @@ COMMANDS = {
     "connections": (".connections_cli", "how a repository's code fits together: calls, holds, builds on, overrides, patches, uses"),
     "history": (".history_cli", "what happened to a game's products over time, and any changelog as it stood at any moment"),
     "installs": (".installs_cli", "what each installed mod would gain or lose by updating or going back to a backup; backs up, goes back, installs"),
+    "pins": (".pins", "which version of this tool kit each repository pins, and what moving the pin would bring"),
     "rules": (".rules_cli", "the rules every repository shares, and whether a repository reads them"),
     "settings": (".settings_cli", "the settings the tools read, where each value comes from, and the central settings file"),
     "test-pass": (".testpass_cli", "what a repository's in-game test list is waiting for, from the game's notes and the owner's verdicts"),
