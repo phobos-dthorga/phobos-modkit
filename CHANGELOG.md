@@ -4,6 +4,21 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-11-18
+
+Asked for by the owner for D'thorga Companion (18 November 2026): a part of it for updating, going back and backups, starting with a live view of what each change to the changelogs would give them or take away. This is the install helper the kit's rules have named since 1.0.0, and the first step of moving deploy.py's install pattern here (docs/migration.md).
+
+### Added
+
+- installs status: each of a repository's mods, its installed copy, the repository's copy and every backup, with what moving to the repository or to each backup gains, loses or rewords, read from the changelog each copy carries. An entry is matched by its text wherever it sits, so one that moved from Unreleased into a version is neither gained nor lost. Entries under Save compatibility are listed apart. Backups' sizes, free space on both drives and whether the game is running come with it.
+- installs backup copies an installed mod into the backups folder. installs restore puts a backup back: the replaced install becomes a backup first and the backup is kept, the swap is two renames on the game's drive, and it refuses while the game runs or while something holds the folder open. installs install runs the repository's own install command. Each refuses rather than leave a drive with less than 1 GB free.
+- The install record (InstallRecord.json): the commit, the time and any uncommitted files a copy was installed from, written by the repository's install and read by status. installs.record_for and write_record make it.
+- A repository opts in with config/installs.json (docs/installs.md). RimWorld's adapter: games/rimworld/installs.py.
+
+### Compatibility
+
+- Read-only unless backup, restore or install is asked for; manifest effects say which (writes, runs). Backups use deploy.py's names, so cleanup's install-backup rule still covers them.
+
 ## [1.19.1] - 2026-11-18
 
 Found on the first run against phobos-rimworld's test list: four rows still said "seen working" from notes that, judged by the new evidence, no longer stand for them (an engine stop on a thrown-track row, a 0 W grid draw, a warning from before its row changed).

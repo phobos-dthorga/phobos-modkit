@@ -67,6 +67,7 @@ python -m phobos_modkit rimworld-sources --root .. --write   where each tied mod
 python -m phobos_modkit crash-dump               why a program crashed, from its Windows crash dump
 python -m phobos_modkit cleanup --root REPO      what the tools, builds and tests left behind; --apply deletes it
 python -m phobos_modkit test-pass report --root REPO   in-game tests waiting for the owner; apply writes verdicts in
+python -m phobos_modkit installs status --root REPO    what updating or going back gains or loses; also backup, restore, install
 python -m phobos_modkit art-audit report --root REPO   images drawn in code, without a record, or borrowed
 python -m phobos_modkit gate --root ..         this repository's checks before a commit; only what failed
 python -m phobos_modkit manifest               every command, its options and what it reads or changes
@@ -93,6 +94,7 @@ in order of expected saving.
 | 10 | [The gate](docs/gate.md) | Every build, test and check before a commit, from the repository's own list; only what failed, with the errors and failed tests | Python | Built: 0.11.0 |
 | 13 | [Cleanup](docs/cleanup.md) | What the tools, builds and tests left behind, how big it is and why it may go; deleted only on request | Python | Built: 1.8.0 |
 | 14 | [Test pass](docs/test-pass.md) | A repository's in-game test list, what the game has seen working and the owner's verdicts; writes verdicts into the list on request | Python | Built: 1.9.0; part passes and verdicts given in conversation 1.14.0 |
+| 17 | [Installs](docs/installs.md) | Each mod's installed copy, the repository's and every backup, and what moving between them gains or loses by their changelogs; backs up, goes back to a backup, or runs the repository's install, on request | Python | Built: 1.20.0 |
 | 15 | [Art audit](docs/art-audit.md) | Every shipped image with its record and how it was made; images drawn in code or without a record; pictures a Def borrows from another thing or another mod | Python | Built: 1.12.0 |
 | 16 | [Performance in play](docs/rimworld-perf.md) (RimWorld 1.7) | Where the running game spends its time: by part of the game loop, by the mod that caused it, by method, with garbage collection; and whether a change made it faster | Python, with Microsoft's dotnet-trace and dotnet-counters | Built: 1.13.0 |
 | 9 | [Workshop publishing](docs/workshop-publishing.md) | Release notes from changelogs, offline staging, the owner-run uploader, pulling Steam's state back | Python | Built: 0.10.0, from phobos-ostranauts |
@@ -129,6 +131,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/crash-dump.md](docs/crash-dump.md) | Windows crash dumps: the exception, a call loop that ran away, and what a small dump cannot say |
 | [docs/cleanup.md](docs/cleanup.md) | Cleanup: the kit's cache, its development build and a repository's own leftovers, previewed before anything is deleted |
 | [docs/test-pass.md](docs/test-pass.md) | The test pass: the repository's evidence map, the seen-in-play notes and verdict files, and what apply writes |
+| [docs/installs.md](docs/installs.md) | Installs: the repository's installs.json, the install record, how gains and losses are read, and what each move does and refuses |
 | [docs/art-audit.md](docs/art-audit.md) | The art audit: how images find their records, how a record's first statement sets the kind, the config, and what counts as borrowed |
 | [docs/gate.md](docs/gate.md) | The gate: a repository's checks from config/gate.json, and what each output parser keeps |
 | `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `sampling.py` and `dotnet_diagnostics.py` (sampled call stacks and Microsoft's diagnostics tools), `query.py` (report filters), `steam/` (Workshop research; `publish/` for publishing), `release/` (changelogs, constants, history screen), `gate/` (the check runner and its output parsers), `code/` (the C# declaration scanner and index), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema), `games/ostranauts/` (publishing only) |
