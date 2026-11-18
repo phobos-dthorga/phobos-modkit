@@ -4,6 +4,13 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.34.0] - 2026-11-19
+
+For D'thorga Companion's cross-links (19 November 2026, docs/cross-links.md there, L2): a thing's own history.
+
+### Added
+
+- connections history: the commits that changed one thing's lines (a method, class, Def or function), newest first, followed back as the lines moved (git's line-range log), each with the changelog entries that commit wrote: why the thing changed. At most 25 commits, saying when there are more.
 ## [1.33.0] - 2026-11-19
 
 The owner asked for it (19 November 2026): "flow-charts and the such which show relationships between functions, classes, etc. of the code I'm viewing", with exact C# from built code, for C#, XML Defs, Lua and Python, in D'thorga Companion's code viewer and a page of its own.

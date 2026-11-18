@@ -5,6 +5,7 @@
     connections around --root REPO --node ID            everything one connection away from one thing, grouped by kind
     connections flow --root REPO --node ID [--depth 2]   who calls it and what it calls, a few steps each way
     connections changed --root REPO --commit HASH        the things a commit changed, by the lines it changed
+    connections history --root REPO --node ID           the commits that changed a thing's lines, with the entries they wrote
 
 C# is read exactly from the assemblies the repository builds (calls, fields, inheritance, overrides, Harmony patches), and by
 name from the source where none is built; XML Defs from the files; Lua by name; Python by its own parser. Every connection says
@@ -20,7 +21,7 @@ import re
 import sys
 
 from . import changes, connections
-from .connections import csharp, defs, lua, pycode
+from .connections import csharp, defs, lineage, lua, pycode
 from .manifest import READS
 from .progress import Progress
 from .report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
@@ -43,14 +44,15 @@ def _parser():
                            ("find", "things by name"),
                            ("around", "everything one connection away from one thing"),
                            ("flow", "who calls one thing and what it calls, a few steps each way"),
-                           ("changed", "the things a commit changed")):
+                           ("changed", "the things a commit changed"),
+                           ("history", "the commits that changed one thing's lines, with the changelog entries they wrote")):
         s = sub.add_parser(name, help=helptext)
         s.add_argument("--root", help="the repository (default: the current folder)")
         if name == "find":
             s.add_argument("--name", required=True, help="a name or pattern (* and ?)")
             s.add_argument("--kind", action="append", default=[], help="only this kind (repeatable): method, class, def...")
             s.add_argument("--outside", action="store_true", help="also the game's and other mods' things the code uses")
-        if name in ("around", "flow"):
+        if name in ("around", "flow", "history"):
             s.add_argument("--node", required=True, help="a thing's id, as find gives it (cs:..., def:..., lua:..., py:...)")
         if name == "flow":
             s.add_argument("--depth", type=int, default=2, choices=(1, 2, 3), help="steps each way (default 2)")
@@ -161,6 +163,21 @@ def changed_report(conn, root, args):
     return report, {"commit": {"hash": described.hash, "subject": described.subject}, "things": found, "files": files}
 
 
+def history_report(conn, root, args):
+    found = connections.node(conn, args.node)
+    if found is None:
+        raise connections.ConnectionsError(f"{args.node!r} is not in this repository's connections.")
+    if found["external"] or not found["file"] or not found["line"]:
+        raise connections.ConnectionsError(f"{found['name']} is not in this repository's files, so it has no history here.")
+    data = lineage.history(root, found)
+    report = Report(f"Connections: {found['name']} changed in {len(data['commits']):,} commit{'' if len(data['commits']) == 1 else 's'}"
+                    + (" (the newest shown)" if data["more"] else ""))
+    report.lines.append(f"Lines {data['lines'][0]} to {data['lines'][1]} of {data['file']}, followed back as they moved.")
+    report.section("Commits", Table(["When", "Commit", "Subject", "Entries it wrote"],
+                                    [[c["time"][:10], c["hash"][:8], c["subject"], f"{len(c['entries']):,}"] for c in data["commits"]]))
+    return report, {"node": found, **data}
+
+
 def main(argv=None, environ=None, out=None):
     out = out or sys.stdout
     environ = os.environ if environ is None else environ
@@ -187,6 +204,8 @@ def main(argv=None, environ=None, out=None):
                 report, data = around_report(conn, args)
             elif args.report == "flow":
                 report, data = flow_report(conn, args)
+            elif args.report == "history":
+                report, data = history_report(conn, root, args)
             else:
                 report, data = changed_report(conn, root, args)
         finally:
@@ -208,4 +227,5 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS,
                         "find": {"note": "things by name; needs the name"},
                         "around": {"note": "everything one connection away from one thing; needs its id"},
                         "flow": {"note": "the calls around one thing, a few steps each way; needs its id"},
-                        "changed": {"note": "the things a commit changed; needs the commit"}}}
+                        "changed": {"note": "the things a commit changed; needs the commit"},
+                        "history": {"note": "the commits that changed one thing, with the entries they wrote; needs its id"}}}

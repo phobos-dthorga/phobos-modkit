@@ -64,6 +64,26 @@ class Keeper:
 def tidy():
     return json.dumps({})
 """
+LAMPS_LOG_FIRST = """# Lamps changelog
+
+## [Unreleased]
+
+## [0.1.0] - 2026-11-01 - Draft
+
+- **Lamps.** They shine.
+"""
+LAMPS_LOG_SECOND = """# Lamps changelog
+
+## [Unreleased]
+
+## [0.2.0] - 2026-11-02 - Draft
+
+- **Brighter.** Lamps shine brighter.
+
+## [0.1.0] - 2026-11-01 - Draft
+
+- **Lamps.** They shine.
+"""
 CSHARP = """namespace Sample.Text
 {
     public class Reader
@@ -176,6 +196,27 @@ class ByNameTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(sorted(t["id"] for t in found["things"]), ["def:RecipeDef/MakeLamp", "lua:Lamps.shine"])
             self.assertTrue(all(t["inGraph"] for t in found["things"]))
+
+    def test_a_things_history_is_its_commits_with_the_entries_they_wrote(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = repository(tmp)
+            write(root / "CHANGELOG.md", LAMPS_LOG_FIRST)
+            git(root, "init", "-q")
+            git(root, "config", "core.fsmonitor", "false")
+            git(root, "config", "user.email", "test@example.com")
+            git(root, "config", "user.name", "Test")
+            git(root, "add", "-A")
+            git(root, "commit", "-q", "-m", "Lamps 0.1.0")
+            write(root / "lua" / "lamps.lua", LUA.replace('print("shine()")', 'print("brighter")'))
+            write(root / "CHANGELOG.md", LAMPS_LOG_SECOND)
+            git(root, "commit", "-q", "-am", "Lamps 0.2.0: brighter")
+            code, found = run(["history", "--root", str(root), "--node", "lua:Lamps.shine"], tmp)
+            self.assertEqual(code, 0)
+            self.assertEqual([c["subject"] for c in found["commits"]], ["Lamps 0.2.0: brighter", "Lamps 0.1.0"])
+            self.assertEqual(found["commits"][0]["entries"], [
+                {"changelog": "CHANGELOG.md", "product": "Lamps", "text": "**Brighter.** Lamps shine brighter."}])
+            code, found = run(["history", "--root", str(root), "--node", "cs:Sample.Lamps.CompGlow"], tmp)
+            self.assertEqual((code, found["ok"]), (1, False))
 
     def test_what_is_not_a_thing_or_a_commit_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:

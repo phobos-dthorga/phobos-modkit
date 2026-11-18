@@ -27,6 +27,7 @@ python -m phobos_modkit connections find --root REPO --name "*Tick*"
 python -m phobos_modkit connections around --root REPO --node cs:Phobos.Framework.TopUp.Seen.Note
 python -m phobos_modkit connections flow --root REPO --node cs:Phobos.Framework.TopUp.Seen.Note --depth 2
 python -m phobos_modkit connections changed --root REPO --commit 3352e4da
+python -m phobos_modkit connections history --root REPO --node cs:Phobos.Framework.TopUp.Seen.Note
 ```
 
 Add `--json` for the envelope; `--rebuild` reads every file again.
@@ -53,6 +54,9 @@ as `external`, with the assembly that holds them where the reader knows it.
 - `flow`: `columns` from the furthest caller (`step` -depth) through the thing (0) to the furthest callee, and `edges` between them.
 - `changed`: the things whose lines a commit changed, read from each file as it stood at that commit, with `linesChanged` and
   `inGraph` (false for a thing since removed).
+- `history` (1.34.0): `node`, `file`, `lines` (first and last), and `commits`, newest first: `hash`, `time`, `subject` and `entries`,
+  each `{changelog, product, text}`, the changelog entries that commit wrote; `more` when there are over 25. The lines are followed
+  back through moves by git's line-range log; a thing outside the repository is refused.
 - `find`: `things`; `summary`: `readers` (each language, how it was read, how much), and counts.
 
 ## Limits
