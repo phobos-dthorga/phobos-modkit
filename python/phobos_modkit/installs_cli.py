@@ -111,6 +111,7 @@ def mod_data(state):
         moved = installs.compare(installed.changelog, b.changelog) if installed else installs.Delta()
         backups.append({**_copy(b, installed), "delta": _delta(moved, installed.changelog if installed else None, b.changelog)})
     return {"mod": state.mod, "name": state.repository.name or (installed.name if installed else "") or state.mod,
+            "changelog": state.changelog,
             "state": state_of(state, update),
             "repository": _copy(state.repository, installed),
             "installed": _copy(installed) if installed else None,

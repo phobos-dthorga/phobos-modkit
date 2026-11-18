@@ -4,6 +4,12 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.24.1] - 2026-11-19
+
+### Added
+
+- installs status gives each mod's changelog as a path in the repository (changelog), so a program can ask changes for the code behind any entry it lists.
+
 ## [1.24.0] - 2026-11-19
 
 Asked for by the owner for D'thorga Companion (19 November 2026): progress bars with status updates wherever they fit, and a code viewer showing the code behind any changelog entry, for every game they mod and not only RimWorld.

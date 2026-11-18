@@ -380,6 +380,7 @@ class ModState:
     settings: list = None            # settings changes since the installed commit; None when unknown
     settings_note: str = None
     look_out: list = field(default_factory=list)
+    changelog: str = ""              # the repository copy's changelog, as a path in the repository (for the changes tool)
 
     @property
     def needs_build(self):
@@ -417,7 +418,7 @@ def survey(where, mods=None, measure=True, run=subprocess.run, progress=None):
         commit, exact = installed_commit(where, installed)
         since = commits_since(where.root, commit, f"{where.config['mods']}/{mod}")
         state = ModState(mod, repository, installed, backups, changed, since, builds=builds.get(mod, []), commit=commit,
-                         commit_exact=exact)
+                         commit_exact=exact, changelog=f"{where.config['mods']}/{mod}/{CHANGELOG}")
         if installed is not None:
             state.files = checks.compare_files(installed.folder, repository.folder, install_only)
             state.look_out = checks.look_out(where.root, repository.name, installed.version, repository.version)
