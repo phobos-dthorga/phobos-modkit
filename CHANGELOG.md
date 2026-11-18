@@ -4,6 +4,12 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-11-19
+
+### Fixed
+
+- An entry that many versions repeat word for word, such as "Not yet tested in game.", was given the commit that first ever wrote that line, in every version. Seen on the owner's Changes page the same day: 0.142.0 and 0.141.0 each split off their last entry into a group of its own. Each entry's commit now comes from git blame, by version and first line, with the history pass kept for entries no longer in the changelog.
+
 ## [1.27.0] - 2026-11-19
 
 ### Added

@@ -116,23 +116,53 @@ def line_key(line):
     return " ".join(line.split())[:KEY_LENGTH]
 
 
+NOT_COMMITTED = "0" * 40
+
+
 def entry_commits(root, changelog):
-    """{first-line key: commit hash} for every entry the changelog's history ever wrote: the oldest commit that added a line
-    opening that way. One pass over the history (git log -p), about 0.1 s for a changelog of 200 versions."""
-    out = git(root, "log", "-p", "--reverse", "--format=%x00%H", "--unified=0", "--no-color", "--no-ext-diff", "--", changelog,
-              check=False)
-    found, commit = {}, None
-    for line in out.split("\n"):
+    """Every entry's commit, two ways, in one map:
+
+    - (version, first-line key) -> the commit that last wrote that line where it stands now (git blame, about 0.1 s a changelog).
+      This is the answer for an entry in the changelog as it is: a line that many versions repeat word for word ("Not yet tested
+      in game.") gets each version's own commit. A line no commit holds yet maps to None.
+    - first-line key -> the oldest commit that ever added a line opening that way (git log -p), for an entry no longer in the
+      changelog, such as one an installed copy has and the repository has since dropped.
+    """
+    found = {}
+    history = git(root, "log", "-p", "--reverse", "--format=%x00%H", "--unified=0", "--no-color", "--no-ext-diff", "--", changelog,
+                  check=False)
+    commit = None
+    for line in history.split("\n"):
         if line.startswith("\x00"):
             commit = line[1:].strip()
         elif commit and line.startswith(("+- ", "+* ")):
             found.setdefault(line_key(line[3:]), commit)
+    blame = git(root, "blame", "--line-porcelain", "--", changelog, check=False)
+    version, commit, seen_version = None, None, False
+    for line in blame.split("\n"):
+        if line.startswith("\t"):
+            text = line[1:]
+            if text.startswith("## "):
+                heading = re.match(r"^## \[([^\]]+)\]", text.strip())
+                if seen_version and not heading and text.strip().endswith("history"):
+                    version = None           # a merged mod's old log follows; its lines are not this mod's entries
+                    continue
+                version = heading.group(1).strip() if heading else text[3:].strip()
+                version = "Unreleased" if version.lower() == "unreleased" else version
+                seen_version = True
+            elif version and text.startswith(("- ", "* ")):
+                found[(version, line_key(text[2:]))] = None if commit == NOT_COMMITTED else commit
+        elif len(line) >= 40 and all(c in "0123456789abcdef" for c in line[:40]) and line[40:41] == " ":
+            commit = line[:40]
     return found
 
 
 def commit_of(entry, commits):
-    """The commit that wrote an entry, from entry_commits; None when no commit holds its first line yet."""
-    return commits.get(line_key(entry.first or entry.text))
+    """The commit that wrote an entry, from entry_commits: where it stands in the changelog now, else the oldest that ever added
+    it; None when no commit holds it yet."""
+    key = line_key(entry.first or entry.text)
+    placed = (entry.version, key)
+    return commits[placed] if placed in commits else commits.get(key)
 
 
 def describe(root, commit):

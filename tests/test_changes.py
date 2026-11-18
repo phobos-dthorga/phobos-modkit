@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 import support  # noqa: F401  (puts the package on the path)
-from phobos_modkit import changes, changes_cli
+from phobos_modkit import changes, changes_cli, installs
 
 HEAD = "# Thing changelog\n\n## [Unreleased]\n\n"
 V1 = "## [0.1.0] - 2026-11-01 - Draft\n\nFirst release\n\n### Added\n\n- **Wheels turn.** As they should.\n"
@@ -86,6 +86,31 @@ class CommitMapTests(unittest.TestCase):
             boats = next(e for e in log.entries if e.lead == "Boats float.")
             self.assertEqual(boats.first, "**Boats float.** On water,")
             self.assertIsNotNone(changes.commit_of(boats, changes.entry_commits(root, "mods/Thing/CHANGELOG.md")))
+
+    def test_a_line_many_versions_repeat_gets_each_versions_own_commit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = repository(tmp)
+            first = V1.replace("### Added", "### Compatibility and limits\n\n- Not yet tested in game.\n\n### Added")
+            write(root / "mods" / "Thing" / "CHANGELOG.md", HEAD + V2 + first)
+            git(root, "commit", "-q", "-am", "Thing 0.1.0: a note")
+            second = V2.replace("### Save compatibility", "### Compatibility and limits\n\n- Not yet tested in game.\n\n### Save compatibility")
+            write(root / "mods" / "Thing" / "CHANGELOG.md", HEAD + second + first)
+            git(root, "commit", "-q", "-am", "Thing 0.2.0: a note")
+            commits = changes.entry_commits(root, "mods/Thing/CHANGELOG.md")
+            log = changes.read(root, "mods/Thing/CHANGELOG.md")
+            notes = {e.version: changes.describe(root, changes.commit_of(e, commits)).subject
+                     for e in log.entries if e.lead.startswith("Not yet tested")}
+            self.assertEqual(notes, {"0.1.0": "Thing 0.1.0: a note", "0.2.0": "Thing 0.2.0: a note"})
+
+    def test_an_entry_dropped_from_the_changelog_is_found_in_its_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = repository(tmp)
+            dropped = installs.Entry("0.1.0", "Fixed", "**Wheels turn.** As they should.", "Wheels turn.",
+                                             "**Wheels turn.** As they should.")
+            write(root / "mods" / "Thing" / "CHANGELOG.md", HEAD + V2)
+            git(root, "commit", "-q", "-am", "drop 0.1.0")
+            commits = changes.entry_commits(root, "mods/Thing/CHANGELOG.md")
+            self.assertEqual(changes.describe(root, changes.commit_of(dropped, commits)).subject, "Thing 0.1.0: wheels")
 
     def test_an_entry_in_no_commit_has_none(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -27,9 +27,10 @@ python -m phobos_modkit changes entry --root REPO --changelog mods/Thing/CHANGEL
 
 ## How an entry's commit is found
 
-1. **One pass over the changelog's history** (`git log -p`, about 0.1 s for a changelog of 200 versions) notes, for every line
-   that opens an entry, the oldest commit that added it. An entry's commit is the one that added its first line, as the file
-   holds it (1.26.0). `changes list` gives every entry its commit this way, and so does `installs status`, so a program can show
+1. **An entry's commit is the one that last wrote its first line where it stands now** (`git blame`, about 0.1 s for a changelog
+   of 4,000 lines; 1.28.0). A line many versions repeat word for word ("Not yet tested in game.") so gets each version's own
+   commit. An entry no longer in the changelog (one an installed copy has and the repository dropped) falls back to the oldest
+   commit that ever added a line opening that way, from one pass over the history (`git log -p`). `changes list` gives every entry its commit this way, and so does `installs status`, so a program can show
    one "the code behind these" for all the entries one commit wrote.
 2. `changes entry` looks the entry up in the changelog as it stands, by its text or its bold opening, and takes its commit from
    the same pass. Only an entry the pass cannot place is searched for by its opening (`git log -S`, openings of 80, 48 and 28
