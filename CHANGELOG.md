@@ -4,6 +4,13 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.36.0] - 2026-11-19
+
+For D'thorga Companion's cross-links (19 November 2026, docs/cross-links.md there, L3): test rows joined to code.
+
+### Added
+
+- test-pass code: where the code notes each test row's keys, as strings in C#, Lua or Python (a key built at run time by its prefix), each placed in the method, function or type that holds it, with the rows it stands for; and the keys no code writes as the map names them. Folders named tests are skipped.
 ## [1.35.0] - 2026-11-19
 
 For D'thorga Companion's cross-links (19 November 2026, docs/cross-links.md there, L1): the game's log as a page, its stack lines leading to code.

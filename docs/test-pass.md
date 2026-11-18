@@ -19,10 +19,19 @@ What a repository's in-game test list is waiting for, from the game's seen-in-pl
 python -m phobos_modkit test-pass report --root REPO              rows waiting, rows seen working, verdicts not yet written
 python -m phobos_modkit test-pass apply --root REPO               what apply would write (a preview)
 python -m phobos_modkit test-pass apply --root REPO --apply       write it
+python -m phobos_modkit test-pass code --root REPO                where the code notes each row's keys (1.36.0)
 ```
 
 `--seen PATH` (repeatable) and `--verdicts PATH` name other files; `--all` lists every row; `--json` gives every row's cells,
 sightings, verdict and the sentence apply would add, for a program such as D'thorga Companion.
+
+## Where the code notes each row: `code` (1.36.0)
+
+`code` finds every string in the repository's C#, Lua and Python that is a key the map names, or starts with one of its `prefixes`,
+and places it in the method, function or type whose lines hold it (phobos-modkit's `connections`). Its JSON gives `places`, each
+`{key, prefix, file, line, thing, rows}`, and `unplaced`: keys the map names that no string in the code matches as written. Folders
+named `tests` or `test` are skipped, since a test naming a key is not where the game notes it. D'thorga Companion joins rows to
+code with it: a row's code, and a method's rows. It reads text, so a key in a comment counts too.
 
 ## The repository's evidence map: `config/test-evidence.json`
 

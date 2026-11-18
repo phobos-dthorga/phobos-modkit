@@ -5,6 +5,7 @@
     test-pass apply --root REPO --apply       write it
     test-pass apply --verdict "55:partial:the landing only" --apply
                                               write a verdict the owner gave in conversation
+    test-pass code --root REPO                where the code notes each row's keys, and in which method (1.36.0)
 
 The repository's config/test-evidence.json names the test list and maps rows to evidence: keys, narrowed by a case or the detail,
 with the figures they should show, in parts, with rules on the order of notes. The notes file comes from --seen, or from the game the
@@ -22,7 +23,8 @@ import os
 from pathlib import Path
 import sys
 
-from . import testpass
+from . import connections, testpass, testpass_code
+from .progress import Progress
 from .manifest import READS, WRITES
 from .paths import COMPANION_ID, companion_data, resolve  # noqa: F401  (COMPANION_ID: read by callers)
 from .report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
@@ -81,7 +83,31 @@ def _parser():
         s.add_argument("--no-redact", action="store_true", help="show the home folder instead of ~")
         if name == "apply":
             s.add_argument("--apply", action="store_true", help="write the test list; without it, only show what would change")
+    s = sub.add_parser("code", help="where the code notes each row's keys, and in which method, function or type")
+    s.add_argument("--root", help="the repository (default: the current folder)")
+    s.add_argument("--top", type=int, default=40, help="places to list (default 40)")
+    s.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
+    s.add_argument("--no-redact", action="store_true", help="show the home folder instead of ~")
     return p
+
+
+def code_report(root, config, environ, top):
+    """Where the code notes each row's keys: the places, and the keys the code never writes as the map names them."""
+    conn = connections.open_graph(root, environ, None, Progress(environ))
+    try:
+        found = testpass_code.places(root, config, conn)
+    finally:
+        conn.close()
+    missing = testpass_code.unplaced(config, found)
+    rows = sorted({r for p in found for r in p["rows"]}, key=testpass_code._row_order)
+    report = Report(f"Test list code: {len(found):,} places note keys for {len(rows):,} rows")
+    report.section("Places", Table(["Key", "Where", "In", "Rows"],
+                                   [[p["key"] + ("*" if p["prefix"] else ""), f"{p['file']}:{p['line']}",
+                                     p["thing"]["name"] if p["thing"] else "-", ", ".join(p["rows"])] for p in found[:top]],
+                                   total=len(found)))
+    if missing:
+        report.section("Keys no code writes as named", Bullets(missing[:top]))
+    return report, {"doc": config["doc"], "places": found, "unplaced": missing}
 
 
 def _version(version):
@@ -229,6 +255,14 @@ def main(argv=None, environ=None, out=None, now=None):
         return EXIT_USAGE if stop.code else EXIT_OK
     redact = keep if args.no_redact else home_redactor()
     root = Path(args.root or ".").resolve()
+    if args.report == "code":
+        try:
+            report, data = code_report(root, testpass.load_config(root), environ, args.top)
+        except (testpass.TestPassError, connections.ConnectionsError) as error:
+            print(redact(str(error)), file=sys.stderr)
+            return EXIT_USAGE
+        out.write((envelope_text("test-pass", report, redact, data) if args.json else render_markdown(report, redact)) + "\n")
+        return EXIT_OK
     try:
         config = testpass.load_config(root)
         seen = seen_paths(config, args.seen, environ, args.settings)
@@ -260,4 +294,5 @@ def main(argv=None, environ=None, out=None, now=None):
 
 MANIFEST = {"game": None, "parser": _parser, "effect": READS,
             "reports": {"report": {"question": "Which in-game tests are waiting for me, and which has the game seen working?"},
-                        "apply": {"effect": WRITES, "when": "--apply"}}}
+                        "apply": {"effect": WRITES, "when": "--apply"},
+                        "code": {"note": "where the code notes each row's keys; for a program joining rows to code"}}}
