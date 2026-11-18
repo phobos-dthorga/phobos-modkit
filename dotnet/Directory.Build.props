@@ -11,4 +11,10 @@
     <BaseOutputPath>$(PhobosBuildRoot)/dotnet/bin/$(MSBuildProjectName)/</BaseOutputPath>
   </PropertyGroup>
 
+  <!-- The same code builds to the same bytes (rules/builds.md): no git commit stamped into the assembly's version. -->
+  <PropertyGroup>
+    <Deterministic>true</Deterministic>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
 </Project>

@@ -1,8 +1,8 @@
 # Shared rules: one place for what holds in every repository
 
-**Status (19 Nov 2026):** created at the owner's request, with its first rules (commits and changelog entries). phobos-rimworld
-and D'thorga Companion read it through their pinned copy of this repository. The rules waiting to move here are listed below; none
-has been moved yet.
+**Status (19 Nov 2026):** created at the owner's request, with its first rules (commits and changelog entries), and a second file
+the same day (builds: the same code builds to the same bytes). phobos-rimworld and D'thorga Companion read it through their pinned
+copy of this repository. The rules waiting to move here are listed below; none has been moved yet.
 
 ## Read this first (gotchas)
 
@@ -19,7 +19,8 @@ has been moved yet.
 
 | File | Read | Covers |
 | --- | --- | --- |
-| [every-session.md](every-session.md) | At the start of every session | Commits and changelog entries |
+| [every-session.md](every-session.md) | At the start of every session | Commits and changelog entries; which file to read before which work |
+| [builds.md](builds.md) | Before setting up or changing how code is built | The same code builds to the same bytes |
 
 `python -m phobos_modkit rules list` prints this with each file's rules counted, and `tests/test_rules.py` fails if a file here is
 missing from the table.

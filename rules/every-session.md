@@ -9,6 +9,14 @@ mistake to report, not a choice to follow. How this folder works, how a rule is 
 **Keep this file short.** It is read every session, in every repository. A rule that matters only before one kind of work (art, a
 release, a game's own systems) goes in a file of its own, listed in the README and read before that work.
 
+## Before some kinds of work
+
+Read the file named before doing the work, even when no file of that kind is open yet.
+
+| Before | Read |
+| --- | --- |
+| Setting up or changing how a repository builds code, or adding a project or a build script | [builds.md](builds.md) |
+
 ## Commits and changelog entries
 
 - **A change and its changelog entry go in the same commit.** The entry is how the owner reads what changed, and the commit that

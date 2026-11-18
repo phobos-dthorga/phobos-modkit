@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-11-19
+
+The owner asked for it (19 November 2026), after D'thorga Companion read every mod as changed because .NET stamped the git commit into each assembly.
+
+### Added
+
+- A shared rule, in rules/builds.md: the same code builds to the same bytes, whatever the commit, the clock or the folder. Nothing that changes from build to build goes into what is built; the commit belongs in the install record, the changelog or the tag. For .NET, Deterministic and IncludeSourceRevisionInInformationalVersion set to false in Directory.Build.props, and how to check.
+- rules/every-session.md says which file to read before which kind of work, starting with builds.md.
+
+### Changed
+
+- The kit's own .NET helpers follow the rule: dotnet/Directory.Build.props no longer lets the SDK stamp the commit.
+
 ## [1.28.0] - 2026-11-19
 
 ### Fixed
