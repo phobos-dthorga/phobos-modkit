@@ -167,6 +167,8 @@ class RebuiltTests(unittest.TestCase):
             self.assertEqual(checks.mark_rebuilt(files, builds, root, commit), 1)
             self.assertEqual([p.get("rebuilt", False) for p in files["paths"]], [True, False])
             self.assertEqual(files["rebuilt"], 1)
+            self.assertEqual((files["paths"][1]["sources"], files["paths"][1]["sourcesInAll"]), (["src/Other/Oar.cs"], 1))
+            self.assertNotIn("sources", files["paths"][0])
 
     def test_a_new_source_file_git_has_not_seen_counts_as_a_change(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -175,6 +177,7 @@ class RebuiltTests(unittest.TestCase):
             files = self.files("Thing.dll")
             checks.mark_rebuilt(files, checks.build_states(root, config)["Thing"], root, commit)
             self.assertNotIn("rebuilt", files["paths"][0])
+            self.assertEqual(files["paths"][0]["sources"], ["src/Thing/Sail.cs"])
 
     def test_without_a_known_commit_nothing_is_called_rebuilt(self):
         with tempfile.TemporaryDirectory() as tmp:

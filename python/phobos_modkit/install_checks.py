@@ -178,18 +178,25 @@ def input_paths(root, csproj, text, shared):
     return sorted(set(relative))
 
 
-def sources_changed(root, commit, paths):
-    """Whether any of the paths changed since commit: committed or not, and new files git has not been told of. True when git
-    cannot say (an unknown commit), so a doubt never hides a change."""
+MAX_CHANGED_SOURCES = 5
+
+
+def changed_sources(root, commit, paths):
+    """The files among paths that changed since commit, committed or not, and new ones git has not been told of, sorted; [] when
+    none did. None when git cannot say (no commit, an unknown one), so a doubt never hides a change."""
     if not commit or not paths:
-        return True
+        return None
     diff = _git(root, "diff", "--name-only", commit, "--", *paths)
     if diff is None:
-        return True
-    if diff.strip():
-        return True
-    untracked = _git(root, "ls-files", "--others", "--exclude-standard", "--", *paths)
-    return bool(untracked and untracked.strip())
+        return None
+    untracked = _git(root, "ls-files", "--others", "--exclude-standard", "--", *paths) or ""
+    return sorted({line.strip() for line in (diff + "\n" + untracked).splitlines() if line.strip()})
+
+
+def sources_changed(root, commit, paths):
+    """Whether any of the paths changed since commit (see changed_sources); True when git cannot say."""
+    found = changed_sources(root, commit, paths)
+    return found is None or bool(found)
 
 
 def mark_rebuilt(files, builds, root, commit):
@@ -200,9 +207,16 @@ def mark_rebuilt(files, builds, root, commit):
     marked = 0
     for change in files["paths"]:
         build = by_assembly.get(change["path"].rsplit("/", 1)[-1].lower())
-        if change["change"] == "changed" and build and not sources_changed(root, commit, build["inputs"]):
+        if change["change"] != "changed" or not build:
+            continue
+        found = changed_sources(root, commit, build["inputs"])
+        if found == []:
             change["rebuilt"] = True
             marked += 1
+        elif found:
+            # Which of its sources changed, so a reader sees why an assembly differs when no changelog entry says.
+            change["sources"] = found[:MAX_CHANGED_SOURCES]
+            change["sourcesInAll"] = len(found)
     files["rebuilt"] = marked
     return marked
 

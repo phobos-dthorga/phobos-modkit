@@ -4,6 +4,12 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-11-19
+
+### Added
+
+- installs status names, for a changed assembly that was not only rebuilt, the sources that changed since the installed commit (sources, up to five, and sourcesInAll). Found the same day: turning off .NET's commit stamp in phobos-rimworld's shared build file changed every mod's build inputs, so every assembly read as changed with nothing to say why; now each names Directory.Build.props.
+
 ## [1.26.0] - 2026-11-19
 
 From the owner's look at the Companion's Mods page (19 November 2026): "It seems to see changes in DLLs, across the board, where there might not be any", and a tidier page with fewer repeated buttons.
