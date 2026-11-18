@@ -16,6 +16,8 @@ COMMANDS = {
     "rimworld-perf": (".games.rimworld.perf_cli", "where a running RimWorld spends its time, by mod, method and part of the game loop"),
     "rimworld-startup": (".games.rimworld.startup_cli", "how long RimWorld takes to start, the costliest mods, what changed between launches"),
     "rimworld-readiness": (".games.rimworld.readiness_cli", "which active mods are ready for a game version, and which are likeliest to break"),
+    "rimworld-archive": (".games.rimworld.archive_cli",
+                         "keep every version of the game's assembly and of tied mods, and compare two of them"),
     "rimworld-workshop": (".games.rimworld.workshop_cli", "what players report about RimWorld mods on the Workshop lately"),
     "steam-workshop": (".steam.workshop_cli", "what players report about Workshop items lately, by ID or URL"),
     "steam-publish": (".steam.publish.cli", "release notes, staging and the owner-run Workshop uploader"),

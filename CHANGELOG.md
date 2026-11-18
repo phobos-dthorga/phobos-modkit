@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-11-18
+
+Asked for by the owner in phobos-rimworld (18 November 2026): that day's game update could not be compared with the build before it, because Steam had replaced the file and nothing had kept it.
+
+### Added
+
+- rimworld-archive: keeps every version of the game's Assembly-CSharp.dll and of each active mod a project's own mods name (About.xml dependencies and load order, LoadFolders.xml IfModActive), each distinct file once and compressed, with an SQLite index of owner, file, version text and first-seen time. Reports snapshot, list, get and compare; compare hands two kept versions to code compare. Its folder is its own (PHOBOS_ASSEMBLY_ARCHIVE, assemblyArchivePath, else the user's local application data), never the cache, which defaults to a temp folder.
+- The guide (docs/rimworld-archive.md) says how the owner can fetch a game build the archive never saw with SteamRE's DepotDownloader, which logs in with the owner's account and is never run by the kit.
+
 ## [1.14.0] - 2026-11-18
 
 A tooling round asked for by the owner in phobos-rimworld (18 November 2026), for three gaps met that day: a part-pass written into the test list by hand, a profile that could not find the game loop, and a scratch script for heights.
