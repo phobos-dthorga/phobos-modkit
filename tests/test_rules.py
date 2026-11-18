@@ -34,6 +34,12 @@ class TheFolderItself(unittest.TestCase):
         self.assertGreater(files[0].rules, 0)
         self.assertTrue(files[0].read and files[0].covers)
 
+    def test_a_design_to_edit_holds_no_rules(self):
+        designs = {f.name: f for f in rules.rule_files() if f.design}
+        self.assertIn("first-class.md", designs)
+        self.assertEqual(designs["first-class.md"].rules, 0)
+        self.assertFalse(rules.rule_files()[0].design)
+
     def test_this_repository_reads_its_own_rules(self):
         found = rules.uptake(rules.FOLDER.parent)
         self.assertEqual((found.kind, found.missing), ("kit", []))

@@ -41,11 +41,12 @@ def list_report(folder=rules.FOLDER):
                     f"{sum(f.rules for f in files):,} rules")
     report.lines.append("What the owner has decided for every repository. A repository reads the copy its pin of the kit holds.")
     report.section("Files", Table(["File", "Read", "Covers", "Rules"],
-                                  [[f.name, f.read, f.covers, f"{f.rules:,}"] for f in files]))
+                                  [[f.name, f.read, f.covers, "a design to edit" if f.design else f"{f.rules:,}"] for f in files]))
     if faults:
         report.section("To put right", Bullets(faults))
     data = {"folder": str(folder), "problems": faults,
-            "files": [{"name": f.name, "title": f.title, "read": f.read, "covers": f.covers, "sections": f.sections, "rules": f.rules}
+            "files": [{"name": f.name, "title": f.title, "read": f.read, "covers": f.covers, "sections": f.sections, "rules": f.rules,
+                       "design": f.design}
                       for f in files]}
     return report, data, bool(faults)
 

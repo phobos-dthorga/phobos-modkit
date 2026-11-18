@@ -20,6 +20,7 @@ CLAUDE, AGENTS = "CLAUDE.md", "AGENTS.md"
 _LINK = re.compile(r"\]\(([^)#\s]+\.md)\)")
 _ROW = re.compile(r"^\|\s*\[[^\]]+\]\((?P<file>[^)]+\.md)\)\s*\|\s*(?P<read>[^|]*)\|\s*(?P<covers>[^|]*)\|\s*$")
 _RULE = re.compile(r"^- \*\*")
+_DESIGN = re.compile(r"^\*\*Status[^*]*:\*\*.*not yet rules", re.IGNORECASE)
 
 
 @dataclass
@@ -30,6 +31,7 @@ class RuleFile:
     covers: str = ""            # what it covers, from the index
     sections: list = field(default_factory=list)
     rules: int = 0              # top-level entries that open in bold: the rules themselves
+    design: bool = False        # a design for the owner to edit, whose status says "not yet rules": it holds no rules
 
 
 def rule_files(folder=FOLDER):
@@ -44,8 +46,10 @@ def rule_files(folder=FOLDER):
         text = path.read_text(encoding="utf-8", errors="replace")
         lines = text.splitlines()
         read, covers = listed.get(path.name, ("", ""))
+        design = any(_DESIGN.match(l) for l in lines[:6])
         found.append(RuleFile(path.name, next((l[2:].strip() for l in lines if l.startswith("# ")), ""), read, covers,
-                              [l[3:].strip() for l in lines if l.startswith("## ")], sum(1 for l in lines if _RULE.match(l))))
+                              [l[3:].strip() for l in lines if l.startswith("## ")],
+                              0 if design else sum(1 for l in lines if _RULE.match(l)), design))
     return found
 
 

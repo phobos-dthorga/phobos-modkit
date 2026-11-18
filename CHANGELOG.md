@@ -16,6 +16,8 @@ The owner asked for it (19 November 2026): "a timeline ... that records/shows ho
 - The central settings file: settings.json in D'thorga Companion's own folder (PHOBOS_SETTINGS names another), read after a repository's own settings file and before the default, for every path the tools read.
 - settings list: every setting the tools read, its value, and whether it comes from the environment, a repository's own file, the central file or the default; a repository declares its own scripts' settings in config/settings.json. settings set writes one into the central file, or clears it.
 - changes entry --commit: one commit's code with every entry it wrote, for a fact on the timeline.
+- rules/first-class.md, a design for the owner to edit and not yet rules: the six properties that make a thing first-class (an identity not a label, an address, a history, the same shape in every game, one shape in tools and window, rules can be about it), eleven citizens with how far each is today, and principles such as "identity is origin and continuity, never the label". The timeline is built on the first five.
+- rules list marks a file whose status says it is not yet rules as "a design to edit", and counts no rules in it.
 
 ### Changed
 
