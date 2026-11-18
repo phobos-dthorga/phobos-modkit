@@ -106,6 +106,11 @@ def _note_data(note):
             "kind": note.kind, "variant": note.variant, "values": note.values}
 
 
+def _kinds_words(kinds):
+    """"1 kind: L-ATV", "2 kinds: L-ATV, M1075 HEMTT"."""
+    return f"{len(kinds)} kind{'' if len(kinds) == 1 else 's'}: " + ", ".join(kinds)[:70]
+
+
 def _parts_words(check):
     """"2 of 3: wet brakes, air filter" for a row in parts; empty for a row of one."""
     if check is None or len(check.parts) < 2:
@@ -181,7 +186,7 @@ def build_report(evidence, changed=None, applied=False, everything=False, top=40
             ["#", "Row", "Parts", "Last seen", "On", "Notes"],
             [[r.id, r.title, _parts_words(evidence.checks.get(r.id)),
               testpass.day(max(s.last for s in evidence.sightings(r.id))),
-              f"{len(evidence.checks[r.id].kinds)} kinds: " + ", ".join(evidence.checks[r.id].kinds)[:70],
+              _kinds_words(evidence.checks[r.id].kinds),
               ", ".join(s.key for s in evidence.sightings(r.id))] for r in seen[:top]], total=len(seen)))
     off = [(r, p) for r in waiting if r.id in evidence.checks for p in evidence.checks[r.id].parts if p.state == "off"]
     if off:

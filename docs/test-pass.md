@@ -7,7 +7,8 @@ What a repository's in-game test list is waiting for, from the game's seen-in-pl
 - **A seen-in-play note never passes a row.** It says a feature ran without an error, not that it looked right. A row the notes
   flag is "seen working, awaiting the owner's word" until the owner gives a verdict.
 - **`apply` previews unless given `--apply`**, and then writes only inside the test list. It never removes text, except the
-  "awaiting the owner's word" note on a row that has just had its verdict, or that is written again naming more parts.
+  "awaiting the owner's word" note on a row that has just had its verdict, or that is written again naming more parts, or that
+  no note read stands for any more (1.19.1; never when no notes were read at all, so a missing notes file takes nothing back).
 - **The repository says where its test list is**, in `config/test-evidence.json`. Without that file the tool stops and says so.
 - **Since 1.19.0 a sighting can be weaker than it looks, and the report says so**: notes whose figures miss what the row expects,
   notes older than the row, and notes out of the order a rule demands are listed apart and do not mark a row seen.

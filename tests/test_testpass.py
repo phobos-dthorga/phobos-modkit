@@ -416,6 +416,46 @@ class Judging(unittest.TestCase):
         self.assertEqual(testpass.mapped_keys(config(rows, order=[rule])), {"a", "b", "c", "d", "e"})
 
 
+class Withdrawing(unittest.TestCase):
+    def test_a_seen_sentence_no_note_stands_for_is_taken_back(self):
+        # Written from a generic note; the map now narrows the evidence and that note no longer fits.
+        repo = Repo(seen=[rich("stopped", "2026-11-19T10:00:00Z", detail="L-ATV: Engine too badly damaged.")],
+                    config=config({"1": ["stopped"]}))
+        try:
+            text, _ = testpass.apply_to_text(repo.doc(), repo.evidence())
+            self.assertIn("Seen working by the game", text)
+            (repo.root / "docs" / "test-pass.md").write_text(text, encoding="utf-8")
+            (repo.root / "config" / "test-evidence.json").write_text(
+                json.dumps(config({"1": [{"key": "stopped", "detail": "*track*"}]})), encoding="utf-8")
+            text, changed = testpass.apply_to_text(repo.doc(), repo.evidence())
+            line = next(l for l in text.splitlines() if l.startswith("| 1 |"))
+            self.assertNotIn("Seen working", line)
+            self.assertTrue(line.endswith("| The tank stops |"), line)
+            self.assertEqual(changed[0][1], testpass.WITHDRAWN)
+        finally:
+            repo.close()
+
+    def test_nothing_is_taken_back_when_no_notes_were_read(self):
+        repo = Repo(seen=[rich("stopped", "2026-11-19T10:00:00Z")], config=config({"1": ["stopped"]}))
+        try:
+            text, _ = testpass.apply_to_text(repo.doc(), repo.evidence())
+            (repo.root / "docs" / "test-pass.md").write_text(text, encoding="utf-8")
+            repo.seen.write_text("", encoding="utf-8")
+            self.assertEqual(testpass.apply_to_text(repo.doc(), repo.evidence())[1], [])
+        finally:
+            repo.close()
+
+    def test_a_verdict_is_never_taken_back(self):
+        repo = Repo(seen=[rich("other", "2026-11-19T10:00:00Z")], verdicts=[verdict("1", "passed", "2026-11-18T10:00:00Z")],
+                    config=config({"1": ["stopped"]}))
+        try:
+            text, _ = testpass.apply_to_text(repo.doc(), repo.evidence())
+            (repo.root / "docs" / "test-pass.md").write_text(text, encoding="utf-8")
+            self.assertEqual(testpass.apply_to_text(repo.doc(), repo.evidence())[1], [])
+        finally:
+            repo.close()
+
+
 class Decisions(unittest.TestCase):
     def test_no_row_needed_leaves_a_key_out_and_make_a_row_lists_it(self):
         repo = Repo(seen=[note("medical.a", "2026-11-17T10:00:00Z"), note("medical.b", "2026-11-17T10:00:00Z"),

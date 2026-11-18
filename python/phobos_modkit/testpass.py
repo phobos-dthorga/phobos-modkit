@@ -266,6 +266,15 @@ class Evidence:
             return seen_text(self.sightings(row.id), check)
         return None
 
+    def withdraws(self, row):
+        """Whether apply takes back its own "seen working" sentence from this row (1.19.1): the row has no verdict, and no note read
+        stands for it now (its notes are older than the row, miss its figures, or no longer fit its evidence). Never when no notes
+        were read at all, so a missing or moved notes file takes nothing back."""
+        if not self.notes or row.id in self.verdicts or not _SEEN_MARK.search(row.cells[-1] if row.cells else ""):
+            return False
+        check = self.checks.get(row.id)
+        return check is None or not check.seen_parts
+
 
 # ---- Reading ----
 
@@ -657,15 +666,23 @@ def _parts_marked(cell):
     return int(found.group(1)) if found else 0
 
 
+WITHDRAWN = "takes back its seen-working sentence: no note stands for the row now"
+
+
 def apply_to_text(text, evidence):
     """The test list with every pending sentence added, and the rows changed. A verdict, or a seen sentence naming more parts,
-    replaces an awaiting note."""
+    replaces an awaiting note; a seen sentence no note stands for any more is taken back (1.19.1)."""
     newline = "\r\n" if "\r\n" in text else "\n"
     lines = text.split(newline)
     changed = []
     for row in evidence.rows:
         sentence = evidence.pending(row)
         if sentence is None:
+            if evidence.withdraws(row):
+                cells = list(row.cells)
+                cells[-1] = _SEEN_MARK.sub("", cells[-1]).rstrip()
+                lines[row.line] = "| " + " | ".join(cells) + " |"
+                changed.append((row, WITHDRAWN))
             continue
         cells = list(row.cells)
         last = cells[-1]

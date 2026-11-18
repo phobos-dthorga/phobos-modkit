@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.19.1] - 2026-11-18
+
+Found on the first run against phobos-rimworld's test list: four rows still said "seen working" from notes that, judged by the new evidence, no longer stand for them (an engine stop on a thrown-track row, a 0 W grid draw, a warning from before its row changed).
+
+### Fixed
+
+- apply takes back its own "seen working, awaiting the owner's word" sentence when no note read stands for the row any more. Never when the row has a verdict, and never when no notes were read at all, so a missing or moved notes file takes nothing back.
+- The report says "1 kind", not "1 kinds".
+
 ## [1.19.0] - 2026-11-18
 
 Asked for by the owner in phobos-rimworld (18 November 2026, its design record "Seen-in-play checks"): two faults sat in the seen-in-play notes and only a reading by eye found them, a grid hook-up noted at 0 W on a row expecting about a kilowatt, and a refusal with no warning before it.
