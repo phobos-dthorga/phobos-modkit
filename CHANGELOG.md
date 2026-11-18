@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-11-18
+
+Asked for by the owner in phobos-rimworld (18 November 2026): clone the confirmed repositories, watch what they cost as they grow, and ask before anything is deleted.
+
+### Added
+
+- rimworld-sources --clone-into DIR: a lean clone of each confirmed repository (whole history, but only source and project files checked out and fetched), --update-clones to move them forward without ever discarding work, and a report of each clone's size, their total against a budget and the drive's free space. When the drive is short (under 10 GB or 3% free, both adjustable) no new clone is made; when it is short or the budget is passed, the report asks for a decision and lists the choices. The tool never deletes.
+- source_clones: the game-free clones and the storage watch behind it.
+
+### Fixed
+
+- rimworld-sources: a register entry missing a field no longer stops the report.
+
 ## [1.16.0] - 2026-11-18
 
 Asked for by the owner in phobos-rimworld (18 November 2026), beside its new rule to read a mod's public repository before decompiling it.

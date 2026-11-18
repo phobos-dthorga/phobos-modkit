@@ -41,6 +41,21 @@ Each candidate is checked by fetching its top-level `About/About.xml` (from raw.
 count). If that names another mod, the repository is that mod's and is passed over. If there is none, the repository's file list is
 read and up to six About.xml files in it are checked, for repositories that hold several mods.
 
+## Clones, and a watch on what they cost
+
+With `--clone-into DIR` (under the root; phobos-rimworld uses `.local/decompiled`), each confirmed repository is kept as a lean
+clone, `DIR/<Name>-src`, and the report says what each one and all of them cost, and how much the drive has free.
+
+- **Lean:** the whole commit history (git's partial clone, `--filter=blob:none`) but file contents only for what is checked out,
+  and only source and project files are checked out (a sparse checkout: `*.cs`, project files, About.xml, README, licence,
+  changelog). Never textures, sounds or binaries. Git LFS downloads are skipped and nothing in a clone is ever run.
+- **`--update-clones`** fetches new history and moves forward only when that needs no merge; anything else is left as it was.
+- **Nothing is ever deleted by the tool.** While the drive has less than `--floor-gb` free (default 10 GB) or under `--floor-percent` (default 3%), no new clone
+  is made; when that happens, or when the clones together pass `--budget-gb` (default 3 GB), the report adds **"Storage needs a
+  decision: nothing was deleted"**, with the largest clones and the choices: free space elsewhere, remove some clones (they come back
+  with `--clone-into`), keep them on another drive, or change the limits (`--budget-gb`, `--floor-gb`, `--floor-percent`).
+- A folder of the same name that is not a clone is left alone and reported.
+
 ## The register
 
 With `--write`, the answers go to `config/source-repos.json` under the root, by package ID: the repository, where it was found,

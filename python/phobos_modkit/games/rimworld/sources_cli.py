@@ -24,6 +24,7 @@ import json
 from pathlib import Path
 import re
 import sqlite3
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
@@ -32,6 +33,7 @@ from ...github import Client, GitHubError, RateLimited, http_get, links
 from ...github import CACHE_FOLDER as GITHUB_CACHE
 from ...manifest import ONLINE
 from ...report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
+from ... import source_clones
 from ...steam import workshop
 from . import loading, paths
 from .archive_cli import tied_active
@@ -54,6 +56,15 @@ def _parser():
     p.add_argument("--recheck", action="store_true", help="look again at mods the register already confirmed")
     p.add_argument("--refresh", action="store_true", help="ignore cached GitHub answers")
     p.add_argument("--no-search", action="store_true", help="never search GitHub by name; links only")
+    p.add_argument("--clone-into", metavar="DIR", help="keep a lean clone of each confirmed repository here (under the root), "
+                                                    "as <Name>-src; says what they and the drive cost")
+    p.add_argument("--update-clones", action="store_true", help="with --clone-into, also bring existing clones up to date")
+    p.add_argument("--budget-gb", type=float, default=source_clones.BUDGET_BYTES / 1e9,
+                   help="warn when the clones together pass this many GB (default %(default)s)")
+    p.add_argument("--floor-gb", type=float, default=source_clones.FLOOR_BYTES / 1e9,
+                   help="no new clone while the drive has less free than this many GB (default %(default)s)")
+    p.add_argument("--floor-percent", type=float, default=source_clones.FLOOR_FRACTION * 100,
+                   help="no new clone while the drive has less free than this share of its size (default %(default)s)")
     p.add_argument("--game", help="the RimWorld folder (else RIMWORLD_PATH, the settings file, Steam's default)")
     p.add_argument("--workshop", help="the Workshop content folder (else RIMWORLD_WORKSHOP_PATH, settings, beside the game)")
     p.add_argument("--config", help="the folder holding ModsConfig.xml (else RIMWORLD_CONFIG_PATH, settings, default)")
@@ -161,7 +172,9 @@ def write_register(path, mods, now):
 # ---- Report ----
 
 def build_report(findings, kept, client, problems, top, written):
-    every = sorted(list(findings.values()) + list(kept.values()), key=lambda f: f["name"].lower())
+    blank = {"name": "?", "package_id": "", "repository": "", "found": "", "confirmed": "", "pushed": "", "licence": "",
+             "archived": False, "candidates": []}
+    every = sorted(({**blank, **f} for f in list(findings.values()) + list(kept.values())), key=lambda f: f["name"].lower())
     confirmed = [f for f in every if f["confirmed"]]
     unconfirmed = [f for f in every if not f["confirmed"] and f["candidates"]]
     none = [f for f in every if not f["confirmed"] and not f["candidates"]]
@@ -188,7 +201,40 @@ def build_report(findings, kept, client, problems, top, written):
     return report
 
 
-def main(argv=None, settings_file=None, environ=None, out=None, get=None, post=None, sleep=None, clock=None):
+def _gb(n):
+    return f"{n / 1e9:.2f} GB" if n >= 1e8 else f"{n / 1e6:.0f} MB"
+
+
+def clones_section(report, outcomes, into, budget, floor, fraction, space, top):
+    """What each clone did and costs, the total against the budget, the drive's free space, and the owner's choices
+    when either runs short. Never deletes anything."""
+    every = source_clones.existing(into)
+    total = sum(size for _, size in every)
+    free, size_of_drive = space(into)
+    short = source_clones.short_of_space(free, size_of_drive, floor, fraction)
+    over = total > budget
+    rows = [[o.name, o.folder.name, o.action, _gb(o.size) if o.size else "-", o.detail] for o in outcomes]
+    section = report.section("Source clones", Table(["Mod", "Folder", "Now", "Size", "Note"], rows[:top], total=len(rows)))
+    section.blocks.insert(0, Bullets([
+        f"{len(every)} clones in {into}: {_gb(total)} together (budget {_gb(budget)}).",
+        f"The drive has {_gb(free)} free of {_gb(size_of_drive)} ({free / size_of_drive:.0%})." if size_of_drive else "The drive's size is unknown."]))
+    if short or over:
+        largest = ", ".join(f"{name} ({_gb(size)})" for name, size in every[:5]) or "none yet"
+        why = []
+        if short:
+            why.append(f"the drive is short of space (under {_gb(floor)} or {fraction:.0%} free), so no new clone was made")
+        if over:
+            why.append(f"the clones pass their budget of {_gb(budget)}")
+        report.section("Storage needs a decision: nothing was deleted", Bullets([
+            "Why: " + "; ".join(why) + ".",
+            f"Largest clones: {largest}. Each can be cloned again at any time from its repository.",
+            "Choices for the owner: free space elsewhere on the drive; remove some or all clones (they come back with "
+            "--clone-into); keep clones on another drive (--clone-into elsewhere); raise --budget-gb, or lower --floor-gb or --floor-percent.",
+        ]))
+    return short or over
+
+
+def main(argv=None, settings_file=None, environ=None, out=None, get=None, post=None, sleep=None, clock=None, run=None, disk=None):
     out = out or sys.stdout
     try:
         args = _parser().parse_args(list(sys.argv[1:] if argv is None else argv))
@@ -245,6 +291,15 @@ def main(argv=None, settings_file=None, environ=None, out=None, get=None, post=N
             write_register(register_path, merged, now)
             written = str(REGISTER)
         report = build_report(findings, kept, client, problems, args.top, written)
+        if args.clone_into:
+            into = Path(args.root) / args.clone_into
+            every = list(findings.values()) + list(kept.values())
+            repos = sorted({(f["name"], f["repository"]) for f in every if f.get("confirmed") and f.get("repository")})
+            space = disk or source_clones.drive
+            outcomes = source_clones.ensure(repos, into, args.update_clones, run=run or subprocess.run,
+                                            space=space, floor=args.floor_gb * 1e9, fraction=args.floor_percent / 100)
+            clones_section(report, outcomes, into, args.budget_gb * 1e9, args.floor_gb * 1e9, args.floor_percent / 100,
+                           space, args.top)
     except (GitHubError, OSError, ET.ParseError) as error:
         report, code = Report("rimworld-sources: error", [str(error)]), EXIT_FAILED
     print(envelope_text("rimworld-sources", report, redact) if args.json else render_markdown(report, redact), file=out)
