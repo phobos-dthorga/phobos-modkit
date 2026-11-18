@@ -74,6 +74,7 @@ python -m phobos_modkit test-pass report --root REPO   in-game tests waiting for
 python -m phobos_modkit installs status --root REPO    what updating or going back gains or loses; also backup, restore, install, build
 python -m phobos_modkit rimworld-textures status       whether any active mod would show an old picture; encode fixes it
 python -m phobos_modkit changes list --root REPO       what the changelogs say changed lately; entry shows one entry's code
+python -m phobos_modkit rules list                     the rules every repository shares; check says whether one reads them
 python -m phobos_modkit art-audit report --root REPO   images drawn in code, without a record, or borrowed
 python -m phobos_modkit gate --root ..         this repository's checks before a commit; only what failed
 python -m phobos_modkit gate --verify-staged    the commit guard: were the staged files checked by a passing run?
@@ -101,6 +102,7 @@ in order of expected saving.
 | 10 | [The gate](docs/gate.md) | Every build, test and check before a commit, from the repository's own list; only what failed, with the errors and failed tests | Python | Built: 0.11.0 |
 | 13 | [Cleanup](docs/cleanup.md) | What the tools, builds and tests left behind, how big it is and why it may go; deleted only on request | Python | Built: 1.8.0 |
 | 14 | [Test pass](docs/test-pass.md) | A repository's in-game test list, what the game has seen working and the owner's verdicts; writes verdicts into the list on request | Python | Built: 1.9.0; part passes and verdicts given in conversation 1.14.0 |
+| 20 | [Shared rules](rules/README.md) | The owner's rules for every game, mod and tool repository, in one place, and a check that a repository reads them | Markdown, with a Python check | Built: 1.25.0 |
 | 19 | [Changes](docs/changes.md) | What a repository's changelogs say changed lately, and the code behind any one entry: the commit that wrote it and its diff, file by file. Any game, any repository with a changelog | Python, with git | Built: 1.24.0 |
 | 18 | [Textures](docs/rimworld-textures.md) (RimWorld) | Whether every active mod's encoded textures match its pictures (a stale one shows the old picture), and encoding those that don't with RimSort's own todds preset, on request | Python, with RimSort's todds | Built: 1.21.0 |
 | 17 | [Installs](docs/installs.md) | Each mod's installed copy, the repository's and every backup, and what moving between them gains or loses by their changelogs; backs up, goes back to a backup, or runs the repository's install, on request | Python | Built: 1.20.0 |
@@ -134,6 +136,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/code.md](docs/code.md) | The code index: find, outline, show and refs over C# trees, what the scanner reads, and compare for two builds |
 | [docs/rimworld-settings.md](docs/rimworld-settings.md) | The player's mod settings: matching files to mods, defaults, snapshots |
 | [docs/rimworld-startup.md](docs/rimworld-startup.md) | Start-up times from Loading Progress's sessions: launches, costliest mods, comparisons |
+| [rules/README.md](rules/README.md) | The shared rules: what the folder holds, how a repository takes them up, how a rule is changed, and what is waiting to move there |
 | [docs/changes.md](docs/changes.md) | Changes: how an entry's commit is found, what the answer holds, and what it cannot know |
 | [docs/rimworld-textures.md](docs/rimworld-textures.md) | Textures: the game's rule for a .dds beside a .png, what counts as stale, the Workshop dates checked, and encoding |
 | [docs/rimworld-perf.md](docs/rimworld-perf.md) | Recording a running RimWorld from outside: what is recorded, how time is put down to mods, and the limits |

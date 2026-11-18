@@ -4,6 +4,21 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-11-19
+
+Asked for by the owner (19 November 2026), on choosing how commits are cut for the Companion's code viewer: "a central point from which global rules for all mods can be read and modified", as a folder in this repository to be used as the root for such rules from now on.
+
+### Added
+
+- rules/: the rules every Phobos and D'thorga repository shares. rules/every-session.md is read at the start of every session; rules/README.md says what the folder holds, how a repository takes the rules up, how a rule is changed and where a rule belongs.
+- The first shared rules, on commits and changelog entries (the owner's choice): a change and its entry go in one commit; separate changes are committed separately where they are separate anyway, one finished before the next is started; one piece of work stays one commit; nothing is untangled afterwards by staging part of a file; a batch may share a version; an entry keeps its opening words when reworded.
+- rules list prints the rule files with when each is read and how many rules it holds. rules check --root REPO says whether a repository reads them (the import in its CLAUDE.md, the pointer in its AGENTS.md, the file its pin holds) and fails when one is missing, for a repository's gate.
+- This repository reads its own rules: a CLAUDE.md that imports AGENTS.md and rules/every-session.md.
+
+### Compatibility
+
+- Twelve rules repeated across the repositories are listed in rules/README.md as waiting to move; none was moved. A new or changed rule raises this repository's middle version number from now on, a rewording the last.
+
 ## [1.24.1] - 2026-11-19
 
 ### Added

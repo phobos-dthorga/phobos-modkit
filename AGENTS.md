@@ -4,6 +4,20 @@ Standing rules for work in this repository, stated once in their current form. W
 lives in `CHANGELOG.md`; designs live in `docs/`. Conventions follow phobos-rimworld and Phobos Scope,
 adapted to a tooling repository. The repository was created on 7 November 2026 at the owner's request.
 
+## Rules shared by every repository
+
+**This repository holds them, in [`rules/`](rules/README.md)** (owner, 19 November 2026: "a central point from which global rules
+for all mods can be read and modified"). **Read [`rules/every-session.md`](rules/every-session.md) at the start of every
+session**; `CLAUDE.md` imports it. The rules below are this repository's own, and add to them.
+
+- **A rule that holds across games goes in `rules/`, never in one repository's `AGENTS.md`**: `rules/README.md` says which file,
+  how a rule is changed (the owner decides; a new or changed rule raises the middle version number) and how a repository takes
+  the rules up. Its "Waiting to move here" table lists the rules still repeated in several repositories.
+- **A rule moves here only on the owner's word**, in one wording they have chosen, and each repository drops its own copy when
+  its pin next moves, so a rule is never stated twice.
+- `python -m phobos_modkit rules list` prints the files; `rules check --root REPO` says whether a repository reads them, for
+  its gate. `tests/test_rules.py` keeps the folder and its index in step.
+
 ## Working with the owner
 
 - Author: Phobos A. D'thorga (phobosgekko).
