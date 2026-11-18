@@ -24,7 +24,7 @@ from .patches import CACHE_FOLDER, INDEX_NAME, PatchesError, mod_assemblies, ref
 from ...manifest import READS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
-REPORTS = ("summary", "who", "mod", "hotspots")
+REPORTS = ("summary", "who", "mod", "hotspots", "targets")
 
 JOINED = """SELECT o.position, o.mod, o.package_id, p.source, p.kind, p.target_type, p.target_member, p.method_type,
                    p.patch_class, p.patch_method, p.can_skip, p.priority, p.note
@@ -53,7 +53,67 @@ def _parser():
     m = sub.add_parser("mod", parents=[common], help="what one mod patches")
     m.add_argument("name", help="a mod's name or package ID; * and ? are wildcards")
     sub.add_parser("hotspots", parents=[common], help="methods several mods patch")
+    t = sub.add_parser("targets", parents=[common], help="each method a repository's code patches: the other mods patching it, "
+                                                         "and, with --updates, what its last update changed (1.37.0)")
+    t.add_argument("--root", default=".", help="the repository whose patches to look at (default: here)")
+    t.add_argument("--updates", action="store_true", help="also compare the archive's newest two versions of each file "
+                                                         "(rimworld-upstream updates; decompiles on first use)")
+    t.add_argument("--days", type=int, default=30, help="--updates: updates in the last N days (default 30)")
+    t.add_argument("--archive", help="--updates: the assembly archive (else PHOBOS_ASSEMBLY_ARCHIVE, settings, default)")
+    t.add_argument("--decompiler", help="--updates: ilspycmd (else PHOBOS_MODKIT_ILSPYCMD, settings, the PATH)")
     return p
+
+
+def targets_report(conn, args, environ, settings_file):
+    """Each method the repository patches, the other mods on it, and (with --updates) what its last update changed."""
+    from . import patch_targets
+    root = Path(args.root).resolve()
+    graph = patch_targets.open_graph(root, environ)
+    try:
+        found = patch_targets.targets(graph, conn, root)
+    finally:
+        graph.close()
+    note = None
+    if args.updates and found:
+        note = _join_updates(found, args, environ, settings_file)
+    crowded = sorted(found, key=lambda t: (-len(t["mods"]), t["target"]))
+    report = Report(f"rimworld-patches targets: {len(found)} methods patched by {root.name}")
+    report.section("Methods, the most crowded first", Table(
+        ["Method", "Our patches", "Other mods", "May skip", "Changed in the last update"],
+        [[t["target"], len(t["ours"]), ", ".join(t["mods"][:4]) + (f" (+{len(t['mods']) - 4})" if len(t["mods"]) > 4 else ""),
+          t["skippers"], "; ".join(f"{c['versions']}: {c['change']}" for c in t["changed"]) or "-"]
+         for t in crowded[:args.top]], total=len(crowded)))
+    if note:
+        report.lines.append(note)
+    return report, {"repository": root.name, "targets": found, "updates": bool(args.updates), "updatesNote": note}
+
+
+def _join_updates(found, args, environ, settings_file):
+    """Adds rimworld-upstream's update rows to the targets they name; a sentence when they could not be read, else None."""
+    from datetime import datetime, timezone
+    from ... import cache as derived
+    from ...assembly_archive import Archive, ArchiveError, archive_root
+    from ...code import compare as code_compare, index as code_index
+    from . import patch_targets
+    from .upstream_cli import Wanted, update_rows
+    wanted = {}
+    for item in found:
+        owner, member = item["target"].rsplit(".", 1)
+        bare = owner.rsplit(".", 1)[-1]
+        wanted.setdefault((bare, member), Wanted(bare, member, ""))
+    try:
+        archive = Archive(archive_root(args.archive, environ, settings_file))
+        decompiled = derived.folder(code_compare.CACHE_FOLDER, args.cache, environ, settings_file)
+        code_cache = derived.folder(code_index.CACHE_FOLDER, args.cache, environ, settings_file)
+        rows, skipped, compared = update_rows(
+            archive, wanted, args.days, datetime.now(timezone.utc), decompiled, code_cache,
+            lambda: code_compare._find_decompiler(args.decompiler, environ, settings_file))
+    except (ArchiveError, code_index.CodeError, OSError) as error:
+        return f"Updates were not compared: {error}"
+    patch_targets.join_updates(found, rows)
+    if not compared:
+        return f"No update in the last {args.days} days was kept by the assembly archive, so none was compared."
+    return None
 
 
 def _target(row):
@@ -174,8 +234,11 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=None):
         index = derived.folder(CACHE_FOLDER, args.cache, environ, settings_file) / INDEX_NAME
         options = {"run": run} if run is not None else {}
         read, kept, built = refresh(index, found, environ, rebuild=args.rebuild, **options)
+        data = None
         with closing(derived.open_read_only(index)) as conn:
-            if args.report == "who":
+            if args.report == "targets":
+                report, data = targets_report(conn, args, environ, settings_file)
+            elif args.report == "who":
                 report = who_report(conn, args)
             elif args.report == "mod":
                 report = mod_report(conn, args)
@@ -188,8 +251,8 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=None):
             if args.report != "summary" and read:
                 report.lines.append(f"Read {read} changed assemblies first.")
     except PatchesError as error:
-        report, code = Report("rimworld-patches: error", [str(error)]), EXIT_FAILED
-    print(envelope_text("rimworld-patches", report, redact) if args.json
+        report, code, data = Report("rimworld-patches: error", [str(error)]), EXIT_FAILED, None
+    print(envelope_text("rimworld-patches", report, redact, data) if args.json
           else render_markdown(report, redact), file=out)
     return code
 
@@ -198,4 +261,5 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
             "reports": {
     "summary": {"question": "How much do my mods patch the game's code?"},
     "hotspots": {"question": "Where do my mods collide?"},
+    "targets": {"note": "each method a repository patches, with the other mods on it; needs the repository"},
 }}

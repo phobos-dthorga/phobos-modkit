@@ -29,11 +29,21 @@ python -m phobos_modkit rimworld-patches who "Pawn.Kill"         every patch on 
 python -m phobos_modkit rimworld-patches who "VehicleStatHandler.*"   wildcards on the member or the type
 python -m phobos_modkit rimworld-patches mod "Combat Extended"   what one mod patches (name or package ID)
 python -m phobos_modkit rimworld-patches hotspots --top 50       methods two or more mods patch
+python -m phobos_modkit rimworld-patches targets --root REPO --updates   each method REPO patches, the others on it, its last update
 ```
 
 Paths resolve as the other RimWorld tools do (`--game`, `--workshop`, `--config`, or their environment variables and
 settings keys). Results are kept in the kit's cache (`rimworld-patches/patches.sqlite`); only DLLs whose size or time
 changed are read again, and everything is read again when the kit's version changes.
+
+## A repository's patch targets: `targets` (1.37.0)
+
+`targets` lists each method a repository's code patches, from its `connections` graph (exact, from the built assemblies), with
+every other active mod patching the same method (the repository's own assemblies left out, by name) and how many of those patches
+may skip the original. With `--updates` it adds rimworld-upstream's comparison of the newest two versions the assembly archive kept
+of each file in the last `--days` (30): a new signature, a new body or a removed member, matched by type and member name. Its JSON
+`data.targets` holds `{node, target, name, assembly, ours, mods, skippers, changed}`; `node` is the target's `connections` id.
+D'thorga Companion's Code map shows it as badges on the methods.
 
 ## How patches are found
 

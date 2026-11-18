@@ -4,6 +4,13 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.37.0] - 2026-11-19
+
+For D'thorga Companion's cross-links (19 November 2026, docs/cross-links.md there, L5): risk where it sits.
+
+### Added
+
+- rimworld-patches targets: each method a repository's code patches (from its connections graph), with every other active mod patching the same method and how many of their patches may skip the original; with --updates, what the archive's newest update of that file changed in it (rimworld-upstream's comparison: new signature, new body or removed). About 5 s on the owner's list.
 ## [1.36.0] - 2026-11-19
 
 For D'thorga Companion's cross-links (19 November 2026, docs/cross-links.md there, L3): test rows joined to code.
