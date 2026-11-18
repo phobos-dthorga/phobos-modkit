@@ -4,6 +4,7 @@
     changes list --root REPO --versions 10           more versions of each
     changes entry --root REPO --changelog mods/Thing/CHANGELOG.md --text "A slung vehicle could be set down"
                                                      the commit that wrote that entry, and what it changed, file by file
+    changes pending --root REPO [--root REPO ...]    what each changelog has not released yet: entries with no version, drafts
 
 The code behind an entry is the commit that first wrote it into its changelog, found by git; an entry no commit holds yet shows the
 uncommitted changes. One commit may have written several entries: the answer names the others, and cannot say which lines are whose
@@ -32,10 +33,16 @@ def _parser():
                                 formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__.split("\n\n", 1)[1])
     sub = p.add_subparsers(dest="report", required=True)
     for name, helptext in (("list", "every changelog in the repository, its newest versions and their entries"),
-                           ("entry", "the commit that wrote one changelog entry, and what it changed")):
+                           ("entry", "the commit that wrote one changelog entry, and what it changed"),
+                           ("pending", "what each changelog has not released yet, for one or more repositories")):
         s = sub.add_parser(name, help=helptext)
-        s.add_argument("--root", help="the repository (default: the current folder)")
-        if name == "list":
+        if name == "pending":
+            s.add_argument("--root", action="append", help="a repository (repeatable; default: the current folder)")
+        else:
+            s.add_argument("--root", help="the repository (default: the current folder)")
+        if name == "pending":
+            pass
+        elif name == "list":
             s.add_argument("--versions", type=int, default=5, help="versions of each changelog to list, newest first (default 5)")
         else:
             s.add_argument("--changelog", required=True, help="the changelog's path in the repository, as list gives it")
@@ -58,7 +65,7 @@ def list_report(root, versions, top, progress):
     logs = []
     for position, path in enumerate(found, 1):
         progress(f"Reading {path}", position, len(found))
-        log = changes.read(root, path)
+        log = changes.read_listed(root, path)
         commits = changes.entry_commits(root, path)
         order = [v for v in log.headings if v == UNRELEASED and any(e.version == v for e in log.entries)]
         order += [v for v in log.headings if v != UNRELEASED][:max(1, versions)]
@@ -83,6 +90,19 @@ def _newest(log):
 def _newest_count(log):
     named = [v for v in log["versions"] if v["version"] != UNRELEASED]
     return len(named[0]["entries"]) if named else sum(len(v["entries"]) for v in log["versions"])
+
+
+def pending_report(roots, top, progress):
+    repositories = []
+    for position, root in enumerate(roots, 1):
+        progress(f"Reading {Path(root).name}'s changelogs", position, len(roots))
+        repositories.append({"repository": Path(root).name, "pending": changes.pending(root)})
+    rows = [[r["repository"], p["product"], f"{p['unreleased']:,}", p["draftVersion"] or "-", p["draftDate"] or "-"]
+            for r in repositories for p in r["pending"]]
+    report = Report(f"Changes: {len(rows):,} changelog{'' if len(rows) == 1 else 's'} with something not yet released")
+    report.section("Not yet released", Table(["Repository", "Product", "Entries with no version", "Newest draft", "Its date"],
+                                             rows[:top], total=len(rows)))
+    return report, {"repositories": repositories}
 
 
 def _when(seconds):
@@ -129,10 +149,12 @@ def main(argv=None, environ=None, out=None):
         return EXIT_USAGE if stop.code else EXIT_OK
     redact = keep if args.no_redact else home_redactor()
     progress = Progress(environ)
-    root = Path(args.root or ".").resolve()
+    root = Path(args.root or ".").resolve() if args.report != "pending" else None
     code = EXIT_OK
     try:
-        if args.report == "list":
+        if args.report == "pending":
+            report, data = pending_report([Path(r).resolve() for r in (args.root or ["."])], args.top, progress)
+        elif args.report == "list":
             report, data = list_report(root, args.versions, args.top, progress)
         else:
             if not args.text and not args.commit:
@@ -153,4 +175,5 @@ def main(argv=None, environ=None, out=None):
 
 MANIFEST = {"game": None, "parser": _parser, "effect": READS,
             "reports": {"list": {"question": "What do the changelogs say changed lately?", "surface": "changes"},
-                        "entry": {"note": "the commit that wrote one entry, and its diff; needs the changelog and the entry"}}}
+                        "entry": {"note": "the commit that wrote one entry, and its diff; needs the changelog and the entry"},
+                        "pending": {"note": "what each changelog has not released yet; reads files only, for a program's first page"}}}

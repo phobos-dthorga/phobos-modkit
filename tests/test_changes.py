@@ -69,6 +69,26 @@ class ChangelogsTests(unittest.TestCase):
         self.assertEqual(changes.product_name("", "CHANGELOG.md", Path("some/repo")), "repo")
 
 
+class PendingTests(unittest.TestCase):
+    def test_unreleased_entries_and_drafts_are_counted_newest_draft_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = repository(tmp)
+            write(root / "mods" / "Thing" / "CHANGELOG.md", HEAD.rstrip("\n") + "\n\n- **Oars.** Boats row.\n- **Bells.** Ring.\n\n" + V2 + V1)
+            write(root / "mods" / "Done" / "CHANGELOG.md", "# Done changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2026-10-01 - Released\n\n- **Old.** Out.\n")
+            found = changes.pending(root)
+            self.assertEqual(found, [{"changelog": "mods/Thing/CHANGELOG.md", "product": "Thing", "unreleased": 2,
+                                      "draftVersion": "0.2.0", "draftDate": "2026-11-02", "earlierDrafts": 1}])
+
+    def test_the_command_reads_several_repositories_at_once(self):
+        with tempfile.TemporaryDirectory() as one, tempfile.TemporaryDirectory() as two:
+            out = io.StringIO()
+            code = changes_cli.main(["pending", "--root", str(repository(one)), "--root", str(repository(two)), "--json"],
+                                    environ={}, out=out)
+            data = json.loads(out.getvalue())["data"]
+            self.assertEqual(code, 0)
+            self.assertEqual([len(r["pending"]) for r in data["repositories"]], [1, 1])
+
+
 class CommitMapTests(unittest.TestCase):
     def test_every_entry_is_given_the_commit_that_wrote_it_from_one_pass(self):
         with tempfile.TemporaryDirectory() as tmp:

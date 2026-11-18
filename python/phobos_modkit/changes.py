@@ -15,7 +15,7 @@ from pathlib import Path
 import re
 import subprocess
 
-from .installs import CHANGELOG, parse_changelog
+from .installs import CHANGELOG, UNRELEASED, parse_changelog
 
 SKIP_FOLDERS = {"node_modules", "external", "obj", "bin", "target", "dist", "artifacts", "__pycache__"}
 SEARCH_DEPTH = 3                 # folders below the repository's root a changelog may sit in
@@ -89,7 +89,35 @@ def read(root, changelog):
     return parse_changelog((Path(root) / changelog).read_text(encoding="utf-8", errors="replace"))
 
 
+def read_listed(root, changelog):
+    """A changelog that changelogs(root) has just listed, read straight from disk: no second walk of the repository to check it,
+    which cost about 0.09 s a changelog in a large repository."""
+    return parse_changelog((Path(root) / changelog).read_text(encoding="utf-8", errors="replace"))
+
+
 # ---------------------------------------------------------------- naming a product
+
+_DAY = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
+
+
+def pending(root):
+    """What each of a repository's changelogs has not released: entries not yet in a version, and versions still marked Draft
+    (the newest first, with its date, and how many older drafts). Changelogs with nothing pending are left out. Reads the files only,
+    never git, so it is quick enough for a program's first page."""
+    found = []
+    for path in changelogs(root):
+        log = read_listed(root, path)
+        unreleased = sum(1 for e in log.entries if e.version == UNRELEASED)
+        drafts = [(v, rest) for v, rest in log.headings.items() if v != UNRELEASED and "draft" in rest.lower()]
+        if not unreleased and not drafts:
+            continue
+        newest = drafts[0] if drafts else (None, "")
+        day = _DAY.search(newest[1])
+        found.append({"changelog": path, "product": product_name(log.title, path, root), "unreleased": unreleased,
+                      "draftVersion": newest[0], "draftDate": day.group(1) if day else None,
+                      "earlierDrafts": max(len(drafts) - 1, 0)})
+    return found
+
 
 def product_name(title, path, root):
     """"D'thorga Framework changelog" names D'thorga Framework and "Changelog (PhobosLib)" PhobosLib; a bare "Changelog" is named

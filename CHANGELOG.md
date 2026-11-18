@@ -4,6 +4,17 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.32.0] - 2026-11-19
+
+For D'thorga Companion's shared-code audit (19 November 2026, docs/shared-code-audit.md there, X1): its Home page read changelogs with a parser of its own beside this kit's.
+
+### Added
+
+- changes pending: what each changelog has not released yet (entries with no version, and the newest Draft version with its date and how many older drafts), for one or more repositories in one run. It reads the files only, never git: about 0.35 s for three repositories, quick enough for a program's first page.
+
+### Changed
+
+- changes list reads each changelog it has just found straight from disk, instead of walking the repository again for each one: about 0.95 s instead of 1.65 s for phobos-rimworld.
 ## [1.31.0] - 2026-11-19
 
 From the owner's first look at D'thorga Companion's Timeline (19 November 2026): "I'm unable to view the applicable changes to the code, as you can in normal views".

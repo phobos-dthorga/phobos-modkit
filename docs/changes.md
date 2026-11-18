@@ -23,6 +23,9 @@ python -m phobos_modkit changes entry --root REPO --changelog mods/Thing/CHANGEL
 python -m phobos_modkit changes entry --root REPO --changelog mods/Thing/CHANGELOG.md --commit 401c6a93
 ```
 
+`changes pending --root REPO [--root REPO ...]` (1.32.0) lists what each changelog has not released yet: entries with no version
+(`unreleased`), and the newest Draft version (`draftVersion`, `draftDate`) with `earlierDrafts`. It reads the files only, never git.
+
 `--commit` (1.30.0) shows one commit's code with every entry it wrote into the changelog, for a fact on the timeline whose
 entries may since have been reworded or removed (docs/history.md); the changelog may be one the repository no longer has.
 
