@@ -261,5 +261,6 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
             "reports": {
     "summary": {"question": "How much do my mods patch the game's code?"},
     "hotspots": {"question": "Where do my mods collide?"},
-    "targets": {"note": "each method a repository patches, with the other mods on it; needs the repository"},
+    "targets": {"note": "each method a repository patches, with the other mods on it; needs the repository",
+                "surface": "patch-targets"},
 }}

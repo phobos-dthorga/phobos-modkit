@@ -4,6 +4,11 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.37.1] - 2026-11-19
+
+### Fixed
+
+- The manifest marks rimworld-patches targets as a patch-targets reader (surface patch-targets), so a program can find it for any game whose tools have one without naming the game.
 ## [1.37.0] - 2026-11-19
 
 For D'thorga Companion's cross-links (19 November 2026, docs/cross-links.md there, L5): risk where it sits.
