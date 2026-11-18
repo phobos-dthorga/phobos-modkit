@@ -66,6 +66,7 @@ python -m phobos_modkit code --each-in DIR show Type.Member   a C# member's sour
 python -m phobos_modkit code compare OLD.dll NEW.dll   what changed between two builds, member by member
 python -m phobos_modkit rimworld-archive snapshot --root ..   keep every new version of the game and tied mods; also list, compare, get
 python -m phobos_modkit rimworld-sources --root .. --write   where each tied mod's public source lives, checked
+python -m phobos_modkit rimworld-upstream --root REPO --clones DIR   updates and upstream commits that changed members we patch
 python -m phobos_modkit crash-dump               why a program crashed, from its Windows crash dump; names methods in a full one
 python -m phobos_modkit windows-dumps --program X   whether Windows keeps full crash dumps of a program; --apply asks it to
 python -m phobos_modkit cleanup --root REPO      what the tools, builds and tests left behind; --apply deletes it
@@ -135,6 +136,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/rimworld-perf.md](docs/rimworld-perf.md) | Recording a running RimWorld from outside: what is recorded, how time is put down to mods, and the limits |
 | [docs/rimworld-readiness.md](docs/rimworld-readiness.md) | Which active mods declare a game version, and how closely each depends on the game |
 | [docs/manifest.md](docs/manifest.md) | The JSON envelope every command prints, and the manifest of commands, options and effects |
+| [docs/rimworld-upstream.md](docs/rimworld-upstream.md) | Whether an update or another author's source changed a member our code patches or names |
 | [docs/crash-dump.md](docs/crash-dump.md) | Windows crash dumps: the exception, a call loop that ran away, the methods in a full dump, what a small dump cannot say, and windows-dumps |
 | [docs/cleanup.md](docs/cleanup.md) | Cleanup: the kit's cache, its development build and a repository's own leftovers, previewed before anything is deleted |
 | [docs/test-pass.md](docs/test-pass.md) | The test pass: the repository's evidence map, the seen-in-play notes and verdict files, and what apply writes |

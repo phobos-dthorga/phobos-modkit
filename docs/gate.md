@@ -38,6 +38,9 @@ A gate that passes is only useful if the commit that follows is the thing it che
   and each clone turns hooks on once with `git config core.hooksPath .githooks`.
 - Sessions sharing a tree: one session's failing run does not undo another's earlier pass, and a pass covers any file it
   saw, whoever commits it. A commit of paths (`git commit -- a b`) is judged on those paths alone, as git stages them.
+- **It cannot pass a commit that stages only part of a file** (`git add -p`, or a patch applied to the index): the gate
+  checked the whole file as it stood. When another session has uncommitted changes in a file you need, wait for its
+  commit, or agree to commit the file together.
 - The guard is no stronger than the gate's list: it proves the files were checked, not that the checks are enough.
 
 ## Use

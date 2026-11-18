@@ -19,6 +19,8 @@ COMMANDS = {
     "rimworld-readiness": (".games.rimworld.readiness_cli", "which active mods are ready for a game version, and which are likeliest to break"),
     "rimworld-archive": (".games.rimworld.archive_cli",
                          "keep every version of the game's assembly and of tied mods, and compare two of them"),
+    "rimworld-upstream": (".games.rimworld.upstream_cli",
+                          "whether an update or another author's source changed a method our code patches or names"),
     "rimworld-sources": (".games.rimworld.sources_cli",
                          "where each tied mod's public source lives, checked against its package ID"),
     "rimworld-textures": (".games.rimworld.textures_cli", "whether active mods' encoded textures match their pictures, and encoding those that don't"),

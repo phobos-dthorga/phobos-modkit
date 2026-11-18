@@ -4,6 +4,18 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-11-18
+
+The third tool the owner wanted that day (18 November 2026): a watch on the mods we tie into, so a change to a method we patch is found on purpose rather than by chance. Vehicle Framework's upgrade research check (VF-412) had been noticed by hand; this finds it, and twelve more like it, in 34 seconds.
+
+### Added
+
+- rimworld-upstream: every member our C# names on another author's type (the scan rimworld-targets checks), against two sources. updates compares the newest two versions rimworld-archive kept of each file updated in the last --days, member by member, through the code tool's compare, and lists those it changed, gave a new signature or removed. pending reads the source clones rimworld-sources made and lists commits since --days ago whose hunks change one of those members, a warning before the Workshop build carries them. Both name the line of ours that depends on the member.
+
+### Changed
+
+- The commit guard's guide says what it cannot pass: a commit that stages only part of a file, since the gate checked the whole file.
+
 ## [1.22.0] - 2026-11-18
 
 The owner's go-ahead for two of the tools proposed that day (18 November 2026): readers for a game that hangs, holds too much memory or crashes, and a guard that refuses a commit the gate has not passed. A gate piped through tail had once lost its exit code and let a broken commit in.
