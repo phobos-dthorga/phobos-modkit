@@ -18,6 +18,8 @@ COMMANDS = {
     "rimworld-readiness": (".games.rimworld.readiness_cli", "which active mods are ready for a game version, and which are likeliest to break"),
     "rimworld-archive": (".games.rimworld.archive_cli",
                          "keep every version of the game's assembly and of tied mods, and compare two of them"),
+    "rimworld-sources": (".games.rimworld.sources_cli",
+                         "where each tied mod's public source lives, checked against its package ID"),
     "rimworld-workshop": (".games.rimworld.workshop_cli", "what players report about RimWorld mods on the Workshop lately"),
     "steam-workshop": (".steam.workshop_cli", "what players report about Workshop items lately, by ID or URL"),
     "steam-publish": (".steam.publish.cli", "release notes, staging and the owner-run Workshop uploader"),

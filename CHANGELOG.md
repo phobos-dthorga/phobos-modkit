@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-11-18
+
+Asked for by the owner in phobos-rimworld (18 November 2026), beside its new rule to read a mod's public repository before decompiling it.
+
+### Added
+
+- rimworld-sources: where the public source of each mod a project ties into lives. Candidates come from the mod's About.xml, then its Workshop page, then a GitHub search by name, cheapest first; one counts only when an About.xml in the repository names the mod's package ID, so links to another mod (the Harmony mod's, most often) are ruled out by the check. With --write it keeps a register in the project (config/source-repos.json) that later runs reuse. On the owner's 54 tied mods: 19 confirmed, 22 with only unconfirmed candidates, 13 with none.
+- github: a keyless, paced client with a week's cache in the kit's cache folder, for repository facts, file lists, raw files and searches. It stops at GitHub's limit for clients that do not log in and says when to run again.
+
+### Changed
+
+- rimworld-archive: the tie-ins it watches come from one function the source finder shares.
+
 ## [1.15.0] - 2026-11-18
 
 Asked for by the owner in phobos-rimworld (18 November 2026): that day's game update could not be compared with the build before it, because Steam had replaced the file and nothing had kept it.

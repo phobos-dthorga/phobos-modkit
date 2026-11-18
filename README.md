@@ -15,6 +15,8 @@ questions in a short summary instead of a long read. One shared home for code th
   [startup sessions](docs/rimworld-startup.md), [the readiness scan](docs/rimworld-readiness.md) and [the target check](docs/rimworld-targets.md).
 - **rimworld-archive (1.15.0) keeps every version of the game's assembly and of the mods a project ties into**, outside the
   cache, so two builds can be compared after Steam has replaced the older one. See [rimworld-archive](docs/rimworld-archive.md).
+- **rimworld-sources (1.16.0) finds where each tied mod's public source lives**, checking each repository's About.xml against
+  the mod's package ID, keyless and paced. See [rimworld-sources](docs/rimworld-sources.md).
 - **rimworld-perf (1.13.0) records a running RimWorld 1.7 from outside** with Microsoft's dotnet-trace and dotnet-counters, which
   its first recording installs (needs the .NET SDK); save the game first, as attaching can hitch it for a moment. See
   [rimworld-perf](docs/rimworld-perf.md).
@@ -61,6 +63,7 @@ python -m phobos_modkit rimworld-readiness               which active mods are r
 python -m phobos_modkit code --each-in DIR show Type.Member   a C# member's source by name; also find, outline, refs
 python -m phobos_modkit code compare OLD.dll NEW.dll   what changed between two builds, member by member
 python -m phobos_modkit rimworld-archive snapshot --root ..   keep every new version of the game and tied mods; also list, compare, get
+python -m phobos_modkit rimworld-sources --root .. --write   where each tied mod's public source lives, checked
 python -m phobos_modkit crash-dump               why a program crashed, from its Windows crash dump
 python -m phobos_modkit cleanup --root REPO      what the tools, builds and tests left behind; --apply deletes it
 python -m phobos_modkit test-pass report --root REPO   in-game tests waiting for the owner; apply writes verdicts in

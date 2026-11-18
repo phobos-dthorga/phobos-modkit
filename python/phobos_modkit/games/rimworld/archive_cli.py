@@ -120,14 +120,23 @@ def sources(root, game, workshop, mods_config, extra_mods=(), game_files=()):
         path = Path(game) / name
         if path.is_file():
             found.append(Source(GAME_OWNER, "RimWorld", game_version, path))
-    _, watched = tied_mods(root)
-    watched |= {loading.bare_id(m) for m in extra_mods}
-    version, _, ids = loading.read_mods_config(mods_config)
-    active = loading.resolve_active(ModIndex.scan(default_roots(game, workshop)).mods, ids)
+    tied, watched, active, version = tied_active(root, game, workshop, mods_config, extra_mods)
     for entry, dll in mod_assemblies(active, version):
         if loading.bare_id(entry.mod.package_id) in watched:
             found.append(Source(entry.mod.package_id, entry.mod.name, _mod_version(entry.mod.folder), dll))
     return found, watched
+
+
+def tied_active(root, game, workshop, mods_config, extra_mods=()):
+    """(installed active mods the project ties into, in load order; every package ID it ties into; all active mods; the
+    game version). extra_mods are added to the tie-ins."""
+    _, watched = tied_mods(root)
+    watched |= {loading.bare_id(m) for m in extra_mods}
+    version, _, ids = loading.read_mods_config(mods_config)
+    active = loading.resolve_active(ModIndex.scan(default_roots(game, workshop)).mods, ids)
+    tied = [entry.mod for entry in active
+            if entry.mod is not None and entry.mod.source != "Ludeon" and loading.bare_id(entry.mod.package_id) in watched]
+    return tied, watched, active, version
 
 
 # ---- Reports ----
