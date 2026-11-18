@@ -6,12 +6,15 @@ using Phobos.ModKit.Assemblies;
 // PhobosModKit.Assemblies patches FILE...             one JSON object per assembly, on its own line, in the order given.
 // PhobosModKit.Assemblies members @TYPES FILE...      one JSON object per type named in TYPES (one name per line; a full
 //                                                     name or a dotted suffix of one) found in any FILE, and per base type.
+// PhobosModKit.Assemblies calls FILE...               one JSON object per assembly: its types (kind, base, interfaces) and
+//                                                     each method with what it calls and which fields it uses (CallReader).
 // FILE may be @LISTFILE, one path per line. Reads metadata only: an assembly is opened as a file and never loaded or run.
 // A file that is not a readable .NET assembly gives an object with an error instead of stopping the run.
-if (args.Length < 1 || (args[0] != "patches" && args[0] != "members"))
+if (args.Length < 1 || (args[0] != "patches" && args[0] != "members" && args[0] != "calls"))
 {
     Console.Error.WriteLine("usage: PhobosModKit.Assemblies patches FILE...   (or patches @LISTFILE, one path per line)");
     Console.Error.WriteLine("       PhobosModKit.Assemblies members @TYPESFILE FILE...");
+    Console.Error.WriteLine("       PhobosModKit.Assemblies calls FILE...");
     return 2;
 }
 var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
@@ -42,6 +45,12 @@ foreach (string file in Files(args.Skip(1)))
         if (!pe.HasMetadata)
         {
             result = new { path = file, error = "no .NET metadata (a native DLL)" };
+        }
+        else if (args[0] == "calls")
+        {
+            var callReader = new CallReader(pe);
+            var (types, methods) = callReader.Read();
+            result = new { path = file, assembly = callReader.AssemblyName, types, methods };
         }
         else
         {

@@ -21,14 +21,14 @@ import tempfile
 
 from ... import __version__
 from ... import cache as derived
-from ... import native
+from ... import assemblies, native
 from . import loading
 from .mods import SHARED_ASSEMBLIES
 
 CACHE_FOLDER = "rimworld-patches"
 INDEX_NAME = "patches.sqlite"
-READER_PROJECT = native.KIT_ROOT / "dotnet" / "PhobosModKit.Assemblies" / "PhobosModKit.Assemblies.csproj"
-READER_NAME = "PhobosModKit.Assemblies"
+READER_PROJECT = assemblies.READER_PROJECT
+READER_NAME = assemblies.READER_NAME
 INDEX_FORMAT = "1"
 
 
@@ -37,34 +37,27 @@ class PatchesError(RuntimeError):
 
 
 def reader_folder(environ=None):
-    return native.build_dir(environ) / "dotnet" / "tool" / "assemblies"
+    return assemblies.reader_folder(environ)
 
 
 def reader_path(environ=None):
-    return reader_folder(environ) / native.program_name(READER_NAME)
+    return assemblies.reader_path(environ)
 
 
 def build_reader(environ=None, run=subprocess.run):
-    """Build the C# reader into the kit's build folder. Raises PatchesError without the .NET SDK or on failure."""
-    if run is subprocess.run and shutil.which("dotnet") is None:
-        raise PatchesError("The .NET SDK is not installed; install .NET 10 from https://dotnet.microsoft.com to read assemblies.")
-    command = ["dotnet", "build", str(READER_PROJECT), "-c", "Release", "-o", str(reader_folder(environ)), "--nologo",
-               "-v", "q"]
-    result = run(command, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        raise PatchesError(f"Building the assembly reader failed:\n{(result.stdout or '')[-2000:]}")
+    """Build the C# reader (the kit's shared assemblies module). Raises PatchesError without the .NET SDK or on failure."""
+    try:
+        assemblies.build_reader(environ, run)
+    except assemblies.ReaderError as error:
+        raise PatchesError(str(error)) from None
 
 
 def ensure_reader(environ=None, run=subprocess.run):
     """The reader's path, built first when it is missing or was built by another version of the kit."""
-    tool = reader_path(environ)
-    stamp = reader_folder(environ) / "kit-version.txt"
-    current = stamp.read_text(encoding="utf-8").strip() if stamp.is_file() else ""
-    if not tool.is_file() or current != __version__:
-        build_reader(environ, run)
-        stamp.parent.mkdir(parents=True, exist_ok=True)
-        stamp.write_text(__version__, encoding="utf-8")
-    return tool
+    try:
+        return assemblies.ensure_reader(environ, run)
+    except assemblies.ReaderError as error:
+        raise PatchesError(str(error)) from None
 
 
 def mod_assemblies(active, version):

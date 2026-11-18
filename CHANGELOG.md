@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-11-19
+
+The owner asked for it (19 November 2026): "flow-charts and the such which show relationships between functions, classes, etc. of the code I'm viewing", with exact C# from built code, for C#, XML Defs, Lua and Python, in D'thorga Companion's code viewer and a page of its own.
+
+### Added
+
+- connections: how a repository's code fits together, as one graph for every language: summary, find, around (everything one connection away, grouped: calls and called by, holds and belongs to, builds on, overrides, patches, uses, imports), flow (the calls a few steps each way) and changed (the things a commit's lines changed, read from each file as it stood). Every connection says whether it is exact. Kept in the kit's cache and read again when a file it came from changes: about 7 s the first time for phobos-rimworld or phobos-ostranauts, under a second after.
+- The assembly reader reads which methods call which (calls): exact from an assembly's metadata and method bodies, across the game and other mods, with the calls a method's lambdas, local functions, iterators and async parts make counted as its own. C# connections come from it, placed in the source by the code scanner; where nothing is built, from the source by name.
+- XML Defs (parents exact; Defs and C# classes used), Lua (by name: functions, calls, require) and Python (Python's own parser; calls by name).
+
+### Changed
+
+- The assembly reader's build and run helpers moved from the RimWorld adapter to a module of their own (assemblies), so a tool that is not RimWorld's can use them; rimworld-patches and rimworld-targets use them as before.
 ## [1.32.0] - 2026-11-19
 
 For D'thorga Companion's shared-code audit (19 November 2026, docs/shared-code-audit.md there, X1): its Home page read changelogs with a parser of its own beside this kit's.

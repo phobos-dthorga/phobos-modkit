@@ -64,3 +64,7 @@ and comment-render endpoint (7 November 2026), with made-up items, people and co
 is by the item's uploader (account 101, the creator's SteamID64 less 76561197960265728). The first two items carry
 made-up BBCode descriptions. `steam/collection.json` follows GetCollectionDetails (9 November 2026): one collection
 of the three items, listed out of order with sortorder values, and one collection Steam does not return (result 9).
+
+`dotnet/ConnectionsFixture/` is C# source the connections tool's tests build and read: a base class with a virtual method and
+its override, a property, a lambda and an iterator (whose calls count as their method's), a field, and calls into .NET's own
+library (left out of the connections).

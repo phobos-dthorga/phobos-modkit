@@ -31,6 +31,7 @@ COMMANDS = {
     "code": (".code.cli", "find, outline and show C# declarations, and every line using a name"),
     "cleanup": (".cleanup_cli", "what the tools, builds and tests left behind; deletes only with --apply"),
     "changes": (".changes_cli", "what the changelogs say changed lately, and the code behind any one entry"),
+    "connections": (".connections_cli", "how a repository's code fits together: calls, holds, builds on, overrides, patches, uses"),
     "history": (".history_cli", "what happened to a game's products over time, and any changelog as it stood at any moment"),
     "installs": (".installs_cli", "what each installed mod would gain or lose by updating or going back to a backup; backs up, goes back, installs"),
     "rules": (".rules_cli", "the rules every repository shares, and whether a repository reads them"),
