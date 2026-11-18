@@ -1,7 +1,7 @@
 # Installs: what updating or going back would change, and the moves themselves
 
-**Status (18 Nov 2026):** built in 1.20.0. D'thorga Companion's Mods page is its first consumer; deploy.py in phobos-rimworld still
-does the copying of an install.
+**Status (18 Nov 2026):** built in 1.20.0; files, builds, settings changes, test rows, build and installing several mods at once in
+1.21.0. D'thorga Companion's Mods page is its first consumer; deploy.py in phobos-rimworld still does the copying of an install.
 
 ## Read this first (gotchas)
 
@@ -20,7 +20,8 @@ python -m phobos_modkit installs status --root REPO              every mod
 python -m phobos_modkit installs status --root REPO --mod NAME   one mod
 python -m phobos_modkit installs backup --root REPO --mod NAME
 python -m phobos_modkit installs restore --root REPO --mod NAME --backup NAME-20261118-200751
-python -m phobos_modkit installs install --root REPO --mod NAME
+python -m phobos_modkit installs install --root REPO --mod NAME [--mod OTHER ...]
+python -m phobos_modkit installs build --root REPO
 ```
 
 Add `--json` for the envelope. A refusal is still an envelope, with `data.ok` false and `data.refusal` saying why, and exit 1.
@@ -40,7 +41,10 @@ Add `--json` for the envelope. A refusal is still an envelope, with `data.ok` fa
 | `backups` | Where backups go, one folder each named `<Mod>-YYYYMMDD-HHMMSS` |
 | `settings` | Optional: a settings file the adapter reads the game's folder from |
 | `sharedSources` | Optional: folders shared by every mod, whose uncommitted changes count against each mod |
-| `install` | The repository's own install command; `{python}` is the running Python, `{mod}` the mod's folder name |
+| `install` | The repository's own install command; `{python}` is the running Python, `{mod}` the mod's folder name (an element that is exactly `{mod}` becomes every mod named) |
+| `installOnly` | Optional: file names only an install has (patterns), left out of the file comparison; the install record always is |
+| `build` | Optional: `projects` (a glob of C# projects), `modProperty` (the project property naming the mod it builds into), `shared` (root build files every project reads) and `command` (the repository's build command) |
+| `settingsChanges` | Optional: a command printing, as JSON, the settings added, removed or given a new default since `{commit}`: `mod`, `key`, `label`, `what`, `before`, `after` |
 
 ## How gains and losses are read
 
@@ -51,6 +55,18 @@ Add `--json` for the envelope. A refusal is still an envelope, with `data.ok` fa
 - An entry lost and one gained with the same version, section and bold opening are paired as **reworded**: the same change,
   described again.
 - Entries under **Save compatibility** are also listed apart (`saveNotes`), so a program can put them first.
+
+## What else status compares (1.21.0)
+
+| Field | What it says |
+| --- | --- |
+| `files` | Files installing would add, change or remove, counted by kind (code, Defs, patches, textures, text, sounds, About, other), with up to 60 paths. Equal size and date is equal; otherwise bytes are compared |
+| `build` | Per C# project of the mod: whether its sources are newer than the assembly it built. It counts the project's folder, its `Compile Include` files from elsewhere and the `shared` files, never referenced projects, whose changes need not rebuild it |
+| `installedCommit` | The install record's commit (`exact`), or for older installs the commit that first gave the mod its installed version (approximate) |
+| `settings` | The settings changes since that commit for this mod, from `settingsChanges`; read once per commit, only for mods not already in step |
+| `lookOut` | Test-list rows still waiting whose named version of the mod lies after the installed version and no later than the repository's (test-pass's `versionNames`) |
+
+`build` runs the repository's build command; it writes only inside the repository, so it does not wait for the game to close.
 
 ## The install record
 

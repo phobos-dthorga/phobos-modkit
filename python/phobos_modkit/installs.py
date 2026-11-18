@@ -26,6 +26,7 @@ import shutil
 import subprocess
 import sys
 
+from . import install_checks as checks
 from .cleanup import remove, size_of
 
 CONFIG = Path("config") / "installs.json"
@@ -369,19 +370,68 @@ class ModState:
     backups: list = field(default_factory=list)
     uncommitted: list = field(default_factory=list)
     commits_since: int = None
+    files: dict = None               # install_checks.compare_files, installed against the repository's copy
+    builds: list = field(default_factory=list)   # install_checks.build_states for this mod's projects
+    commit: str = None               # the installed commit
+    commit_exact: bool = False       # from the install record, not worked out from the version
+    settings: list = None            # settings changes since the installed commit; None when unknown
+    settings_note: str = None
+    look_out: list = field(default_factory=list)
+
+    @property
+    def needs_build(self):
+        return any(b["needsBuild"] for b in self.builds)
 
 
-def survey(where, mods=None, measure=True):
+def installed_commit(where, installed):
+    """(commit, exact): the install record's commit, or the commit that first gave the mod its installed version."""
+    if installed is None:
+        return None, False
+    recorded = (installed.record or {}).get("commit")
+    if recorded:
+        return recorded, True
+    marker = getattr(where.game, "version_marker", None)
+    if not installed.version or marker is None:
+        return None, False
+    version_file = f"{where.config['mods']}/{installed.folder.name}/{where.game.VERSION_FILE}"
+    return checks.version_commit(where.root, version_file, marker(installed.version)), False
+
+
+def survey(where, mods=None, measure=True, run=subprocess.run):
     states = []
+    builds = checks.build_states(where.root, where.config)
+    install_only = [RECORD, *where.config.get("installOnly", [])]
     for mod in mods or mods_of(where.root, where.config):
         repository = read_copy("repository", where.source(mod), where.game)
         installed_folder = where.installed(mod)
         installed = read_copy("installed", installed_folder, where.game) if installed_folder.is_dir() else None
         backups = [read_copy("backup", where.backups / name, where.game, measure, name) for name in backups_of(where.backups, mod)]
         changed = uncommitted(where.root, [f"{where.config['mods']}/{mod}", *where.config.get("sharedSources", [])])
-        since = commits_since(where.root, (installed.record or {}).get("commit") if installed else None, f"{where.config['mods']}/{mod}")
-        states.append(ModState(mod, repository, installed, backups, changed, since))
+        commit, exact = installed_commit(where, installed)
+        since = commits_since(where.root, commit, f"{where.config['mods']}/{mod}")
+        state = ModState(mod, repository, installed, backups, changed, since, builds=builds.get(mod, []), commit=commit,
+                         commit_exact=exact)
+        if installed is not None:
+            state.files = checks.compare_files(installed.folder, repository.folder, install_only)
+            state.look_out = checks.look_out(where.root, repository.name, installed.version, repository.version)
+        states.append(state)
+    _add_settings(where, states, run)
     return states
+
+
+def _add_settings(where, states, run):
+    """Settings changes since each installed commit, read once per commit, for mods not already in step."""
+    by_commit = {}
+    for state in states:
+        in_step = state.files is not None and state.files["total"] == 0 and not state.needs_build and not state.uncommitted
+        if state.commit and not in_step:
+            by_commit.setdefault(state.commit, []).append(state)
+    for commit, group in by_commit.items():
+        found, note = checks.settings_changes(where.root, where.config, commit, run)
+        for state in group:
+            state.settings_note = note
+            if found is not None:
+                state.settings = [c for c in found if c.get("mod") == state.mod]
 
 
 def free_bytes(folder):
@@ -491,27 +541,55 @@ def restore(where, mod, name, now=None, running=game_running):
     return replaced
 
 
-def install_command(where, mod):
+def install_command(where, mods):
+    """The repository's install command for one or more mods: an element that is exactly {mod} becomes every mod named."""
     command = where.config.get("install")
     if not command:
         raise InstallsError("This repository's installs.json names no install command.")
-    return [sys.executable if part == "{python}" else part.replace("{mod}", mod) for part in command]
+    mods = [mods] if isinstance(mods, str) else list(mods)
+    expanded = []
+    for part in command:
+        if part == "{python}":
+            expanded.append(sys.executable)
+        elif part == "{mod}":
+            expanded.extend(mods)
+        else:
+            expanded.append(part.replace("{mod}", mods[0]))
+    return expanded
 
 
-def install(where, mod, run=subprocess.run, running=game_running):
-    """Runs the repository's own install command for one mod (which builds, backs up what it replaces, and copies).
-
-    Returns (exit code, the last lines of its output)."""
-    _known_mod(where, mod)
-    _refuse_while_running(where, running)
-    command = install_command(where, mod)
+def _run_command(where, command, what, run=None):
+    run = run or subprocess.run
     try:
         result = run(command, cwd=str(where.root), capture_output=True, text=True, check=False, timeout=INSTALL_TIMEOUT,
                      env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
     except subprocess.TimeoutExpired:
-        raise InstallsError(f"The install was still running after {INSTALL_TIMEOUT // 60} minutes and was stopped. Check the mod's "
-                            "installed folder and its backups before playing.") from None
+        raise InstallsError(f"The {what} was still running after {INSTALL_TIMEOUT // 60} minutes and was stopped. Check the mods' "
+                            "installed folders and their backups before playing.") from None
     except OSError as error:
-        raise InstallsError(f"The install could not start ({error}). Nothing was changed.") from None
+        raise InstallsError(f"The {what} could not start ({error}). Nothing was changed.") from None
     lines = ((result.stdout or "") + (result.stderr or "")).splitlines()
     return result.returncode, lines[-OUTPUT_LINES:]
+
+
+def install(where, mods, run=None, running=game_running):
+    """Runs the repository's own install command for one or more mods (it builds, backs up what it replaces, and copies).
+
+    Returns (exit code, the last lines of its output)."""
+    mods = [mods] if isinstance(mods, str) else list(mods)
+    if not mods:
+        raise InstallsError("Name at least one mod to install.")
+    for mod in mods:
+        _known_mod(where, mod)
+    _refuse_while_running(where, running)
+    return _run_command(where, install_command(where, mods), "install", run)
+
+
+def build(where, run=None):
+    """Runs the repository's own build command. It writes only inside the repository, so it may run while the game does.
+
+    Returns (exit code, the last lines of its output)."""
+    command = (where.config.get("build") or {}).get("command")
+    if not command:
+        raise InstallsError("This repository's installs.json names no build command.")
+    return _run_command(where, [sys.executable if part == "{python}" else part for part in command], "build", run)

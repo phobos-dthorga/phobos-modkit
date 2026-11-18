@@ -7,6 +7,7 @@ from pathlib import Path
 from .mods import _about_root, _text
 from .paths import game_path
 
+VERSION_FILE = "About/About.xml"
 # RimWorld.exe is 1.7 on Windows (seen in tasklist, 30 Oct 2026); RimWorldWin64.exe was 1.6. The others are the usual Unity names.
 PROCESSES = ("RimWorld.exe", "RimWorldWin64.exe", "RimWorldWin.exe", "RimWorldLinux", "RimWorldLinux.x86_64", "RimWorldMac")
 
@@ -22,3 +23,8 @@ def identity(folder):
     if root is None:
         return "", ""
     return _text(root, "name"), _text(root, "modVersion")
+
+
+def version_marker(version):
+    """How a version is written in About.xml, for finding the commit that set it."""
+    return f"<modVersion>{version}</modVersion>"

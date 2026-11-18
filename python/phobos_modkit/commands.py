@@ -20,6 +20,7 @@ COMMANDS = {
                          "keep every version of the game's assembly and of tied mods, and compare two of them"),
     "rimworld-sources": (".games.rimworld.sources_cli",
                          "where each tied mod's public source lives, checked against its package ID"),
+    "rimworld-textures": (".games.rimworld.textures_cli", "whether active mods' encoded textures match their pictures, and encoding those that don't"),
     "rimworld-workshop": (".games.rimworld.workshop_cli", "what players report about RimWorld mods on the Workshop lately"),
     "steam-workshop": (".steam.workshop_cli", "what players report about Workshop items lately, by ID or URL"),
     "steam-publish": (".steam.publish.cli", "release notes, staging and the owner-run Workshop uploader"),

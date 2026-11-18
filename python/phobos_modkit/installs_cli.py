@@ -6,7 +6,9 @@ would gain or lose by their changelogs; and the three ways to move.
     installs backup --root REPO --mod NAME          copy the installed mod into the backups folder (safe while the game runs)
     installs restore --root REPO --mod NAME --backup BACKUP
                                                     put a backup back; the install it replaces becomes a backup first
-    installs install --root REPO --mod NAME         run the repository's own install command (it builds, backs up, copies)
+    installs install --root REPO --mod NAME         run the repository's own install command (it builds, backs up, copies);
+                                                    --mod again for more mods, installed in one run
+    installs build --root REPO                      run the repository's own build command (writes only inside the repository)
 
 The repository's config/installs.json names its game, its mods folder, its backups folder and its install command
 (docs/installs.md). restore and install refuse while the game runs. Nothing here touches saves or a mod manager's lists.
@@ -14,6 +16,7 @@ The repository's config/installs.json names its game, its mods folder, its backu
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 import sys
@@ -33,11 +36,16 @@ def _parser():
     helps = {"status": "every mod's installed copy, repository copy and backups, and what moving between them gains or loses",
              "backup": "copy the installed mod into the backups folder",
              "restore": "put a backup back as the installed mod; the replaced install becomes a backup first",
-             "install": "run the repository's own install command for one mod"}
+             "install": "run the repository's own install command for one or more mods",
+             "build": "run the repository's own build command; it writes only inside the repository"}
     for name, helptext in helps.items():
         s = sub.add_parser(name, help=helptext)
         s.add_argument("--root", help="the repository (default: the current folder)")
-        s.add_argument("--mod", required=name != "status", help="the mod's folder name" + (" (default: every mod)" if name == "status" else ""))
+        if name == "install":
+            s.add_argument("--mod", action="append", required=True, help="a mod's folder name (repeatable)")
+        elif name != "build":
+            s.add_argument("--mod", required=name != "status",
+                           help="the mod's folder name" + (" (default: every mod)" if name == "status" else ""))
         if name == "restore":
             s.add_argument("--backup", required=True, help="the backup's folder name, as status lists it")
         s.add_argument("--settings", help="a JSON settings file naming the game's folder (default: the one installs.json names)")
@@ -85,6 +93,15 @@ def state_of(state, update):
     return "differs"
 
 
+def _build_data(state):
+    return {"needsBuild": state.needs_build,
+            "projects": [{**b, "built": _iso(b["built"]), "newest": _iso(b["newest"])} for b in state.builds]}
+
+
+def _iso(stamp):
+    return datetime.fromtimestamp(stamp, timezone.utc).isoformat(timespec="seconds") if stamp else None
+
+
 def mod_data(state):
     installed = state.installed
     update = installs.compare(installed.changelog, state.repository.changelog) if installed else installs.Delta()
@@ -98,7 +115,10 @@ def mod_data(state):
             "installed": _copy(installed) if installed else None,
             "update": _delta(update, installed.changelog if installed else None, state.repository.changelog),
             "uncommitted": state.uncommitted[:50], "uncommittedCount": len(state.uncommitted),
-            "commitsSince": state.commits_since, "backups": backups}
+            "commitsSince": state.commits_since, "backups": backups,
+            "installedCommit": {"commit": state.commit, "exact": state.commit_exact} if state.commit else None,
+            "files": state.files, "build": _build_data(state), "settings": state.settings, "settingsNote": state.settings_note,
+            "lookOut": state.look_out}
 
 
 # ---------------------------------------------------------------- words for people
@@ -114,20 +134,24 @@ def _size(size):
 def status_report(where, states, running, top):
     datas = [mod_data(s) for s in states]
     behind = sum(d["state"] in ("behind", "differs") for d in datas)
-    report = Report(f"Installs: {len(datas):,} mods, {behind:,} with changes in the repository not yet installed")
+    report = Report(f"Installs: {len(datas):,} mod{'' if len(datas) == 1 else 's'}, {behind:,} with changes in the repository "
+                    "not yet installed")
     report.lines.append("What you would gain or lose is read from the changelogs the two copies carry: an entry one has and the "
                         "other lacks. A changelog says what changed, not that it works in game.")
     if running:
         report.lines.append(f"**The game is running ({', '.join(running)}): going back and installing wait until it closes.**")
     report.section("Mods", Table(
-        ["Mod", "Installed", "Repository", "To gain", "To lose", "Backups", "State"],
+        ["Mod", "Installed", "Repository", "To gain", "To lose", "Files", "Build", "Backups", "State"],
         [[d["name"], (d["installed"] or {}).get("version") or "-", d["repository"]["version"] or "-", f"{len(d['update']['gain']):,}",
-          f"{len(d['update']['lose']):,}", f"{len(d['backups']):,}", _STATE_WORDS[d["state"]]] for d in datas]))
+          f"{len(d['update']['lose']):,}", f"{(d['files'] or {}).get('total', 0):,}", "needed" if d["build"]["needsBuild"] else "",
+          f"{len(d['backups']):,}", _STATE_WORDS[d["state"]]] for d in datas]))
     for d in datas:
         update = d["update"]
         if not (update["gain"] or update["lose"]):
             continue
         items = [f"**Saves:** {e['text']} ({e['version']})" for e in update["saveNotes"]]
+        items += [f"**Setting:** {c.get('label') or c.get('key')} {c.get('what')}" for c in d["settings"] or []]
+        items += [f"Look out for, in play: row {r['id']}, {r['title']}" for r in d["lookOut"]]
         items += [f"Gain ({e['version']}, {e['section'] or 'no section'}): {e['lead']}" for e in update["gain"][:top]]
         items += [f"Lose ({e['version']}, {e['section'] or 'no section'}): {e['lead']}" for e in update["lose"][:top]]
         report.section(f"{d['name']}: installing from the repository", Bullets(items))
@@ -138,6 +162,8 @@ def status_report(where, states, running, top):
         "Old backups are listed by the cleanup tool; it deletes only when the owner runs it with --apply."]))
     data = {"repository": where.root.name, "target": str(where.target), "backupsFolder": str(where.backups),
             "gameRunning": running, "installCommand": " ".join(where.config.get("install") or []),
+            "canBuild": bool((where.config.get("build") or {}).get("command")),
+            "needsBuild": any(d["build"]["needsBuild"] for d in datas),
             "space": {"backups": sum(b["size"] or 0 for d in datas for b in d["backups"]),
                       "backupsFree": installs.free_bytes(where.backups), "targetFree": installs.free_bytes(where.target),
                       "spare": installs.SPARE_BYTES},
@@ -182,12 +208,20 @@ def main(argv=None, environ=None, out=None, now=None, running=None, run=None):
             lines.append(f"The install it replaced was kept as the backup {replaced}." if replaced else "Nothing was installed before.")
             report, data = _done(f"Went back to {args.backup}", lines, {"ok": True, "mod": args.mod, "backup": args.backup,
                                                                          "replacedBy": replaced})
-        else:
-            exit_code, lines = installs.install(where, args.mod, **({"run": run} if run else {}), running=running)
+        elif args.report == "build":
+            exit_code, lines = installs.build(where, run)
             ok = exit_code == 0
             code = EXIT_OK if ok else EXIT_REFUSED
-            report, data = _done(f"Installed {args.mod} from the repository" if ok else f"The install of {args.mod} failed (exit {exit_code})",
-                                 ["Its last lines of output follow."], {"ok": ok, "mod": args.mod, "exitCode": exit_code, "output": lines})
+            report, data = _done("Built every project" if ok else f"The build failed (exit {exit_code})",
+                                 ["Its last lines of output follow."], {"ok": ok, "exitCode": exit_code, "output": lines})
+            report.blocks.append(Bullets(lines or ["(no output)"]))
+        else:
+            exit_code, lines = installs.install(where, args.mod, run, running=running)
+            ok = exit_code == 0
+            code = EXIT_OK if ok else EXIT_REFUSED
+            names = ", ".join(args.mod)
+            report, data = _done(f"Installed {names} from the repository" if ok else f"The install of {names} failed (exit {exit_code})",
+                                 ["Its last lines of output follow."], {"ok": ok, "mods": args.mod, "exitCode": exit_code, "output": lines})
             report.blocks.append(Bullets(lines or ["(no output)"]))
     except installs.InstallsError as error:
         if not args.json:
@@ -204,4 +238,5 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS,
                         "backup": {"effect": WRITES, "note": "copies an installed mod into the repository's backups folder"},
                         "restore": {"effect": WRITES,
                                     "note": "replaces an installed mod with a backup; the replaced install is kept as a backup"},
-                        "install": {"effect": RUNS, "note": "runs the repository's own install command, which builds and copies"}}}
+                        "install": {"effect": RUNS, "note": "runs the repository's own install command, which builds and copies"},
+                        "build": {"effect": RUNS, "note": "runs the repository's own build command, which writes only inside it"}}}

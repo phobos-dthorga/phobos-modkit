@@ -4,6 +4,27 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-11-18
+
+The owner's four asks for D'thorga Companion's Mods page (18 November 2026): compile as needed, refresh after, see before and after ahead of a compile, and know whether textures need encoding before the next launch, Workshop mods included. Their picks: check and fix textures, a build button plus installing everything that changed, all four before-and-after extras, and a "before you play" strip.
+
+### Added
+
+- rimworld-textures status: every active mod's encoded textures against its pictures. Stale (the game would show the old picture, since it loads a .dds instead of the .png beside it without comparing dates), never encoded, and left over. About 3 seconds for 342 mods.
+- rimworld-textures encode: RimSort's own todds preset on the named mods, Workshop ones included (owner's choice), refused while the game runs; each mod is checked again afterwards. The preset moved here from phobos-rimworld's deploy.py, so both use one copy.
+- installs status, for each mod: the files installing would add, change or remove, by kind; whether its C# projects need a build; the installed commit (the record's, or the one that first set its version); its settings changes since then, from the repository's own command; and the test rows the install would bring.
+- installs build runs the repository's build command, which writes only inside the repository, so it does not wait for the game to close. installs install takes --mod more than once, for one run and one restart.
+- installs.json keys: installOnly, build (projects, modProperty, shared, command) and settingsChanges.
+
+### Changed
+
+- The kit's rules allow one more writer, for textures only: encode writes .dds files into the mod folders it is named, never deletes, and never runs while the game does.
+- The status summary says "1 mod", not "1 mods".
+
+### Compatibility
+
+- installs install's JSON names its mods under mods (a list) instead of mod.
+
 ## [1.20.0] - 2026-11-18
 
 Asked for by the owner for D'thorga Companion (18 November 2026): a part of it for updating, going back and backups, starting with a live view of what each change to the changelogs would give them or take away. This is the install helper the kit's rules have named since 1.0.0, and the first step of moving deploy.py's install pattern here (docs/migration.md).

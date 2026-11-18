@@ -29,8 +29,9 @@ questions in a short summary instead of a long read. One shared home for code th
   Framework for RimWorld, PhobosLib for Project Zomboid and FS25, Phobos Framework for Ostranauts) stay in
   their own repositories.
 - **Read-only towards the game.** Tools never write to a game's install, save or Workshop folders. Save
-  tools work on a copy. The one exception is the install helper, which copies a mod into a game's mod
-  folder only when asked, refuses while the game runs, and backs up first.
+  tools work on a copy. Two exceptions, each only when asked and never while the game runs: the install
+  helper, which copies a mod into a game's mod folder and backs up first; and `rimworld-textures encode`, which
+  writes encoded textures (`.dds`) into the mod folders it is named, Workshop ones included, as RimSort does.
 - **Only the owner uploads to Steam.** Workshop research and `steam-publish pull` read Steam's public, keyless
   pages and APIs, slowly. The one tool that uploads, `steam-publish upload` (and `update`), is run by the owner in
   their own console: SteamCMD asks for the login in its own prompt, so the tool never sees a password, and new items
@@ -67,7 +68,8 @@ python -m phobos_modkit rimworld-sources --root .. --write   where each tied mod
 python -m phobos_modkit crash-dump               why a program crashed, from its Windows crash dump
 python -m phobos_modkit cleanup --root REPO      what the tools, builds and tests left behind; --apply deletes it
 python -m phobos_modkit test-pass report --root REPO   in-game tests waiting for the owner; apply writes verdicts in
-python -m phobos_modkit installs status --root REPO    what updating or going back gains or loses; also backup, restore, install
+python -m phobos_modkit installs status --root REPO    what updating or going back gains or loses; also backup, restore, install, build
+python -m phobos_modkit rimworld-textures status       whether any active mod would show an old picture; encode fixes it
 python -m phobos_modkit art-audit report --root REPO   images drawn in code, without a record, or borrowed
 python -m phobos_modkit gate --root ..         this repository's checks before a commit; only what failed
 python -m phobos_modkit manifest               every command, its options and what it reads or changes
@@ -94,6 +96,7 @@ in order of expected saving.
 | 10 | [The gate](docs/gate.md) | Every build, test and check before a commit, from the repository's own list; only what failed, with the errors and failed tests | Python | Built: 0.11.0 |
 | 13 | [Cleanup](docs/cleanup.md) | What the tools, builds and tests left behind, how big it is and why it may go; deleted only on request | Python | Built: 1.8.0 |
 | 14 | [Test pass](docs/test-pass.md) | A repository's in-game test list, what the game has seen working and the owner's verdicts; writes verdicts into the list on request | Python | Built: 1.9.0; part passes and verdicts given in conversation 1.14.0 |
+| 18 | [Textures](docs/rimworld-textures.md) (RimWorld) | Whether every active mod's encoded textures match its pictures (a stale one shows the old picture), and encoding those that don't with RimSort's own todds preset, on request | Python, with RimSort's todds | Built: 1.21.0 |
 | 17 | [Installs](docs/installs.md) | Each mod's installed copy, the repository's and every backup, and what moving between them gains or loses by their changelogs; backs up, goes back to a backup, or runs the repository's install, on request | Python | Built: 1.20.0 |
 | 15 | [Art audit](docs/art-audit.md) | Every shipped image with its record and how it was made; images drawn in code or without a record; pictures a Def borrows from another thing or another mod | Python | Built: 1.12.0 |
 | 16 | [Performance in play](docs/rimworld-perf.md) (RimWorld 1.7) | Where the running game spends its time: by part of the game loop, by the mod that caused it, by method, with garbage collection; and whether a change made it faster | Python, with Microsoft's dotnet-trace and dotnet-counters | Built: 1.13.0 |
@@ -125,6 +128,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/code.md](docs/code.md) | The code index: find, outline, show and refs over C# trees, what the scanner reads, and compare for two builds |
 | [docs/rimworld-settings.md](docs/rimworld-settings.md) | The player's mod settings: matching files to mods, defaults, snapshots |
 | [docs/rimworld-startup.md](docs/rimworld-startup.md) | Start-up times from Loading Progress's sessions: launches, costliest mods, comparisons |
+| [docs/rimworld-textures.md](docs/rimworld-textures.md) | Textures: the game's rule for a .dds beside a .png, what counts as stale, the Workshop dates checked, and encoding |
 | [docs/rimworld-perf.md](docs/rimworld-perf.md) | Recording a running RimWorld from outside: what is recorded, how time is put down to mods, and the limits |
 | [docs/rimworld-readiness.md](docs/rimworld-readiness.md) | Which active mods declare a game version, and how closely each depends on the game |
 | [docs/manifest.md](docs/manifest.md) | The JSON envelope every command prints, and the manifest of commands, options and effects |

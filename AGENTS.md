@@ -36,8 +36,11 @@ adapted to a tooling repository. The repository was created on 7 November 2026 a
 
 - **Read-only towards games.** Never write to an install, save or Workshop folder. Save tools copy the save to
   a temporary folder first. The install helper is the one writer: only on request, never while the game
-  runs, and it backs up what it replaces. Release and publishing tools write only inside the repository they
-  are run on, and only when asked (`--write`, `--apply`, an upload's records).
+  runs, and it backs up what it replaces. **One more writer, for textures only** (owner, 18 November 2026, for
+  D'thorga Companion): `rimworld-textures encode` writes `.dds` files beside the pictures of the active mods it is
+  named, Workshop ones included, with RimSort's own todds preset, only on request and never while the game runs; it
+  never deletes a file. Release and publishing tools write only inside the repository they are run on, and only
+  when asked (`--write`, `--apply`, an upload's records).
 - **Never execute other authors' code.** Assemblies are read through their metadata
   (`System.Reflection.Metadata`), never loaded. Never run another mod's scripts.
 - **Steam, read-only and slow, with one owner-run exception.** Tools read public, keyless pages and APIs only,
