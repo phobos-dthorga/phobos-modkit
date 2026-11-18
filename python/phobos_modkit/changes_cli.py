@@ -1,0 +1,162 @@
+"""changes: what a repository's changelogs say changed lately, and the code behind any one entry.
+
+    changes list --root REPO                         every changelog, its newest versions and their entries
+    changes list --root REPO --versions 10           more versions of each
+    changes entry --root REPO --changelog mods/Thing/CHANGELOG.md --text "A slung vehicle could be set down"
+                                                     the commit that wrote that entry, and what it changed, file by file
+
+The code behind an entry is the commit that first wrote it into its changelog, found by git; an entry no commit holds yet shows the
+uncommitted changes. One commit may have written several entries: the answer names the others, and cannot say which lines are whose
+(docs/changes.md). It works on any repository with a changelog and only reads.
+"""
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timezone
+import os
+from pathlib import Path
+import sys
+
+from . import changes
+from .installs import UNRELEASED
+from .manifest import READS
+from .progress import Progress
+from .report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
+
+EXIT_OK, EXIT_REFUSED, EXIT_USAGE = 0, 1, 2
+MAX_TEXT = 4000
+
+
+def _parser():
+    p = argparse.ArgumentParser(prog="changes", description=__doc__.split("\n\n")[0],
+                                formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__.split("\n\n", 1)[1])
+    sub = p.add_subparsers(dest="report", required=True)
+    for name, helptext in (("list", "every changelog in the repository, its newest versions and their entries"),
+                           ("entry", "the commit that wrote one changelog entry, and what it changed")):
+        s = sub.add_parser(name, help=helptext)
+        s.add_argument("--root", help="the repository (default: the current folder)")
+        if name == "list":
+            s.add_argument("--versions", type=int, default=5, help="versions of each changelog to list, newest first (default 5)")
+        else:
+            s.add_argument("--changelog", required=True, help="the changelog's path in the repository, as list gives it")
+            s.add_argument("--text", required=True, help="the entry's text, or its bold opening")
+        s.add_argument("--top", type=int, default=40, help="rows per table (default 40)")
+        s.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
+        s.add_argument("--no-redact", action="store_true", help="show the home folder instead of ~")
+    return p
+
+
+def _entry(entry):
+    return {"version": entry.version, "section": entry.section, "text": entry.text, "lead": entry.lead,
+            "aboutSaves": entry.about_saves}
+
+
+def list_report(root, versions, top, progress):
+    found = changes.changelogs(root)
+    logs = []
+    for position, path in enumerate(found, 1):
+        progress(f"Reading {path}", position, len(found))
+        log = changes.read(root, path)
+        order = [v for v in log.headings if v == UNRELEASED and any(e.version == v for e in log.entries)]
+        order += [v for v in log.headings if v != UNRELEASED][:max(1, versions)]
+        logs.append({"changelog": path, "product": _product(log.title, path, root),
+                     "versionsInAll": sum(v != UNRELEASED for v in log.headings),
+                     "versions": [{"version": v, "heading": log.headings.get(v, ""), "summary": log.summaries.get(v, ""),
+                                   "entries": [_entry(e) for e in log.entries if e.version == v]} for v in order]})
+    report = Report(f"Changes: {len(logs):,} changelog{'' if len(logs) == 1 else 's'}")
+    report.lines.append("Each entry's code is the commit that wrote it: changes entry --changelog PATH --text \"its opening\".")
+    report.section("Changelogs", Table(
+        ["Product", "Changelog", "Newest version", "Its entries", "Versions"],
+        [[log["product"], log["changelog"], _newest(log), f"{_newest_count(log):,}", f"{log['versionsInAll']:,}"] for log in logs[:top]],
+        total=len(logs)))
+    return report, {"repository": Path(root).name, "changelogs": logs}
+
+
+def _product(title, path, root):
+    """"D'thorga Framework changelog" names D'thorga Framework and "Changelog (PhobosLib)" PhobosLib; a bare "Changelog" is named
+    by its folder, or by the repository."""
+    name = title.strip()
+    if name.lower().endswith("changelog"):
+        name = name[:-len("changelog")].strip()
+    elif name.lower().startswith("changelog"):
+        name = name[len("changelog"):].strip(" ()-:")
+    return name or Path(path).parent.name or Path(root).name
+
+
+def _newest(log):
+    named = [v for v in log["versions"] if v["version"] != UNRELEASED]
+    return named[0]["version"] if named else UNRELEASED
+
+
+def _newest_count(log):
+    named = [v for v in log["versions"] if v["version"] != UNRELEASED]
+    return len(named[0]["entries"]) if named else sum(len(v["entries"]) for v in log["versions"])
+
+
+def _when(seconds):
+    return datetime.fromtimestamp(seconds, timezone.utc).isoformat(timespec="seconds") if seconds else None
+
+
+def entry_report(root, changelog, text, top, progress):
+    progress("Finding the commit that wrote this entry", 1, 2)
+    found = changes.entry_code(root, changelog, text)
+    progress("Reading what it changed", 2, 2)
+    commit = found.commit
+    files = [{"path": f.path, "oldPath": f.old_path if f.change == "renamed" else None, "change": f.change, "kind": f.kind,
+              "language": f.language, "binary": f.binary, "additions": f.additions, "deletions": f.deletions, "hunks": f.hunks,
+              "truncated": f.truncated} for f in found.files]
+    if commit:
+        title = f"Changes: this entry was written by {commit.hash[:8]}, which changed {len(files):,} other files"
+    else:
+        title = f"Changes: this entry is in no commit yet; {len(files):,} files have uncommitted changes"
+    report = Report(title)
+    if commit:
+        report.lines.append(f"{commit.subject} ({_when(commit.time)}).")
+    else:
+        report.lines.append("Files git does not track yet are not shown.")
+    if found.written_with:
+        report.lines.append(f"**The same commit wrote {len(found.written_with):,} other entries; which lines are whose is not known.**")
+        report.section("Written with it", Bullets([w[:120] for w in found.written_with[:top]]))
+    report.section("Files", Table(["File", "Kind", "Change", "Added", "Removed"],
+                                  [[f["path"], f["kind"], f["change"], f"{f['additions']:,}", f"{f['deletions']:,}"] for f in files[:top]],
+                                  total=len(files)))
+    data = {"repository": Path(root).name, "changelog": changelog,
+            "commit": {"hash": commit.hash, "time": _when(commit.time), "author": commit.author, "subject": commit.subject}
+            if commit else None,
+            "writtenWith": found.written_with, "files": files, "filesLeftOut": found.files_left_out,
+            "additions": sum(f["additions"] for f in files), "deletions": sum(f["deletions"] for f in files)}
+    return report, data
+
+
+def main(argv=None, environ=None, out=None):
+    out = out or sys.stdout
+    environ = os.environ if environ is None else environ
+    try:
+        args = _parser().parse_args(list(sys.argv[1:] if argv is None else argv))
+    except SystemExit as stop:
+        return EXIT_USAGE if stop.code else EXIT_OK
+    redact = keep if args.no_redact else home_redactor()
+    progress = Progress(environ)
+    root = Path(args.root or ".").resolve()
+    code = EXIT_OK
+    try:
+        if args.report == "list":
+            report, data = list_report(root, args.versions, args.top, progress)
+        else:
+            if len(args.text) > MAX_TEXT:
+                raise changes.ChangesError("That entry's text is too long to look for.")
+            report, data = entry_report(root, args.changelog.replace("\\", "/"), args.text, args.top, progress)
+    except (changes.ChangesError, OSError) as error:
+        if not args.json:
+            print(redact(str(error)), file=sys.stderr)
+            return EXIT_REFUSED
+        report, data = Report("Refused"), {"ok": False, "refusal": str(error)}
+        report.lines.append(str(error))
+        code = EXIT_REFUSED
+    out.write((envelope_text("changes", report, redact, data) if args.json else render_markdown(report, redact)) + "\n")
+    return code
+
+
+MANIFEST = {"game": None, "parser": _parser, "effect": READS,
+            "reports": {"list": {"question": "What do the changelogs say changed lately?", "surface": "changes"},
+                        "entry": {"note": "the commit that wrote one entry, and its diff; needs the changelog and the entry"}}}

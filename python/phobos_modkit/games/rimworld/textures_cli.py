@@ -19,6 +19,7 @@ import sys
 
 from ...installs import game_running
 from ...manifest import READS, WRITES
+from ...progress import Progress
 from ...report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
 from . import loading, textures
 from .installs import PROCESSES
@@ -28,6 +29,7 @@ from .paths import config_path, game_path, workshop_path
 EXIT_OK, EXIT_REFUSED, EXIT_USAGE = 0, 1, 2
 OWN_SOURCES = ("Local", "Workshop")
 CHECK_THREADS = 8
+PROGRESS_EVERY = 10        # mods between progress lines while checking
 
 
 def _parser():
@@ -67,9 +69,13 @@ def _mod_data(mod, fresh):
             "missingPaths": fresh.missing[:textures.SAMPLE_PATHS], "leftOverPaths": fresh.left_over[:textures.SAMPLE_PATHS]}
 
 
-def status(mods, running, todds, everything=False, top=40, now=None):
+def status(mods, running, todds, everything=False, top=40, now=None, progress=None):
+    rows = []
     with ThreadPoolExecutor(max_workers=CHECK_THREADS) as pool:     # the disk does the waiting, so folders are read side by side
-        rows = list(pool.map(lambda mod: _mod_data(mod, textures.check_folder(mod.folder)), mods))
+        for row in pool.map(lambda mod: _mod_data(mod, textures.check_folder(mod.folder)), mods):
+            rows.append(row)
+            if progress and (len(rows) % PROGRESS_EVERY == 0 or len(rows) == len(mods)):
+                progress("Checking each active mod's textures against its pictures", len(rows), len(mods))
     stale = [r for r in rows if r["stale"]]
     missing = [r for r in rows if r["missing"] and not r["stale"]]
     title = ("Textures: in step" if not stale and not missing else
@@ -131,12 +137,14 @@ def main(argv=None, environ=None, out=None, running=None, run=None, mods=None, n
         return EXIT_USAGE if stop.code else EXIT_OK
     redact = keep if args.no_redact else home_redactor()
     running = (running or game_running)(PROCESSES)
+    progress = Progress(environ)
     todds = textures.todds_path(args.todds, environ, args.settings)
     code = EXIT_OK
     try:
+        progress("Finding the active mods")
         found = mods if mods is not None else active_mods(args.settings, environ, args.game)
         if args.report == "status":
-            report, data = status(found, running, todds, args.all, args.top, now)
+            report, data = status(found, running, todds, args.all, args.top, now, progress)
         else:
             picked = _pick(found, args.mod)
             if running:
@@ -144,7 +152,8 @@ def main(argv=None, environ=None, out=None, running=None, run=None, mods=None, n
             if todds is None:
                 raise ValueError("RimSort's todds was not found. Pass --todds, set RIMSORT_TODDS, or install RimSort. Nothing was changed")
             results = []
-            for mod in picked:
+            for position, mod in enumerate(picked, 1):
+                progress(f"Encoding the textures of {mod.name}", position, len(picked))
                 exit_code, line = textures.encode(mod.folder, todds, **({"run": run} if run else {}))
                 after = textures.check_folder(mod.folder)
                 results.append({"name": mod.name, "packageId": mod.package_id, "exitCode": exit_code, "line": line,

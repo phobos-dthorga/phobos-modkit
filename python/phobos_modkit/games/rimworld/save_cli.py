@@ -35,6 +35,7 @@ import sys
 
 from ... import cache as derived
 from ...native import ToolMissing, build_tools
+from ...progress import Progress
 from ...report import envelope_text, home_redactor, keep, render_markdown
 from . import def_lookup
 from . import defs as def_index
@@ -351,6 +352,7 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     args = _parser().parse_args(argv)
     settings_file = args.settings or settings_file
     redact = keep if args.no_redact else home_redactor()
+    progress = Progress(environ)
 
     try:
         if args.build_indexer:
@@ -362,9 +364,11 @@ def main(argv=None, settings_file=None, environ=None, out=None):
                 raise saves.SaveError(f"No index at {index}.")
             source = saves.read_meta(index).get("source", index.name)
         else:
+            progress("Finding the save", 1, 3)
             folder = paths.saves_path(args.saves, environ, settings_file)
             save = saves.find_save(folder, args.save)
             cache = derived.folder(saves.CACHE_FOLDER, args.cache, environ, settings_file)
+            progress(f"Reading {save.name}: a save read for the first time takes about a minute", 2, 3)
             index, built = saves.ensure(save, cache, args.indexer, environ, args.rebuild or args.report == "index")
             source = save.name
         other = None
@@ -374,6 +378,7 @@ def main(argv=None, settings_file=None, environ=None, out=None):
             cache = derived.folder(saves.CACHE_FOLDER, args.cache, environ, settings_file)
             other_index, _ = saves.ensure(other_save, cache, args.indexer, environ, args.rebuild)
             other = (other_index, other_save.name, source)
+        progress("Working out the answer", 3, 3)
         with closing(saves.open_read_only(index)) as conn:
             report = _report(conn, args, environ, settings_file, other)
     except (saves.SaveError, ToolMissing) as problem:

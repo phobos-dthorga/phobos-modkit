@@ -30,6 +30,7 @@ COMMANDS = {
     "release": (".release.cli", "changelog checks, version constants kept in step, history screen"),
     "code": (".code.cli", "find, outline and show C# declarations, and every line using a name"),
     "cleanup": (".cleanup_cli", "what the tools, builds and tests left behind; deletes only with --apply"),
+    "changes": (".changes_cli", "what the changelogs say changed lately, and the code behind any one entry"),
     "installs": (".installs_cli", "what each installed mod would gain or lose by updating or going back to a backup; backs up, goes back, installs"),
     "test-pass": (".testpass_cli", "what a repository's in-game test list is waiting for, from the game's notes and the owner's verdicts"),
     "art-audit": (".artaudit_cli", "every shipped image with its record and how it was made, and every borrowed picture"),

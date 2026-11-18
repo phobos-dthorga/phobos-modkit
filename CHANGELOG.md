@@ -4,6 +4,21 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-11-19
+
+Asked for by the owner for D'thorga Companion (19 November 2026): progress bars with status updates wherever they fit, and a code viewer showing the code behind any changelog entry, for every game they mod and not only RimWorld.
+
+### Added
+
+- Progress lines: with PHOBOS_MODKIT_PROGRESS=1 a command writes one JSON line a step to standard error (label, step and of when it can count, detail for a line of the work's own output). Standard output is untouched, and without the variable nothing changes. installs (status, backup, restore, build, install), rimworld-textures (status, encode), rimworld-save and changes speak them.
+- progress.run_streaming runs a repository's own command, passes its progress lines on and turns its ordinary output into details, so a build or an install can report each project and mod as it goes. installs build and install use it.
+- changes list: every changelog in a repository with its newest versions and their entries. changes entry: the code behind one entry, as the commit that first wrote it into its changelog (found with git log -S) and that commit's diff, file by file with line numbers, code first; an entry in no commit yet shows the uncommitted changes. It names the other entries the same commit wrote. No game in it: checked on RimWorld, Ostranauts, Project Zomboid and Kenshi repositories.
+- The manifest's surface gains changes; installs.parse_changelog keeps each version's heading text (headings).
+
+### Compatibility
+
+- Nothing changes for a caller that does not set the variable. A changelog needs no new markup for changes to read it.
+
 ## [1.23.0] - 2026-11-18
 
 The third tool the owner wanted that day (18 November 2026): a watch on the mods we tie into, so a change to a method we patch is found on purpose rather than by chance. Vehicle Framework's upgrade research check (VF-412) had been noticed by hand; this finds it, and twelve more like it, in 34 seconds.

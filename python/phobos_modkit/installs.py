@@ -28,6 +28,7 @@ import sys
 
 from . import install_checks as checks
 from .cleanup import remove, size_of
+from .progress import run_streaming
 
 CONFIG = Path("config") / "installs.json"
 SCHEMA_VERSION = 1
@@ -75,6 +76,7 @@ class Changelog:
     title: str = ""
     summaries: dict = field(default_factory=dict)    # version -> the line under its heading, when it has one
     entries: list = field(default_factory=list)
+    headings: dict = field(default_factory=dict)     # version -> what follows it in its heading ("2026-11-18 - Draft"), in order
 
 
 def _lead(text):
@@ -112,6 +114,7 @@ def parse_changelog(text):
             version = heading.group("version").strip() if heading else line[3:].strip()
             if version.lower() == UNRELEASED.lower():
                 version = UNRELEASED
+            log.headings.setdefault(version, heading.group("rest").strip(" -") if heading else "")
             section, seen_version = "", True
             continue
         if line.startswith("### "):
@@ -397,12 +400,16 @@ def installed_commit(where, installed):
     return checks.version_commit(where.root, version_file, marker(installed.version)), False
 
 
-def survey(where, mods=None, measure=True, run=subprocess.run):
+def survey(where, mods=None, measure=True, run=subprocess.run, progress=None):
     states = []
+    progress = progress or (lambda *a, **k: None)
+    progress("Looking at what needs a build")
     builds = checks.build_states(where.root, where.config)
     install_only = [RECORD, *where.config.get("installOnly", [])]
-    for mod in mods or mods_of(where.root, where.config):
+    names = list(mods or mods_of(where.root, where.config))
+    for position, mod in enumerate(names, 1):
         repository = read_copy("repository", where.source(mod), where.game)
+        progress(f"Comparing {repository.name or mod} with its installed copy and backups", position, len(names) + 1)
         installed_folder = where.installed(mod)
         installed = read_copy("installed", installed_folder, where.game) if installed_folder.is_dir() else None
         backups = [read_copy("backup", where.backups / name, where.game, measure, name) for name in backups_of(where.backups, mod)]
@@ -415,6 +422,7 @@ def survey(where, mods=None, measure=True, run=subprocess.run):
             state.files = checks.compare_files(installed.folder, repository.folder, install_only)
             state.look_out = checks.look_out(where.root, repository.name, installed.version, repository.version)
         states.append(state)
+    progress("Reading what settings an install would change", len(names) + 1, len(names) + 1)
     _add_settings(where, states, run)
     return states
 
@@ -558,21 +566,25 @@ def install_command(where, mods):
     return expanded
 
 
-def _run_command(where, command, what, run=None):
-    run = run or subprocess.run
+def _run_command(where, command, what, run=None, progress=None):
+    """Runs one of the repository's own commands. With a stand-in run (tests) it is run whole; otherwise its output is read as it
+    comes, so its progress lines are passed on and its ordinary lines become details."""
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONUNBUFFERED": "1"}
     try:
-        result = run(command, cwd=str(where.root), capture_output=True, text=True, check=False, timeout=INSTALL_TIMEOUT,
-                     env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+        if run is not None:
+            result = run(command, cwd=str(where.root), capture_output=True, text=True, check=False, timeout=INSTALL_TIMEOUT, env=env)
+            code, lines = result.returncode, ((result.stdout or "") + (result.stderr or "")).splitlines()
+        else:
+            code, lines = run_streaming(command, cwd=str(where.root), env=env, timeout=INSTALL_TIMEOUT, progress=progress)
     except subprocess.TimeoutExpired:
         raise InstallsError(f"The {what} was still running after {INSTALL_TIMEOUT // 60} minutes and was stopped. Check the mods' "
                             "installed folders and their backups before playing.") from None
     except OSError as error:
         raise InstallsError(f"The {what} could not start ({error}). Nothing was changed.") from None
-    lines = ((result.stdout or "") + (result.stderr or "")).splitlines()
-    return result.returncode, lines[-OUTPUT_LINES:]
+    return code, lines[-OUTPUT_LINES:]
 
 
-def install(where, mods, run=None, running=game_running):
+def install(where, mods, run=None, running=game_running, progress=None):
     """Runs the repository's own install command for one or more mods (it builds, backs up what it replaces, and copies).
 
     Returns (exit code, the last lines of its output)."""
@@ -582,14 +594,14 @@ def install(where, mods, run=None, running=game_running):
     for mod in mods:
         _known_mod(where, mod)
     _refuse_while_running(where, running)
-    return _run_command(where, install_command(where, mods), "install", run)
+    return _run_command(where, install_command(where, mods), "install", run, progress)
 
 
-def build(where, run=None):
+def build(where, run=None, progress=None):
     """Runs the repository's own build command. It writes only inside the repository, so it may run while the game does.
 
     Returns (exit code, the last lines of its output)."""
     command = (where.config.get("build") or {}).get("command")
     if not command:
         raise InstallsError("This repository's installs.json names no build command.")
-    return _run_command(where, [sys.executable if part == "{python}" else part for part in command], "build", run)
+    return _run_command(where, [sys.executable if part == "{python}" else part for part in command], "build", run, progress)

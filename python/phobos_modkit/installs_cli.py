@@ -23,6 +23,7 @@ import sys
 
 from . import installs
 from .manifest import READS, RUNS, WRITES
+from .progress import Progress
 from .report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
 
 EXIT_OK, EXIT_REFUSED, EXIT_USAGE = 0, 1, 2
@@ -186,6 +187,7 @@ def main(argv=None, environ=None, out=None, now=None, running=None, run=None):
         return EXIT_USAGE if stop.code else EXIT_OK
     redact = keep if args.no_redact else home_redactor()
     running = running or installs.game_running
+    progress = Progress(environ)
     code = EXIT_OK
 
     def emit(report, data):
@@ -197,26 +199,31 @@ def main(argv=None, environ=None, out=None, now=None, running=None, run=None):
             mods = [args.mod] if args.mod else None
             if args.mod and args.mod not in installs.mods_of(where.root, where.config):
                 raise installs.InstallsError(f"{args.mod!r} is not one of this repository's mods.")
-            report, data = status_report(where, installs.survey(where, mods), running(where.game.PROCESSES), args.top)
+            states = installs.survey(where, mods, progress=progress)
+            report, data = status_report(where, states, running(where.game.PROCESSES), args.top)
         elif args.report == "backup":
+            progress(f"Copying the installed {args.mod} into the backups")
             name = installs.backup(where, args.mod, now)
             report, data = _done(f"Backed up {args.mod}", [f"The installed copy was copied to {where.backups / name}."],
                                  {"ok": True, "mod": args.mod, "backup": name})
         elif args.report == "restore":
+            progress(f"Putting {args.backup} back; the install it replaces becomes a backup")
             replaced = installs.restore(where, args.mod, args.backup, now, running)
             lines = [f"{args.backup} is now the installed copy of {args.mod}; the backup itself is kept."]
             lines.append(f"The install it replaced was kept as the backup {replaced}." if replaced else "Nothing was installed before.")
             report, data = _done(f"Went back to {args.backup}", lines, {"ok": True, "mod": args.mod, "backup": args.backup,
                                                                          "replacedBy": replaced})
         elif args.report == "build":
-            exit_code, lines = installs.build(where, run)
+            progress("Starting the build")
+            exit_code, lines = installs.build(where, run, progress)
             ok = exit_code == 0
             code = EXIT_OK if ok else EXIT_REFUSED
             report, data = _done("Built every project" if ok else f"The build failed (exit {exit_code})",
                                  ["Its last lines of output follow."], {"ok": ok, "exitCode": exit_code, "output": lines})
             report.blocks.append(Bullets(lines or ["(no output)"]))
         else:
-            exit_code, lines = installs.install(where, args.mod, run, running=running)
+            progress("Starting the build and install")
+            exit_code, lines = installs.install(where, args.mod, run, running=running, progress=progress)
             ok = exit_code == 0
             code = EXIT_OK if ok else EXIT_REFUSED
             names = ", ".join(args.mod)

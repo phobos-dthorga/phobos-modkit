@@ -80,7 +80,7 @@ and `reports`. Each report has:
 | `when` | The flag that brings the effect on; null when it always applies |
 | `note` | Anything else a caller should know, or null |
 | `question` | The report as a person would ask for it, or null |
-| `surface` | What the report mostly is, when a program should give it a page of its own: `globe` (1.7.0), or null |
+| `surface` | What the report mostly is, when a program should give it a page of its own: `globe` (1.7.0), `textures` (1.21.0), `changes` (1.24.0), or null |
 | `options` | `name`, `positional`, `kind` (`flag`, `integer`, `number` or `text`), `required`, `repeatable`, `choices`, `default` and `help`, read from the command's own parser |
 | `exclusive` | Groups of options that cannot be used together |
 
@@ -103,9 +103,32 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
 
 `tests/test_manifest.py` fails if a command has no manifest, an effect is unknown, or a report named there does not exist.
 
+## Progress
+
+A program that wants to show progress sets `PHOBOS_MODKIT_PROGRESS=1` and reads the command's standard error line by line while it
+runs (1.24.0). Each progress line is one JSON object; every other line of standard error is the command's own, as before. Standard
+output is untouched: the envelope arrives whole at the end.
+
+```json
+{"progress": 1, "label": "Building PhobosFramework", "step": 3, "of": 23}
+{"progress": 1, "label": "Reading the save"}
+{"progress": 1, "detail": "  copied 412 files"}
+```
+
+| Field | What it holds |
+| --- | --- |
+| `label` | What is being done now, in words a person can read. A line without one keeps the last label |
+| `step`, `of` | How far along, when the command can count its work (`step` from 1). Without them the work cannot be counted: show that it is working, not how far |
+| `detail` | A line of the work's own output, as a second, quieter status |
+
+A command adds progress with `phobos_modkit.progress.Progress(environ)`, called like a function. **A repository's own command can
+speak the same lines**: `installs build` and `install` run it with the variable set, pass its progress lines on, and turn its
+ordinary output lines into details (`progress.run_streaming`).
+
 ## Limits
 
 - A table's `values` give the number each cell sorts by, read from its text: `null` for every cell in a column that isn't all numbers
   in one unit. A table's cells themselves stay as written.
-- The commands report nothing while they work.
+- Most commands report nothing while they work. Those that do (installs, rimworld-textures, rimworld-save, changes) write
+  progress lines to standard error only when asked: see [Progress](#progress).
 - The manifest describes the kit. A game repository's own scripts are not in it.
