@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-11-18
+
+The owner's first clones (19 repositories, 59 MB on K:) showed five that hold built files only: Dubs Bad Hygiene, Rimatomics, Rimefeller, Medical System Expansion 2 and Frontline Workshop.
+
+### Added
+
+- rimworld-sources --clone-into: each clone's C# file count, read from the repository's file list, and a note when there is none: decompile for code, and read its history for what changed and when.
+
 ## [1.17.0] - 2026-11-18
 
 Asked for by the owner in phobos-rimworld (18 November 2026): clone the confirmed repositories, watch what they cost as they grow, and ask before anything is deleted.

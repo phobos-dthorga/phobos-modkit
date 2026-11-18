@@ -67,6 +67,7 @@ class CloneTests(unittest.TestCase):
         self.assertFalse((folder / "Textures" / "Big.png").exists())
         self.assertEqual(git(folder, "config", "core.fsmonitor").stdout.strip(), "false")
         self.assertGreater(outcome.size, 0)
+        self.assertEqual(outcome.sources, 1)
         self.assertEqual([name for name, _ in existing(self.into)], ["SomeMod-src"])
 
     def test_an_update_moves_forward_and_a_second_finds_nothing_new(self):
@@ -85,6 +86,13 @@ class CloneTests(unittest.TestCase):
         self.assertEqual([o.action for o in outcomes], ["kept", "refused"])
         self.assertTrue((self.into / "SomeMod-src" / "Source" / "Thing.cs").is_file())
         self.assertFalse((self.into / "AnotherMod-src").exists())
+
+    def test_a_repository_of_built_files_only_says_so(self):
+        git(self.upstream, "rm", "-q", "Source/Thing.cs")
+        git(self.upstream, "commit", "-q", "-m", "builds only")
+        [outcome] = ensure([("Some Mod", self.url)], self.into, space=PLENTY)
+        self.assertEqual(outcome.sources, 0)
+        self.assertEqual(outcome.detail, source_clones.NO_SOURCE)
 
     def test_a_folder_that_is_not_a_clone_is_left_alone(self):
         (self.into / "SomeMod-src").mkdir(parents=True)

@@ -55,6 +55,8 @@ clone, `DIR/<Name>-src`, and the report says what each one and all of them cost,
   decision: nothing was deleted"**, with the largest clones and the choices: free space elsewhere, remove some clones (they come back
   with `--clone-into`), keep them on another drive, or change the limits (`--budget-gb`, `--floor-gb`, `--floor-percent`).
 - A folder of the same name that is not a clone is left alone and reported.
+- **Some public repositories hold built files only** (DLLs and XML, no C#). The report counts each clone's C# files and says so when
+  there are none: the code still needs a decompile, while the history still says what changed and when.
 
 ## The register
 

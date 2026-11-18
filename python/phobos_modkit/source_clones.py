@@ -40,6 +40,10 @@ class Outcome:
     action: str          # "cloned", "updated", "unchanged", "kept", "refused", "failed"
     detail: str = ""
     size: int = 0
+    sources: int = -1    # C# files in the repository at HEAD; -1 when not counted
+
+
+NO_SOURCE = "no C# in this repository (built files only): decompile for code, read its history for what changed"
 
 
 def folder_name(title):
@@ -90,6 +94,12 @@ def clone(url, folder, run=subprocess.run):
     _git(["checkout", "--quiet"], run, folder)
 
 
+def source_count(folder, run=subprocess.run):
+    """C# files in the whole repository at HEAD, read from its file list (no file contents needed)."""
+    names = _git(["ls-tree", "-r", "--name-only", "HEAD"], run, folder).splitlines()
+    return sum(1 for name in names if name.lower().endswith(".cs"))
+
+
 def update(folder, run=subprocess.run):
     """Fetch new history and move forward if that needs no merge; True when anything changed. Never discards work."""
     before = _git(["rev-parse", "HEAD"], run, folder).strip()
@@ -132,6 +142,13 @@ def ensure(repos, into, refresh=False, run=subprocess.run, space=drive, floor=FL
     for outcome in outcomes:
         if outcome.folder.is_dir():
             outcome.size = folder_size(outcome.folder)
+        if (outcome.folder / ".git").is_dir():
+            try:
+                outcome.sources = source_count(outcome.folder, run)
+            except CloneError:
+                continue
+            if outcome.sources == 0 and not outcome.detail:
+                outcome.detail = NO_SOURCE
     return outcomes
 
 

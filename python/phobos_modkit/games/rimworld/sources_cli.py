@@ -213,8 +213,9 @@ def clones_section(report, outcomes, into, budget, floor, fraction, space, top):
     free, size_of_drive = space(into)
     short = source_clones.short_of_space(free, size_of_drive, floor, fraction)
     over = total > budget
-    rows = [[o.name, o.folder.name, o.action, _gb(o.size) if o.size else "-", o.detail] for o in outcomes]
-    section = report.section("Source clones", Table(["Mod", "Folder", "Now", "Size", "Note"], rows[:top], total=len(rows)))
+    rows = [[o.name, o.folder.name, o.action, _gb(o.size) if o.size else "-", o.sources if o.sources >= 0 else "-", o.detail]
+            for o in outcomes]
+    section = report.section("Source clones", Table(["Mod", "Folder", "Now", "Size", "C# files", "Note"], rows[:top], total=len(rows)))
     section.blocks.insert(0, Bullets([
         f"{len(every)} clones in {into}: {_gb(total)} together (budget {_gb(budget)}).",
         f"The drive has {_gb(free)} free of {_gb(size_of_drive)} ({free / size_of_drive:.0%})." if size_of_drive else "The drive's size is unknown."]))
