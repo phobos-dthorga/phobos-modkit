@@ -287,5 +287,189 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(path, Path("/elsewhere/v.jsonl"))
 
 
+# ---- 1.19.0: notes that say what they were seen on, and evidence that judges them ----
+
+def rich(key, time, on="", kind="", variant="", values=None, detail="", version="0.138.0"):
+    line = {"format": 1, "time": time, "key": key, "mod": "D'thorga Framework", "version": version, "detail": detail}
+    line.update({k: v for k, v in (("on", on), ("kind", kind), ("variant", variant)) if v})
+    if values is not None:
+        line["values"] = values
+    return json.dumps(line)
+
+
+def config(rows, **more):
+    return {"doc": "docs/test-pass.md", "rows": rows, "prefixes": {}, **more}
+
+
+class Judging(unittest.TestCase):
+    def evidence(self, rows, seen, **more):
+        repo = Repo(seen=seen, config=config(rows, **more))
+        self.addCleanup(repo.close)
+        return repo, repo.evidence()
+
+    def test_a_figure_off_from_what_the_row_expects_does_not_count_as_seen(self):
+        rows = {"1": [{"key": "grid", "expect": {"W": ">= 300"}}]}
+        _, evidence = self.evidence(rows, [rich("grid", "2026-11-19T10:00:00Z", values={"W": 0.09})])
+        part = evidence.checks["1"].parts[0]
+        self.assertEqual(part.state, "off")
+        self.assertEqual(evidence.sightings("1"), [])
+        self.assertIsNone(evidence.pending(evidence.rows[0]))
+
+    def test_a_figure_as_expected_counts_and_says_so(self):
+        rows = {"1": [{"key": "grid", "expect": {"W": ">= 300", "loadsA": "> 0"}}]}
+        _, evidence = self.evidence(rows, [rich("grid", "2026-11-19T10:00:00Z", values={"W": 0.09}),
+                                           rich("grid", "2026-11-19T11:00:00Z", values={"W": 960, "loadsA": 30})])
+        self.assertEqual(evidence.checks["1"].parts[0].state, "expected")
+        self.assertEqual(len(evidence.sightings("1")), 1)
+
+    def test_a_note_with_no_figures_cannot_meet_an_expectation(self):
+        _, evidence = self.evidence({"1": [{"key": "grid", "expect": {"W": "1..2000"}}]}, [note("grid", "2026-11-19T10:00:00Z")])
+        self.assertEqual(evidence.checks["1"].parts[0].state, "off")
+
+    def test_every_form_of_expectation(self):
+        values = {"x": 5}
+        for text, holds in ((">= 5", True), ("> 5", False), ("<= 5", True), ("< 5", False), ("= 5", True), ("4..6", True),
+                            ("6..9", False), ("-1 .. 5", True)):
+            self.assertEqual(testpass.parse_check("x", text).holds(values), holds, text)
+        with self.assertRaises(testpass.TestPassError):
+            testpass.parse_check("x", "about 5")
+
+    def test_a_case_and_a_wildcard_narrow_the_evidence(self):
+        rows = {"1": [{"key": "stopped", "detail": "*track*"}], "2": [{"key": "stage", "variant": "too weak"}]}
+        _, evidence = self.evidence(rows, [rich("stopped", "2026-11-19T10:00:00Z", detail="L-ATV: Engine too badly damaged."),
+                                           rich("stage", "2026-11-19T10:00:00Z", variant="barely enough")])
+        self.assertEqual(evidence.checks["1"].parts[0].state, "none")
+        self.assertEqual(evidence.checks["2"].parts[0].state, "none")
+        _, evidence = self.evidence(rows, [rich("stopped", "2026-11-19T10:00:00Z", detail="M1A2: Left TRACK thrown"),
+                                           rich("stage", "2026-11-19T10:00:00Z", variant="too weak")])
+        self.assertEqual([evidence.checks[r].parts[0].state for r in ("1", "2")], ["seen", "seen"])
+
+    def test_a_row_in_parts_says_how_many_were_seen_and_grows(self):
+        rows = {"1": {"parts": {"wet brakes": ["wet"], "air filter": ["filter"], "a service": ["service"]}}}
+        repo, evidence = self.evidence(rows, [rich("wet", "2026-11-19T10:00:00Z")])
+        text, changed = testpass.apply_to_text(repo.doc(), evidence)
+        self.assertIn("1 of 3 parts (wet brakes)", changed[0][1])
+        (repo.root / "docs" / "test-pass.md").write_text(text, encoding="utf-8")
+        repo.seen.write_text("\n".join([rich("wet", "2026-11-19T10:00:00Z"), rich("filter", "2026-11-19T12:00:00Z")]) + "\n",
+                             encoding="utf-8")
+        text, changed = testpass.apply_to_text(repo.doc(), repo.evidence())
+        line = next(l for l in text.splitlines() if l.startswith("| 1 |"))
+        self.assertIn("2 of 3 parts (wet brakes, air filter)", line)
+        self.assertEqual(line.count("Seen working by the game"), 1)
+        (repo.root / "docs" / "test-pass.md").write_text(text, encoding="utf-8")
+        self.assertEqual(testpass.apply_to_text(repo.doc(), repo.evidence())[1], [])
+
+    def test_a_sighting_older_than_its_row_is_stale(self):
+        # Row 1 is written for Framework 0.115.0; a note from 0.114.0 is older, one from 0.115.0 is not.
+        rows = {"1": ["vehicles.track-thrown"]}
+        names = {"versionNames": {"D'thorga Framework": "Framework"}}
+        _, evidence = self.evidence(rows, [note("vehicles.track-thrown", "2026-11-17T10:00:00Z", version="0.114.0")], **names)
+        self.assertEqual(evidence.checks["1"].parts[0].state, "stale")
+        self.assertIsNone(evidence.pending(evidence.rows[0]))
+        _, evidence = self.evidence(rows, [note("vehicles.track-thrown", "2026-11-17T10:00:00Z", version="0.115.0")], **names)
+        self.assertEqual(evidence.checks["1"].parts[0].state, "seen")
+
+    def test_row_versions_skip_other_mods_and_written_sentences(self):
+        row = testpass.Row("9", "", [], ["9", "**X** (Patches 0.21.0, Framework 0.119.0)",
+                                         "Needs Vehicle Framework 1.7.2537. Framework 0.137.3: a turbine warns",
+                                         "Lit. **Seen working by the game, 18 Nov 2026 (D'thorga Framework 0.140.0); awaiting the owner's word.**"], 0)
+        found = testpass.row_versions(row, {"D'thorga Framework": "Framework", "D'thorga Patches": ["Patches"]})
+        self.assertEqual(found, {"D'thorga Framework": (0, 137, 3), "D'thorga Patches": (0, 21, 0)})
+
+    def test_order_rules_find_a_refusal_with_no_warning_before_it(self):
+        rule = {"name": "warn first", "row": "1", "first": {"key": "stage", "variant": "barely"},
+                "then": {"key": "stage", "variant": "too weak"}}
+        seen = [rich("stage", "2026-11-19T10:00:00Z", on="Abrams1", variant="barely"),
+                rich("stage", "2026-11-19T10:05:00Z", on="Abrams1", variant="too weak"),
+                # A second refusal on the same tank needs a warning of its own.
+                rich("stage", "2026-11-19T12:00:00Z", on="Abrams1", variant="too weak"),
+                # Another tank's warning does not count for this one.
+                rich("stage", "2026-11-19T09:00:00Z", on="Abrams2", variant="barely"),
+                rich("stage", "2026-11-19T09:30:00Z", on="Hind1", kind="Hind", variant="too weak", detail="Hind: too weak"),
+                # A note from before notes said what they were on cannot be checked.
+                rich("stage", "2026-11-19T08:00:00Z", variant="too weak")]
+        _, evidence = self.evidence({"1": ["stage"]}, seen, order=[rule])
+        self.assertEqual([(p.on, p.time) for p in evidence.order],
+                         [("Abrams1", "2026-11-19T12:00:00Z"), ("Hind1", "2026-11-19T09:30:00Z")])
+        self.assertEqual(evidence.unchecked_order, 1)
+
+    def test_breadth_counts_kinds_or_the_detail_before_its_colon(self):
+        _, evidence = self.evidence({"1": ["k"]}, [rich("k", "2026-11-19T10:00:00Z", kind="M1A2Abrams"),
+                                                   rich("k", "2026-11-19T11:00:00Z", detail="L-ATV: wet"),
+                                                   rich("k", "2026-11-19T12:00:00Z", kind="M1A2Abrams")])
+        self.assertEqual(evidence.checks["1"].kinds, ["L-ATV", "M1A2Abrams"])
+
+    def test_a_generic_key_on_two_rows_must_be_shared_on_purpose(self):
+        rows = {"1": ["cranked", {"key": "stopped", "detail": "*track*"}], "2": ["cranked", "stopped"]}
+        self.assertEqual(len(testpass.map_problems(config(rows))), 1)
+        self.assertEqual(testpass.map_problems(config(rows, shared={"cranked": "both test a gun cranked by hand"})), [])
+
+    def test_a_badly_written_map_says_what_to_give(self):
+        for rows in ({"1": [{"variant": "x"}]}, {"1": [{"key": "k", "colour": "red"}]}, {"1": {"parts": {"a": []}}},
+                     {"1": "k"}, {"1": [{"key": "k", "expect": {"W": "lots"}}]}):
+            with self.assertRaises(testpass.TestPassError, msg=str(rows)):
+                testpass.parse_mapping(config(rows))
+
+    def test_mapped_keys_reads_every_form(self):
+        rows = {"1": ["a", {"key": "b"}], "2": {"parts": {"x": [{"key": "c", "variant": "v"}]}}}
+        rule = {"first": "d", "then": {"key": "e"}}
+        self.assertEqual(testpass.mapped_keys(config(rows, order=[rule])), {"a", "b", "c", "d", "e"})
+
+
+class Decisions(unittest.TestCase):
+    def test_no_row_needed_leaves_a_key_out_and_make_a_row_lists_it(self):
+        repo = Repo(seen=[note("medical.a", "2026-11-17T10:00:00Z"), note("medical.b", "2026-11-17T10:00:00Z"),
+                          note("medical.c", "2026-11-17T10:00:00Z")],
+                    config=config({"1": ["vehicles.track-thrown"]}, unrowed={"medical.c": "a dev action's note"}))
+        try:
+            decisions = repo.root / "decisions.jsonl"
+            decisions.write_text("\n".join(json.dumps(d) for d in (
+                {"format": 1, "time": "2026-11-18T10:00:00Z", "key": "medical.a", "decision": "no-row"},
+                {"format": 1, "time": "2026-11-18T10:00:00Z", "key": "medical.b", "decision": "make-row", "note": "the drip"},
+                {"format": 1, "time": "2026-11-18T10:00:00Z", "key": "medical.z", "decision": "maybe"})) + "\n", encoding="utf-8")
+            evidence = testpass.gather(repo.root, [repo.seen], [repo.verdicts], decision_paths=[decisions])
+            self.assertEqual(evidence.unmapped, ["medical.b"])
+            self.assertEqual(evidence.unreadable, 1)
+            out = io.StringIO()
+            testpass_cli.main(["report", "--root", str(repo.root), "--seen", str(repo.seen), "--verdicts", str(repo.verdicts),
+                               "--decisions", str(decisions), "--json"], environ={}, out=out)
+            unrowed = json.loads(out.getvalue())["data"]["unrowed"]
+            self.assertEqual([(u["key"], u["decision"]) for u in unrowed], [("medical.b", "make-row"), ("medical.a", "no-row")])
+        finally:
+            repo.close()
+
+    def test_decisions_default_beside_the_verdicts(self):
+        path = testpass_cli.decisions_path(Path("/work/phobos-rimworld"), environ={"LOCALAPPDATA": "/appdata", "XDG_DATA_HOME": "/d"})
+        self.assertEqual((path.name, path.parent.name), ("phobos-rimworld.jsonl", "test-key-decisions"))
+
+
+class RichReport(unittest.TestCase):
+    def test_the_report_shows_figures_order_and_staleness(self):
+        rows = {"1": [{"key": "grid", "expect": {"W": ">= 300"}}], "3": ["lamp"], "4": ["old"]}
+        rule = {"name": "warn first", "row": "3", "first": {"key": "lamp", "variant": "warn"},
+                "then": {"key": "lamp", "variant": "fail"}}
+        doc_rows = {"versionNames": {"D'thorga Framework": "Framework"}, "order": [rule]}
+        repo = Repo(seen=[rich("grid", "2026-11-19T10:00:00Z", values={"W": 0.09}),
+                          rich("lamp", "2026-11-19T10:00:00Z", on="T1", kind="Truck", variant="fail"),
+                          rich("old", "2026-11-19T10:00:00Z", version="0.100.0")], config=config(rows, **doc_rows))
+        try:
+            (repo.root / "docs" / "test-pass.md").write_text(DOC.replace("| 4 | **A pipe with a \\| in it** |",
+                                                                         "| 4 | **A pipe** (Framework 0.120.0) |"), encoding="utf-8")
+            code, out = repo.run("report")
+            self.assertEqual(code, 0)
+            self.assertIn("Seen, but not with the figures the row expects", out)
+            self.assertIn("W 0.09", out)
+            self.assertIn("Out of order", out)
+            self.assertIn("Seen only before the row last changed", out)
+            code, out = repo.run("report", "--json")
+            data = json.loads(out)["data"]
+            row1 = next(r for r in data["rows"] if r["id"] == "1")
+            self.assertEqual(row1["parts"][0]["state"], "off")
+            self.assertEqual(row1["parts"][0]["off"][0]["values"], {"W": 0.09})
+            self.assertEqual(data["order_problems"][0]["on"], "T1")
+        finally:
+            repo.close()
+
+
 if __name__ == "__main__":
     unittest.main()

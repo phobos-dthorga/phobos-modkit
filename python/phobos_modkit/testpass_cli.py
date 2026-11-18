@@ -6,10 +6,12 @@
     test-pass apply --verdict "55:partial:the landing only" --apply
                                               write a verdict the owner gave in conversation
 
-The repository's config/test-evidence.json names the test list and maps rows to evidence. The notes file comes from --seen, or
-from the game the config names (its adapter knows where the mod writes it). Verdicts come from --verdicts, the environment
-variable PHOBOS_TEST_VERDICTS, a settings file's companionTestVerdictsPath, or D'thorga Companion's own folder. A note never
-passes a row; only a verdict does. apply writes only inside the test list.
+The repository's config/test-evidence.json names the test list and maps rows to evidence: keys, narrowed by a case or the detail,
+with the figures they should show, in parts, with rules on the order of notes. The notes file comes from --seen, or from the game the
+config names (its adapter knows where the mod writes it). Verdicts come from --verdicts, the environment variable
+PHOBOS_TEST_VERDICTS, a settings file's companionTestVerdictsPath, or D'thorga Companion's own folder; the owner's decisions on notes
+no row names from --decisions, PHOBOS_TEST_KEY_DECISIONS, companionTestKeyDecisionsPath or the same folder. A note never passes a
+row; only a verdict does. apply writes only inside the test list.
 """
 from __future__ import annotations
 
@@ -27,7 +29,9 @@ from .report import Bullets, Report, Table, envelope_text, home_redactor, keep, 
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 VERDICTS = ("companionTestVerdictsPath", "PHOBOS_TEST_VERDICTS")
+DECISIONS = ("companionTestKeyDecisionsPath", "PHOBOS_TEST_KEY_DECISIONS")
 COMPANION_ID = "org.phobosdthorga.companion"
+_DECIDED = {"make-row": "make a row", "no-row": "no row needed"}
 
 
 def companion_data(environ=None):
@@ -44,6 +48,12 @@ def verdicts_path(root, explicit=None, environ=None, settings=None):
     """The owner's verdicts for this repository: one JSON-lines file per repository, named after its folder."""
     default = companion_data(environ) / "test-verdicts" / f"{Path(root).resolve().name}.jsonl"
     return resolve(*VERDICTS, default, explicit, environ, settings)
+
+
+def decisions_path(root, explicit=None, environ=None, settings=None):
+    """The owner's decisions on notes no row names, beside the verdicts: one JSON-lines file per repository."""
+    default = companion_data(environ) / "test-key-decisions" / f"{Path(root).resolve().name}.jsonl"
+    return resolve(*DECISIONS, default, explicit, environ, settings)
 
 
 def seen_paths(config, explicit, environ=None, settings=None):
@@ -70,6 +80,7 @@ def _parser():
         s.add_argument("--root", help="the repository (default: the current folder)")
         s.add_argument("--seen", action="append", help="a seen-in-play notes file (repeatable; default: from the config's game)")
         s.add_argument("--verdicts", help="the owner's verdicts file (default: D'thorga Companion's, for this repository)")
+        s.add_argument("--decisions", help="the owner's decisions on notes no row names (default: D'thorga Companion's)")
         s.add_argument("--settings", help="a JSON settings file naming paths")
         s.add_argument("--verdict", action="append", default=[], metavar="ROW:WORD[:NOTE]",
                        help="a verdict the owner gave in conversation (WORD passed, partial or failed; repeatable)")
@@ -82,19 +93,62 @@ def _parser():
     return p
 
 
+def _version(version):
+    return ".".join(str(n) for n in version)
+
+
+def _figures(values):
+    return ", ".join(f"{k} {v:g}" for k, v in sorted(values.items())) or "no figures"
+
+
+def _note_data(note):
+    return {"key": note.key, "time": note.time, "mod": note.mod, "version": note.version, "detail": note.detail, "on": note.on,
+            "kind": note.kind, "variant": note.variant, "values": note.values}
+
+
+def _parts_words(check):
+    """"2 of 3: wet brakes, air filter" for a row in parts; empty for a row of one."""
+    if check is None or len(check.parts) < 2:
+        return ""
+    return f"{len(check.seen_parts)} of {len(check.parts)}: " + ", ".join(p.name for p in check.seen_parts)
+
+
 def _row_data(row, evidence):
     verdict = evidence.verdicts.get(row.id)
+    check = evidence.checks.get(row.id)
     return {"id": row.id, "section": row.section, "title": row.title, "status": row.status,
             "cells": dict(zip(row.columns, row.cells)),
             "seen": [{"key": s.key, "first": s.first, "last": s.last, "count": s.count, "mod": s.mod, "version": s.version,
                       "detail": s.detail} for s in evidence.sightings(row.id)],
-            "evidence_keys": evidence.mapping.get(row.id, []),
+            "evidence_keys": evidence.keys(row.id),
+            "parts": [] if check is None else [
+                {"name": p.name, "state": p.state, "seen": len(p.good), "expected": p.expected,
+                 "off": [_note_data(n) for n in p.off[-3:]], "stale": len(p.stale),
+                 "stale_version": max((n.version for n in p.stale), key=lambda v: testpass.version_tuple(v) or (), default="")}
+                for p in check.parts],
+            "kinds": [] if check is None else check.kinds,
+            "versions": {} if check is None else {m: _version(v) for m, v in sorted(check.versions.items())},
+            "order_problems": [_order_data(o) for o in evidence.order if o.row == row.id],
             "verdict": None if verdict is None else {"verdict": verdict.verdict, "time": verdict.time, "note": verdict.note,
                                                      "via": verdict.via},
             "pending": evidence.pending(row)}
 
 
-def build_report(evidence, changed=None, applied=False, everything=False, top=40):
+def _order_data(problem):
+    return {"rule": problem.rule, "row": problem.row, "on": problem.on, "kind": problem.kind, "time": problem.time,
+            "detail": problem.detail}
+
+
+def _unrowed_data(evidence):
+    rows = []
+    for key in evidence.unmapped + sorted(k for k, d in evidence.decisions.items() if d.decision == "no-row" and k in evidence.seen):
+        sighting, decision = evidence.seen[key], evidence.decisions.get(key)
+        rows.append({"key": key, "count": sighting.count, "last": sighting.last, "detail": sighting.detail,
+                     "decision": decision.decision if decision else None, "note": decision.note if decision else ""})
+    return rows
+
+
+def build_report(evidence, changed=None, applied=False, everything=False, top=40, map_problems=()):
     rows = evidence.rows
     waiting = [r for r in rows if r.status in ("open", "partial", "seen") and r.id not in evidence.verdicts]
     seen = [r for r in waiting if evidence.sightings(r.id)]
@@ -118,12 +172,30 @@ def build_report(evidence, changed=None, applied=False, everything=False, top=40
         if not applied and changed:
             report.lines.append("**Preview only. Add --apply to write the test list.**")
         return report
+    if evidence.order:
+        report.section("Out of order: a note came without the one that should come before it", Table(
+            ["Rule", "Row", "On", "When", "Detail"],
+            [[o.rule, o.row, o.kind or o.on, testpass.day(o.time), o.detail] for o in evidence.order[:top]], total=len(evidence.order)))
     if seen:
         report.section("Seen working, awaiting your word", Table(
-            ["#", "Row", "Last seen", "On", "Notes"],
-            [[r.id, r.title, testpass.day(max(s.last for s in evidence.sightings(r.id))),
-              "; ".join(sorted({s.detail for s in evidence.sightings(r.id) if s.detail}))[:80],
+            ["#", "Row", "Parts", "Last seen", "On", "Notes"],
+            [[r.id, r.title, _parts_words(evidence.checks.get(r.id)),
+              testpass.day(max(s.last for s in evidence.sightings(r.id))),
+              f"{len(evidence.checks[r.id].kinds)} kinds: " + ", ".join(evidence.checks[r.id].kinds)[:70],
               ", ".join(s.key for s in evidence.sightings(r.id))] for r in seen[:top]], total=len(seen)))
+    off = [(r, p) for r in waiting if r.id in evidence.checks for p in evidence.checks[r.id].parts if p.state == "off"]
+    if off:
+        report.section("Seen, but not with the figures the row expects", Table(
+            ["#", "Row", "Part", "Last seen with", "Expects"],
+            [[r.id, r.title, p.name or "the row", _figures(p.off[-1].values), "; ".join(p.expected)] for r, p in off[:top]],
+            total=len(off)))
+    stale = [(r, p) for r in waiting if r.id in evidence.checks for p in evidence.checks[r.id].parts if p.state == "stale"]
+    if stale:
+        report.section("Seen only before the row last changed", Table(
+            ["#", "Row", "Part", "Last seen on", "The row names"],
+            [[r.id, r.title, p.name or "the row", f"{p.stale[-1].mod} {p.stale[-1].version}",
+              ", ".join(f"{m} {_version(v)}" for m, v in sorted(evidence.checks[r.id].versions.items()))]
+             for r, p in stale[:top]], total=len(stale)))
     if unwritten:
         report.section("Verdicts not yet in the test list", Table(
             ["#", "Row", "Verdict", "When", "Note"],
@@ -133,11 +205,20 @@ def build_report(evidence, changed=None, applied=False, everything=False, top=40
     if listed:
         report.section("Every row" if everything else "Still waiting, nothing seen yet", Table(
             ["#", "Row", "Status", "Section"], [[r.id, r.title, r.status, r.section] for r in listed[:top]], total=len(listed)))
-    notes = []
     if evidence.unmapped:
-        notes.append("Seen keys no row names: " + ", ".join(evidence.unmapped[:10]) + ".")
+        report.section("Notes no row names", Table(
+            ["Key", "Notes", "Last seen", "Last detail", "Your word"],
+            [[k, f"{evidence.seen[k].count:,}", testpass.day(evidence.seen[k].last), evidence.seen[k].detail,
+              _DECIDED.get(evidence.decisions[k].decision, "") if k in evidence.decisions else ""] for k in evidence.unmapped[:top]],
+            total=len(evidence.unmapped)))
+    notes = []
+    if map_problems:
+        notes.extend(f"Evidence map: {problem}." for problem in map_problems)
+    if evidence.unchecked_order:
+        notes.append(f"{evidence.unchecked_order:,} notes an order rule names say nothing of what they were seen on (written before "
+                     "notes did) and could not be checked.")
     if evidence.unreadable:
-        notes.append(f"{evidence.unreadable:,} note or verdict lines could not be read and were skipped.")
+        notes.append(f"{evidence.unreadable:,} note, verdict or decision lines could not be read and were skipped.")
     if notes:
         report.section("Left out", Bullets(notes))
     return report
@@ -156,9 +237,11 @@ def main(argv=None, environ=None, out=None, now=None):
         config = testpass.load_config(root)
         seen = seen_paths(config, args.seen, environ, args.settings)
         verdicts = verdicts_path(root, args.verdicts, environ, args.settings)
+        decisions = decisions_path(root, args.decisions, environ, args.settings)
         stamp = (now or datetime.now(timezone.utc)).isoformat()
         given = [testpass.parse_verdict(text, stamp) for text in args.verdict]
-        evidence = testpass.gather(root, seen, [verdicts], config, given)
+        evidence = testpass.gather(root, seen, [verdicts], config, given, [decisions])
+        problems = testpass.map_problems(config)
     except testpass.TestPassError as error:
         print(redact(str(error)), file=sys.stderr)
         return EXIT_USAGE
@@ -170,9 +253,11 @@ def main(argv=None, environ=None, out=None, now=None):
         if args.apply and changed:
             with open(doc, "w", encoding="utf-8", newline="") as fh:
                 fh.write(written)
-    report = build_report(evidence, changed, bool(getattr(args, "apply", False)), args.all, args.top)
+    report = build_report(evidence, changed, bool(getattr(args, "apply", False)), args.all, args.top, problems)
     data = {"doc": config["doc"], "seen_files": [str(p) for p in seen], "verdicts_file": str(verdicts),
-            "rows": [_row_data(r, evidence) for r in evidence.rows]}
+            "decisions_file": str(decisions), "rows": [_row_data(r, evidence) for r in evidence.rows],
+            "order_problems": [_order_data(o) for o in evidence.order], "unchecked_order": evidence.unchecked_order,
+            "unrowed": _unrowed_data(evidence), "map_problems": problems}
     out.write((envelope_text("test-pass", report, redact, data) if args.json else render_markdown(report, redact)) + "\n")
     return EXIT_OK
 

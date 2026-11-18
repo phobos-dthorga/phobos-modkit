@@ -4,6 +4,29 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-11-18
+
+Asked for by the owner in phobos-rimworld (18 November 2026, its design record "Seen-in-play checks"): two faults sat in the seen-in-play notes and only a reading by eye found them, a grid hook-up noted at 0 W on a row expecting about a kilowatt, and a refusal with no warning before it.
+
+### Added
+
+- test-pass reads optional note fields: what a note was seen on (on), its kind, its case (variant) and its figures (values). Every note is kept, not only the last of each key.
+- Evidence that judges: a row in named parts; a piece of evidence narrowed by a case or a wildcard on the detail; expected figures (>= N, > N, <= N, < N, = N, A..B). A part whose notes never show the figures is listed as seen but off, and does not mark its row seen.
+- Order rules: a note that must come before another on the same thing, such as a warning before a refusal. Each break is listed with the thing and the time.
+- Sightings older than the row: versionNames says how each mod is written in the rows, and a note from an older version than the newest the row names is listed apart.
+- How widely a row was seen: the kinds of thing its notes came from.
+- The owner's decisions on notes no row names, read from D'thorga Companion's folder (test-key-decisions, or --decisions): no row needed leaves a key out, make a row lists it as a request.
+- testpass.map_problems: a key with nothing narrowing it that stands for several rows without a shared entry. testpass.mapped_keys: every key the map names, in any form.
+- --json: each row's parts with their state, figures and staleness, its kinds, the versions it names and its order problems; and the whole map's order problems, notes no row names and map problems.
+
+### Changed
+
+- apply's seen sentence names the parts seen ("2 of 3 parts (wet brakes, air filter)"), and is written again when more parts are seen.
+
+### Compatibility
+
+- Every existing evidence map, note and verdict reads as before: a list of keys is one part, and a note without the new fields is a sighting with no figures, which cannot meet an expectation or be checked for order.
+
 ## [1.18.0] - 2026-11-18
 
 The owner's first clones (19 repositories, 59 MB on K:) showed five that hold built files only: Dubs Bad Hygiene, Rimatomics, Rimefeller, Medical System Expansion 2 and Frontline Workshop.

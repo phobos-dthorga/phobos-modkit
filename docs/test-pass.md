@@ -7,8 +7,10 @@ What a repository's in-game test list is waiting for, from the game's seen-in-pl
 - **A seen-in-play note never passes a row.** It says a feature ran without an error, not that it looked right. A row the notes
   flag is "seen working, awaiting the owner's word" until the owner gives a verdict.
 - **`apply` previews unless given `--apply`**, and then writes only inside the test list. It never removes text, except the
-  "awaiting the owner's word" note on a row that has just had its verdict.
+  "awaiting the owner's word" note on a row that has just had its verdict, or that is written again naming more parts.
 - **The repository says where its test list is**, in `config/test-evidence.json`. Without that file the tool stops and says so.
+- **Since 1.19.0 a sighting can be weaker than it looks, and the report says so**: notes whose figures miss what the row expects,
+  notes older than the row, and notes out of the order a rule demands are listed apart and do not mark a row seen.
 
 ## Run it
 
@@ -27,8 +29,28 @@ sightings, verdict and the sentence apply would add, for a program such as D'tho
 | --- | --- |
 | `doc` | The test list's path in the repository: Markdown tables whose first column is `#` and last column says what passes |
 | `game` | Optional: the game adapter that knows where the mod writes its notes (`rimworld`) |
-| `rows` | Each row's id, and the note keys that stand as evidence for it |
+| `rows` | Each row's id, and its evidence: a list (the whole row), or `{"parts": {"name": [...]}}` for a row in parts |
 | `prefixes` | Keys the mod builds at run time, by their start, with what follows |
+| `order` | Rules on the order of notes on one thing: `{"name", "row", "first": evidence, "then": evidence}` |
+| `shared` | Keys with nothing narrowing them that stand for more than one row on purpose, with why |
+| `unrowed` | Keys that need no row, with why |
+| `versionNames` | How each mod is written in rows (`{"D'thorga Framework": "Framework"}`, or a list), for sightings older than the row |
+
+**A piece of evidence** is a key, or an object narrowing it:
+
+| Field | Meaning |
+| --- | --- |
+| `key` | The note's key |
+| `variant` | Only notes of this case (a stage's label) |
+| `detail` | Only notes whose detail fits this wildcard, ignoring case (`"*track*"`) |
+| `expect` | The figures it should show: `{"W": ">= 300", "loadsA": "> 0"}`; forms `>= N`, `> N`, `<= N`, `< N`, `= N`, `A..B` |
+
+**How a part is judged**, from its matching notes: notes older than the newest version of their mod the row names are *stale*; a
+fresh note that meets every expectation counts (*expected* when the item has any, *seen* when not); fresh notes that never do are
+*off*. A row is seen working when a part counts. **An order rule** is broken by a `then` note on a thing with no `first` note on the
+same thing since its last `then`; notes without `on` cannot be checked and are counted. `map_problems` (and the report's "Left out")
+names a key with nothing narrowing it that stands for several rows without a `shared` entry; `mapped_keys` gives every key the map
+names, for a repository's own checks.
 
 A row's status is read from its last cell: `Passed in part` or a lower-case "passed: the owner" (part of a row) is passed in
 part, `Passed` is passed, `**Failed` is failed, "Seen working by the game" is seen; the last of these in the cell decides.
@@ -42,6 +64,20 @@ beside the Config folder, written by phobos-rimworld's D'thorga Framework 0.118.
 ```json
 {"format":1,"time":"2026-11-17T12:00:00Z","key":"vehicles.field-refit","mod":"D'thorga Framework","version":"0.118.0","detail":"M1A2: left track"}
 ```
+
+Optional since 1.19.0 (D'thorga Framework 0.138.0 writes them): `on`, a stable name for what it was seen on; `kind`, what kind of
+thing that is; `variant`, which case of the feature; `values`, figures by name as numbers. Readers ignore fields they do not know.
+
+```json
+{"format":1,"time":"2026-11-19T12:00:00Z","key":"vehicles.grid-hook-up","mod":"D'thorga Framework","version":"0.138.0","detail":"M2A3 Bradley: 960 W","on":"Vehicle_M2A3Bradley412","kind":"M2A3Bradley","values":{"W":960,"loadsA":30,"chargingA":4}}
+```
+
+## The owner's decisions on notes no row names
+
+JSON lines D'thorga Companion writes beside its verdicts (`test-key-decisions/<repository folder>.jsonl`, or
+`PHOBOS_TEST_KEY_DECISIONS`, or a settings file's `companionTestKeyDecisionsPath`, or `--decisions`): `key`, `decision`
+(`make-row`, `no-row` or `cleared`), `time` and an optional `note`. The latest line for a key wins. "No row needed" leaves the key out
+of the report; "make a row" marks it as a request for the next session that edits the test list.
 
 ## The owner's verdicts
 
