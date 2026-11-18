@@ -7,11 +7,12 @@ mod's assemblies for the game's version, in load order.
 """
 from __future__ import annotations
 
+import fnmatch
 import json
 from pathlib import Path
 
 from ...sampling import ENGINE, GAME, LIBRARY, MOD, RUNTIME, UNKNOWN, Owner
-from . import loading
+from . import loading, paths
 from .mods import ModIndex, default_roots
 from .patches import mod_assemblies
 
@@ -78,3 +79,46 @@ def classify(modules, install, mod_owners):
         else:
             result[module] = Owner(UNKNOWN, module or "?")
     return result
+
+
+def module_owners(modules, game=None, workshop=None, config=None, environ=None, settings_file=None):
+    """({module: Owner}, notes): who owns each module, against the game's install and the mod list as they are now.
+
+    Best effort: when the mod list cannot be read, no module is put down to a mod and a note says why.
+    """
+    notes, install, mod_owners = [], set(), {}
+    try:
+        game_folder = paths.game_path(game, environ, settings_file)
+        install = install_assemblies(game_folder)
+        workshop_folder = paths.workshop_path(game_folder, workshop, environ, settings_file)
+        config_folder = paths.config_path(config, environ, settings_file)
+        mod_owners, shared = active_mod_assemblies(game_folder, workshop_folder, config_folder)
+        if shared:
+            notes.append(f"{len(shared)} assembly names are shipped by more than one active mod; each counts for the first in load order.")
+    except Exception as error:  # noqa: BLE001 - a report without mod names beats no report
+        notes.append(f"The mod list could not be read ({error}), so nothing is put down to a mod.")
+    return classify(modules, install, mod_owners), notes
+
+
+# The game's own loop, for finding the main thread in a snapshot: the named parts, and the root that calls them each frame.
+MAIN_LOOP_ROOTS = ("Verse.Root*",)
+
+
+def loop_patterns():
+    return [p for _, patterns in phases()[0] for p in patterns] + list(MAIN_LOOP_ROOTS)
+
+
+def is_main_loop(stack):
+    """True when a thread's stack runs the game's loop: one of its frames matches a named part or the loop's root."""
+    patterns = loop_patterns()
+    return any(fnmatch.fnmatchcase(f.method, p) for f in stack.frames for p in patterns)
+
+
+def phase_of_frames(frames):
+    """The named part of the loop a stack (innermost first) is in: the first whose pattern matches, from the root; None if none."""
+    named, _ = phases()
+    for item in reversed(frames):
+        for label, patterns in named:
+            if any(fnmatch.fnmatchcase(item.method, p) for p in patterns):
+                return label
+    return None

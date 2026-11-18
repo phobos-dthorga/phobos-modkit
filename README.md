@@ -60,18 +60,21 @@ python -m phobos_modkit rimworld-settings --mod "X*"   the player's settings for
 python -m phobos_modkit rimworld-patches who "Pawn.Kill"   which active mods patch a method; also mod, hotspots
 python -m phobos_modkit rimworld-startup                 load-time history and the costliest mods; also compare, mod
 python -m phobos_modkit rimworld-perf record             where the running game spends its time, by mod; also report, mod, compare
+python -m phobos_modkit rimworld-perf stack              a frozen game: where every thread is stuck; heap for memory by mod
 python -m phobos_modkit rimworld-readiness               which active mods are ready for a game version
 python -m phobos_modkit code --each-in DIR show Type.Member   a C# member's source by name; also find, outline, refs
 python -m phobos_modkit code compare OLD.dll NEW.dll   what changed between two builds, member by member
 python -m phobos_modkit rimworld-archive snapshot --root ..   keep every new version of the game and tied mods; also list, compare, get
 python -m phobos_modkit rimworld-sources --root .. --write   where each tied mod's public source lives, checked
-python -m phobos_modkit crash-dump               why a program crashed, from its Windows crash dump
+python -m phobos_modkit crash-dump               why a program crashed, from its Windows crash dump; names methods in a full one
+python -m phobos_modkit windows-dumps --program X   whether Windows keeps full crash dumps of a program; --apply asks it to
 python -m phobos_modkit cleanup --root REPO      what the tools, builds and tests left behind; --apply deletes it
 python -m phobos_modkit test-pass report --root REPO   in-game tests waiting for the owner; apply writes verdicts in
 python -m phobos_modkit installs status --root REPO    what updating or going back gains or loses; also backup, restore, install, build
 python -m phobos_modkit rimworld-textures status       whether any active mod would show an old picture; encode fixes it
 python -m phobos_modkit art-audit report --root REPO   images drawn in code, without a record, or borrowed
 python -m phobos_modkit gate --root ..         this repository's checks before a commit; only what failed
+python -m phobos_modkit gate --verify-staged    the commit guard: were the staged files checked by a passing run?
 python -m phobos_modkit manifest               every command, its options and what it reads or changes
 ```
 
@@ -99,7 +102,7 @@ in order of expected saving.
 | 18 | [Textures](docs/rimworld-textures.md) (RimWorld) | Whether every active mod's encoded textures match its pictures (a stale one shows the old picture), and encoding those that don't with RimSort's own todds preset, on request | Python, with RimSort's todds | Built: 1.21.0 |
 | 17 | [Installs](docs/installs.md) | Each mod's installed copy, the repository's and every backup, and what moving between them gains or loses by their changelogs; backs up, goes back to a backup, or runs the repository's install, on request | Python | Built: 1.20.0 |
 | 15 | [Art audit](docs/art-audit.md) | Every shipped image with its record and how it was made; images drawn in code or without a record; pictures a Def borrows from another thing or another mod | Python | Built: 1.12.0 |
-| 16 | [Performance in play](docs/rimworld-perf.md) (RimWorld 1.7) | Where the running game spends its time: by part of the game loop, by the mod that caused it, by method, with garbage collection; and whether a change made it faster | Python, with Microsoft's dotnet-trace and dotnet-counters | Built: 1.13.0 |
+| 16 | [Performance in play](docs/rimworld-perf.md) (RimWorld 1.7) | Where the running game spends its time: by part of the game loop, by the mod that caused it, by method, with garbage collection; and whether a change made it faster. Since 1.22.0, where a frozen game is stuck and what holds its memory, by mod | Python, with Microsoft's dotnet-trace, dotnet-counters, dotnet-stack and dotnet-gcdump | Built: 1.13.0, 1.22.0 |
 | 9 | [Workshop publishing](docs/workshop-publishing.md) | Release notes from changelogs, offline staging, the owner-run uploader, pulling Steam's state back | Python | Built: 0.10.0, from phobos-ostranauts |
 
 ## How a repository uses it
@@ -132,7 +135,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/rimworld-perf.md](docs/rimworld-perf.md) | Recording a running RimWorld from outside: what is recorded, how time is put down to mods, and the limits |
 | [docs/rimworld-readiness.md](docs/rimworld-readiness.md) | Which active mods declare a game version, and how closely each depends on the game |
 | [docs/manifest.md](docs/manifest.md) | The JSON envelope every command prints, and the manifest of commands, options and effects |
-| [docs/crash-dump.md](docs/crash-dump.md) | Windows crash dumps: the exception, a call loop that ran away, and what a small dump cannot say |
+| [docs/crash-dump.md](docs/crash-dump.md) | Windows crash dumps: the exception, a call loop that ran away, the methods in a full dump, what a small dump cannot say, and windows-dumps |
 | [docs/cleanup.md](docs/cleanup.md) | Cleanup: the kit's cache, its development build and a repository's own leftovers, previewed before anything is deleted |
 | [docs/test-pass.md](docs/test-pass.md) | The test pass: the repository's evidence map, the seen-in-play notes and verdict files, and what apply writes |
 | [docs/installs.md](docs/installs.md) | Installs: the repository's installs.json, the install record, how gains and losses are read, and what each move does and refuses |

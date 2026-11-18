@@ -26,6 +26,33 @@ python -m phobos_modkit rimworld-perf list                         every recordi
 python -m phobos_modkit rimworld-perf index FILE.speedscope.json --counters FILE.json   a trace recorded by hand
 ```
 
+## Snapshots: a frozen game, and memory (1.22.0)
+
+```text
+python -m phobos_modkit rimworld-perf stack --label "frozen"   3 snapshots of every thread's stack, 2 s apart (--times, --every)
+python -m phobos_modkit rimworld-perf stack-report             the newest again (or name one)
+python -m phobos_modkit rimworld-perf heap --label "day 40"    the managed heap by type and by mod
+python -m phobos_modkit rimworld-perf heap-report              the newest again
+python -m phobos_modkit rimworld-perf heap-compare             the last two heaps (or name two): who grew
+```
+
+- **stack** runs Microsoft's `dotnet-stack report` a few times. It finds the thread running the game's loop (a frame from the
+  named parts or `Verse.Root*`), says whether its stack moved between snapshots, and if it moved, the outer frames that never did:
+  the place to look for a loop that never ends or the same slow work again and again. Then the part of the loop, the innermost mod
+  on its stack (as **Caused by** above), its frames innermost first, and other threads with game or mod code on them. Each snapshot
+  stops the game for a moment; on a small test program one took half a second.
+- **heap** runs `dotnet-gcdump collect`, **which forces a full garbage collection, so the game pauses until it is done**, then its
+  report: one row per type, with its count and the average size of one object, read here as totals. Each type belongs to its
+  module's owner, as frames do. A .NET collection whose generic arguments name a mod's type (`List<Example.Dose>`) counts for that
+  mod, "through" that type. **Memory counts under the type that is it**: the arrays and strings a mod's objects hold count as
+  .NET's. What holds what is in the `.gcdump` file kept beside the report, for PerfView or Visual Studio.
+- **On .NET 10 runtimes dotnet-gcdump warns that it can drop events on a large heap** ("non-lossy buffering requires .NET 11+"),
+  so counts can come out low. The report repeats the warning; trust a difference between heaps that repeats.
+- **A leak is a heap that keeps growing** across several snapshots of the same game minutes apart with the same thing on screen.
+  Two can mislead; take a third.
+- Snapshots are kept in the kit's cache, `rimworld-stacks/` and `rimworld-heaps/`, and listed by `list`; cleanup lists them once a
+  fortnight old.
+
 ## What a recording is
 
 `record` finds the running `RimWorld` process (`--pid` when there are two) and runs, side by side for `--seconds`:

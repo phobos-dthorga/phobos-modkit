@@ -16,7 +16,29 @@ projects. The gate runs a list the repository keeps, finds repeated steps by glo
   them anyway. Steps inside a stage all run.
 - **A step whose program is missing is skipped, and says so** ("requires"), so a machine without Rust can still run
   the Python checks. The report lists what was skipped and why.
-- It runs what it is told to: it never commits, pushes or writes anywhere but the cache.
+- It runs what it is told to: it never commits or pushes, and writes only to the cache and, after a full pass, to its note
+  for the commit guard inside the repository's `.git` folder.
+
+## The commit guard (1.22.0)
+
+A gate that passes is only useful if the commit that follows is the thing it checked. Chained with `&&` it is; piped through
+`tail`, or followed by another edit, it is not (a broken commit went in that way). So:
+
+- **After a full passing run** (no `--only` or `--skip`), the gate notes every file that differs from HEAD, by the blob git
+  would store for it, in `.git/phobos-gate/passes.json` (the last 20 passes). A file that changed while the gate ran is left
+  out, since the gate may have read either version.
+- **`gate --verify-staged`** runs nothing. It exits 0 only when one noted pass saw every staged file exactly as staged; else
+  it names the files and exits 1. A repository makes it its pre-commit hook:
+
+  ```sh
+  #!/bin/sh
+  exec python scripts/check-all.py --verify-staged
+  ```
+
+  and each clone turns hooks on once with `git config core.hooksPath .githooks`.
+- Sessions sharing a tree: one session's failing run does not undo another's earlier pass, and a pass covers any file it
+  saw, whoever commits it. A commit of paths (`git commit -- a b`) is judged on those paths alone, as git stages them.
+- The guard is no stronger than the gate's list: it proves the files were checked, not that the checks are enough.
 
 ## Use
 

@@ -137,7 +137,7 @@ class CommandTests(unittest.TestCase):
 
     def test_a_full_dump_does_not_ask_for_the_error_output(self):
         self.dump.write_bytes(minidump(looping(), full=True))
-        self.assertNotIn("2> errors.txt", self.run_it()[1])
+        self.assertNotIn("2> errors.txt", self.run_it("--no-names")[1])   # naming runs dotnet-dump; test_crash_names covers it
 
     def test_json_is_the_envelope(self):
         code, text = self.run_it("--json")

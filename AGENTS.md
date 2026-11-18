@@ -39,7 +39,9 @@ adapted to a tooling repository. The repository was created on 7 November 2026 a
   runs, and it backs up what it replaces. **One more writer, for textures only** (owner, 18 November 2026, for
   D'thorga Companion): `rimworld-textures encode` writes `.dds` files beside the pictures of the active mods it is
   named, Workshop ones included, with RimSort's own todds preset, only on request and never while the game runs; it
-  never deletes a file. Release and publishing tools write only inside the repository they are run on, and only
+  never deletes a file. **One more, for Windows' crash dump setting** (owner's go-ahead, 18 November 2026): `windows-dumps
+  --apply` and `--off` write only the LocalDumps key of the program named, only on request and from an administrator
+  window; **agents never run them**, the owner does. Release and publishing tools write only inside the repository they are run on, and only
   when asked (`--write`, `--apply`, an upload's records).
 - **Never execute other authors' code.** Assemblies are read through their metadata
   (`System.Reflection.Metadata`), never loaded. Never run another mod's scripts.
@@ -128,6 +130,9 @@ adapted to a tooling repository. The repository was created on 7 November 2026 a
 ## Git, versions and documents
 
 - **Public, MIT** (owner, 7 November 2026). Never change the repository's visibility.
+- **The commit guard** (owner's go-ahead, 18 November 2026): this repository's `.githooks/pre-commit` runs `gate --verify-staged`,
+  which refuses a commit whose staged files no full passing gate run saw exactly so. **After cloning, run
+  `git config core.hooksPath .githooks`.** Never pass `--no-verify`; run the gate and chain the commit on it.
 - Commit and push directly to `main`; no pull requests unless the owner asks. Never force-push or rewrite
   history. Several agent sessions may share a tree: commit explicit paths and leave others' work alone.
 - Versions: a fix raises the last number, new functionality the middle, an incompatible change the first.

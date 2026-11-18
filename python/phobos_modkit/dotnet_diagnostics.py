@@ -1,10 +1,12 @@
-"""Microsoft's .NET diagnostics tools: find or install them, find a running program, and record it.
+"""Microsoft's .NET diagnostics tools: find or install them, find a running program, and record or read it.
 
 `dotnet-trace` samples every managed thread's call stack about once a millisecond and `dotnet-counters` reads the runtime's own
 counters (garbage collection, allocation, JIT, locks), both through the diagnostics pipe a .NET program opens (Microsoft,
-https://learn.microsoft.com/dotnet/core/diagnostics/). They attach from outside: nothing is installed in the program, and they
-detach when the recording ends. The kit installs a pinned version into its own build folder with `dotnet tool install`, so the
-recording does not depend on what else is on the machine. Nothing here names a game.
+https://learn.microsoft.com/dotnet/core/diagnostics/). `dotnet-stack` prints every managed thread's stack once, through the same
+pipe; `dotnet-gcdump` forces a full garbage collection and writes what the managed heap holds, by type; `dotnet-dump` reads a
+dump file. They attach from outside: nothing is installed in the program, and they detach when they finish. The kit installs a
+pinned version into its own build folder with `dotnet tool install`, so nothing depends on what else is on the machine. Nothing
+here names a game.
 """
 from __future__ import annotations
 
@@ -20,9 +22,14 @@ from . import native
 
 TOOLS_VERSION = "10.0.750501"      # Microsoft's release of 2026; the version the tool was built and checked against
 TRACE, COUNTERS = "dotnet-trace", "dotnet-counters"
+STACK, GCDUMP, DUMP = "dotnet-stack", "dotnet-gcdump", "dotnet-dump"
+RECORDING = (TRACE, COUNTERS)
 TOOLS_ENV = "PHOBOS_DOTNET_TOOLS"   # a folder holding both programs, instead of the kit's own copy
 SPEEDSCOPE_SUFFIX = ".speedscope.json"
 STOP_GRACE_SECONDS = 600           # dotnet-trace converts the trace after recording; its own message warns this can take minutes
+STACK_SECONDS = 120                # one snapshot of every thread's stack; half a second on a small program (seen 18 November 2026)
+GCDUMP_SECONDS = 1800              # a full garbage collection of a large heap, then walking it
+DUMP_SECONDS = 1800                # opening a dump as large as a program's memory, then the commands
 
 
 class DiagnosticsError(RuntimeError):
@@ -43,12 +50,12 @@ def tool_path(name, environ=None, which=shutil.which):
     return Path(found) if found else None
 
 
-def install_tools(environ=None, run=subprocess.run, which=shutil.which):
-    """Install both tools at TOOLS_VERSION into the kit's tools folder. Raises DiagnosticsError without the .NET SDK."""
+def install_tools(environ=None, run=subprocess.run, which=shutil.which, names=RECORDING):
+    """Install the named tools at TOOLS_VERSION into the kit's tools folder. Raises DiagnosticsError without the .NET SDK."""
     if run is subprocess.run and which("dotnet") is None:
         raise DiagnosticsError("The .NET SDK is not installed; install .NET 10 or newer from https://dotnet.microsoft.com first.")
     folder = tools_folder(environ)
-    for name in (TRACE, COUNTERS):
+    for name in names:
         command = ["dotnet", "tool", "update" if (folder / native.program_name(name)).is_file() else "install", name,
                    "--version", TOOLS_VERSION, "--tool-path", str(folder)]
         result = run(command, capture_output=True, text=True, check=False)
@@ -57,17 +64,82 @@ def install_tools(environ=None, run=subprocess.run, which=shutil.which):
     return folder
 
 
+def ensure(names, environ=None, run=subprocess.run, which=shutil.which):
+    """({name: program} for the tools named, installing the missing ones first; whether it installed any)."""
+    found = {name: tool_path(name, environ, which) for name in names}
+    missing = [name for name, program in found.items() if program is None]
+    if missing:
+        install_tools(environ, run, which, missing)
+        found = {name: tool_path(name, environ, which) for name in names}
+    still = [name for name, program in found.items() if program is None]
+    if still:
+        raise DiagnosticsError(f"{' and '.join(still)} could not be found after installing them in {tools_folder(environ)}.")
+    return found, bool(missing)
+
+
 def ensure_tools(environ=None, run=subprocess.run, which=shutil.which):
     """(trace program, counters program), installing them first when either is missing. Returns also whether it installed."""
-    trace, counters = tool_path(TRACE, environ, which), tool_path(COUNTERS, environ, which)
-    installed = False
-    if trace is None or counters is None:
-        install_tools(environ, run, which)
-        installed = True
-        trace, counters = tool_path(TRACE, environ, which), tool_path(COUNTERS, environ, which)
-    if trace is None or counters is None:
-        raise DiagnosticsError(f"{TRACE} and {COUNTERS} could not be found after installing them in {tools_folder(environ)}.")
-    return trace, counters, installed
+    found, installed = ensure(RECORDING, environ, run, which)
+    return found[TRACE], found[COUNTERS], installed
+
+
+def _completed(command, run, seconds, what):
+    try:
+        return run([str(part) for part in command], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                   check=False, timeout=seconds, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired as late:
+        raise DiagnosticsError(f"{what} did not finish within {seconds} s.") from late
+    except OSError as failed:
+        raise DiagnosticsError(f"{what} could not be started: {failed}") from failed
+
+
+def _output(command, run, seconds, what):
+    """A tool's standard output, or DiagnosticsError with the end of what it said when it failed or ran too long."""
+    result = _completed(command, run, seconds, what)
+    if result.returncode != 0:
+        raise DiagnosticsError(f"{what} failed (exit {result.returncode}):\n{(result.stdout or '')[-1500:]}{(result.stderr or '')[-1500:]}")
+    return result.stdout or ""
+
+
+def stack_text(pid, tool, run=subprocess.run):
+    """dotnet-stack's report of every managed thread's stack in a running program, as it printed it."""
+    return _output([tool, "report", "-p", pid], run, STACK_SECONDS, "dotnet-stack")
+
+
+def collect_gcdump(pid, file, tool, run=subprocess.run):
+    """Write a running program's heap to file with dotnet-gcdump; return the warnings the tool printed.
+
+    The tool forces a full garbage collection first, so the program pauses until it is done.
+    """
+    file = Path(file)
+    file.parent.mkdir(parents=True, exist_ok=True)
+    text = _output([tool, "collect", "-p", pid, "-o", file], run, GCDUMP_SECONDS, "dotnet-gcdump")
+    if not file.is_file():
+        raise DiagnosticsError(f"dotnet-gcdump finished but wrote no file at {file}.\n{text[-1500:]}")
+    return [line.strip() for line in text.splitlines() if line.strip().lower().startswith("warning")]
+
+
+def gcdump_text(file, tool, run=subprocess.run):
+    """dotnet-gcdump's table of a heap file: one row per type, with its size and count."""
+    return _output([tool, "report", file], run, STACK_SECONDS, "dotnet-gcdump report")
+
+
+def _analyze(dump, commands, tool):
+    command = [tool, "analyze", dump]
+    for text in list(commands) + ["exit"]:
+        command += ["-c", text]
+    return command
+
+
+def dump_commands(dump, commands, tool, run=subprocess.run):
+    """What dotnet-dump's analyser printed for the commands, run in order on one dump file."""
+    return _output(_analyze(dump, commands, tool), run, DUMP_SECONDS, "dotnet-dump")
+
+
+def dump_commands_status(dump, commands, tool, run=subprocess.run):
+    """(exit code, what it printed): dotnet-dump stops at the first command that fails and exits 1, keeping what came before."""
+    result = _completed(_analyze(dump, commands, tool), run, DUMP_SECONDS, "dotnet-dump")
+    return result.returncode, (result.stdout or "") + (result.stderr or "")
 
 
 def find_processes(name, run=subprocess.run, platform=None):

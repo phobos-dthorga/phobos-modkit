@@ -32,8 +32,9 @@ class FileTests(unittest.TestCase):
             for folder in (installed, repository):
                 write(folder / "About" / "About.xml", "<a/>", 1000)
                 write(folder / "Common" / "Defs" / "Same.xml", "<Defs/>", 1000)
-            write(installed / "Common" / "Defs" / "Things.xml", "<Defs>old</Defs>")
-            write(repository / "Common" / "Defs" / "Things.xml", "<Defs>new</Defs>")
+            # The same size; times apart, so the comparison never takes them for the same file by size and time alone.
+            write(installed / "Common" / "Defs" / "Things.xml", "<Defs>old</Defs>", 1000)
+            write(repository / "Common" / "Defs" / "Things.xml", "<Defs>new</Defs>", 2000)
             write(repository / "Common" / "Textures" / "Boat.png", "png")
             write(installed / "Common" / "Textures" / "Old.png", "png")
             write(installed / "Common" / "Textures" / "Old.dds", "dds")

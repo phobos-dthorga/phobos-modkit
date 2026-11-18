@@ -4,6 +4,28 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-11-18
+
+The owner's go-ahead for two of the tools proposed that day (18 November 2026): readers for a game that hangs, holds too much memory or crashes, and a guard that refuses a commit the gate has not passed. A gate piped through tail had once lost its exit code and let a broken commit in.
+
+### Added
+
+- rimworld-perf stack: a few snapshots of every thread's stack in the running game (Microsoft's dotnet-stack), a moment apart. It finds the thread running the game's loop, says whether it moved between snapshots and which frames never did, names the part of the loop and the innermost mod on its stack, and lists other threads with game or mod code on them. stack-report reads them again.
+- rimworld-perf heap: what the game's managed heap holds, by type and by the mod each type belongs to (Microsoft's dotnet-gcdump, which forces a full garbage collection first). A .NET collection whose generic arguments name a mod's type counts for that mod. heap-report reads one again; heap-compare sets two side by side, who grew and which types. The .gcdump file is kept for PerfView or Visual Studio.
+- crash-dump names the methods in a dump that holds the full memory of a .NET program: the loop's return addresses, the calls beyond it and those where the stack ran out, through Microsoft's dotnet-dump, with each method's assembly. --no-names skips it. Checked on a stack overflow of a small test program: it named the same method and caller as .NET's own error output.
+- windows-dumps: whether Windows keeps full crash dumps of one program, the PowerShell lines that ask it to, and --apply or --off to do it from an administrator window. Only that program's own key is written.
+- The gate's commit guard: a full passing run (no --only or --skip) notes, in the repository's .git folder, the content of every changed file it saw unchanged from start to end; gate --verify-staged, run from a pre-commit hook, refuses a commit whose staged files no single passing run saw exactly so. A failing run, a narrowed run or an edit after the pass is refused; another session's failing run leaves an earlier pass standing.
+- dotnet_diagnostics installs and runs dotnet-stack, dotnet-gcdump and dotnet-dump beside dotnet-trace and dotnet-counters, each at the pinned version and only when first needed; dotnet_snapshots reads their text.
+
+### Fixed
+
+- crash-dump read the wrong bytes as the stack in a dump .NET writes itself (createdump): its thread record points to no stack, which is kept in the full memory list instead. It now looks there, and a stack overflow's loop is found.
+- A test of installs status could fail by timing: two files of the same size written in the same clock tick were taken for the same file. The test now gives them different times.
+
+### Changed
+
+- The kit's rules allow one more writer, for Windows' crash dump setting only: windows-dumps --apply and --off write the one LocalDumps key of the program named, on request, from an administrator window.
+
 ## [1.21.0] - 2026-11-18
 
 The owner's four asks for D'thorga Companion's Mods page (18 November 2026): compile as needed, refresh after, see before and after ahead of a compile, and know whether textures need encoding before the next launch, Workshop mods included. Their picks: check and fix textures, a build button plus installing everything that changed, all four before-and-after extras, and a "before you play" strip.

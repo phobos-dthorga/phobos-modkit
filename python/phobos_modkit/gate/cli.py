@@ -7,8 +7,11 @@ from pathlib import Path
 import sys
 import time
 
+import subprocess
+
 from .. import cache
 from ..report import Bullets, Code, Report, Table, envelope_text, home_redactor, render_markdown
+from . import stamp
 from .runner import CONFIG, GateError, load, run, select
 from ..manifest import RUNS
 
@@ -27,6 +30,8 @@ def build_parser():
     parser.add_argument("--jobs", type=int, default=min(4, os.cpu_count() or 1), help="lanes run at once (default up to 4)")
     parser.add_argument("--keep-going", action="store_true", help="run later stages even when a stage failed")
     parser.add_argument("--list", action="store_true", help="show the steps, expanded, without running them")
+    parser.add_argument("--verify-staged", action="store_true",
+                        help="run nothing: exit 0 only when a full passing run saw every staged file as it is staged (a pre-commit hook)")
     parser.add_argument("--verbose", action="store_true", help="list every step, not only the failed ones")
     parser.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
     parser.add_argument("--no-redact", action="store_true", help="show the home folder instead of ~")
@@ -89,7 +94,27 @@ def result_report(results, seconds, verbose=False):
     return report
 
 
-def main(argv=None, out=None, environ=None, runner=None, which=None):
+REFUSED = ("**Commit refused: the gate has not passed on these files as they are staged.** Run the gate and chain the commit on "
+           "it (`gate && git commit ...`). A run narrowed with --only or --skip does not count.")
+
+
+def verify_report(root, git):
+    """(report, exit code) for --verify-staged."""
+    try:
+        covered, missing, when = stamp.verify(root, git)
+    except stamp.StampError as error:
+        return Report("Gate: cannot check the commit", [str(error)]), EXIT_FAILED
+    if covered:
+        return Report("Gate: commit covered", [f"A passing run{' at ' + when if when else ''} checked every staged file."
+                                                if when else "Nothing staged."]), EXIT_OK
+    report = Report("Gate: commit refused", [REFUSED])
+    report.lines.append(f"The newest passing run was at {when}." if when else "No passing run is noted in this clone yet.")
+    report.section("Staged files no passing run saw like this", Bullets(missing[:20] + ([f"... and {len(missing) - 20} more"]
+                                                                                         if len(missing) > 20 else [])))
+    return report, EXIT_FAILED
+
+
+def main(argv=None, out=None, environ=None, runner=None, which=None, git=subprocess.run):
     out = out or sys.stdout
     parser = build_parser()
     try:
@@ -99,6 +124,10 @@ def main(argv=None, out=None, environ=None, runner=None, which=None):
     root = Path(args.root or ".").resolve()
     environ = os.environ if environ is None else environ
     redact = None if args.no_redact else home_redactor()
+    if args.verify_staged:
+        report, code = verify_report(root, git)
+        print(envelope_text("gate", report, redact) if args.json else render_markdown(report, redact), file=out)
+        return code
     options = {}
     if runner is not None:
         options["runner"] = runner
@@ -111,16 +140,36 @@ def main(argv=None, out=None, environ=None, runner=None, which=None):
         if args.list:
             report, code = list_report(stages), EXIT_OK
         else:
+            full = not (args.only or args.skip)
+            before = _state(root, git) if full else None
             started = time.monotonic()
             logs = cache.folder("gate-logs", environ=environ) / root.name
             results = run(stages, root, environ, args.jobs, args.keep_going, logs, **options)
             report = result_report(results, time.monotonic() - started, args.verbose)
             code = EXIT_FAILED if any(r.state == "failed" for r in results) else EXIT_OK
+            if code == EXIT_OK and before is not None:
+                after = _state(root, git)
+                try:
+                    if after is not None:
+                        noted = stamp.record(root, before, after, git)
+                        report.lines.append(f"Noted for the commit guard: {noted} changed files as checked.")
+                except (stamp.StampError, OSError) as error:
+                    report.lines.append(f"Could not note this pass for the commit guard: {error}")
     except GateError as error:
         report, code = Report("Gate: error", [str(error)]), EXIT_USAGE
     print(envelope_text("gate", report, redact) if args.json
           else render_markdown(report, redact), file=out)
     return code
+
+
+def _state(root, git):
+    """The working tree's changed files, or None when root is not the top of a git repository (the guard has nothing to note)."""
+    try:
+        if not stamp.is_top(root, git):
+            return None
+        return stamp.working_state(root, git)
+    except stamp.StampError:
+        return None
 
 
 MANIFEST = {"game": None, "parser": build_parser, "effect": RUNS,

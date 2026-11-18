@@ -69,6 +69,9 @@ class DumpSummary:
     runtime: str | None
     loop: Loop | None
     code_modules: list = field(default_factory=list)    # (module or None, return-address-like words)
+    thread_named: bool = True                           # False when the dump names no failing thread and the first was read
+    inner_addresses: list = field(default_factory=list) # (address, module or None): distinct code-like words, innermost first
+    outer_addresses: list = field(default_factory=list) # the same beyond a loop (or the whole stack), outermost first
 
     @property
     def exception_name(self):
@@ -103,18 +106,41 @@ def _modules(view, streams):
     return modules
 
 
+def _in_memory64(view, streams, address, size):
+    """Where in the file a full dump keeps the memory at address, or None. Memory64 holds every range back to back."""
+    if STREAM_MEMORY64 not in streams:
+        return None
+    _, rva = streams[STREAM_MEMORY64]
+    count, offset = struct.unpack_from("<QQ", view, rva)
+    for i in range(count):
+        start, length = struct.unpack_from("<QQ", view, rva + 16 + i * 16)
+        if start <= address and address + size <= start + length:
+            return offset + (address - start)
+        offset += length
+    return None
+
+
 def _stack_of(view, streams, thread_id):
-    """The faulting thread's stack as (start address, words); the first thread when the dump names none."""
+    """The faulting thread's stack as (thread ID, start address, words); the first thread when the dump names none.
+
+    A dump .NET writes itself (createdump) leaves the thread's own pointer to its stack at 0 and keeps the stack in the full
+    memory list instead (seen 18 November 2026), so the stack is found there by its address.
+    """
     if STREAM_THREADS not in streams:
-        return 0, ()
+        return thread_id, 0, ()
     _, rva = streams[STREAM_THREADS]
     count = struct.unpack_from("<I", view, rva)[0]
     for i in range(count):
         at = rva + 4 + i * THREAD_SIZE
-        if thread_id is None or struct.unpack_from("<I", view, at)[0] == thread_id:
+        this = struct.unpack_from("<I", view, at)[0]
+        if thread_id is None or this == thread_id:
             start, size, data = struct.unpack_from("<QII", view, at + 24)
-            return start, struct.unpack_from(f"<{size // WORD}Q", view, data)
-    return 0, ()
+            if data == 0 or data + size > len(view):
+                data = _in_memory64(view, streams, start, size)
+                if data is None:
+                    return this, start, ()
+            return this, start, struct.unpack_from(f"<{size // WORD}Q", view, data)
+    return thread_id, 0, ()
 
 
 def find_loop(words, is_code=lambda value: CODE_LOW <= value < CODE_HIGH):
@@ -188,12 +214,92 @@ def _summarise(path, view):
         i = bisect.bisect_right(starts, value) - 1
         return modules[i][2] if i >= 0 and modules[i][0] <= value < modules[i][1] else None
 
-    _, words = _stack_of(view, streams, thread_id)
+    named = thread_id is not None
+    thread_id, _, words = _stack_of(view, streams, thread_id)
     tally = Counter(module_of(w) for w in words if CODE_LOW <= w < CODE_HIGH)
     names = {m[2].lower() for m in modules}
     runtime = next((name for name in RUNTIMES if name in names), None)
+    loop = find_loop(words)
+    inner, outer = _around_loop(words, loop)
+
+    def compiled(value):   # code a runtime compiled, outside every image: where a .NET program's own methods run
+        return CODE_LOW <= value < CODE_HIGH and module_of(value) is None
     return DumpSummary(path, len(view), timestamp, bool(flags & FLAG_FULL_MEMORY), code, address, thread_id, len(words) * WORD, len(modules), runtime,
-                       find_loop(words), sorted(tally.items(), key=lambda item: (-item[1], item[0] or "")))
+                       loop, sorted(tally.items(), key=lambda item: (-item[1], item[0] or "")), named,
+                       [(w, None) for w in _distinct_code(inner, INNER_ADDRESSES, compiled)],
+                       [(w, None) for w in _distinct_code(reversed(outer), OUTER_ADDRESSES, compiled)])
+
+
+INNER_ADDRESSES, OUTER_ADDRESSES = 10, 25
+
+
+def _around_loop(words, loop):
+    """(the words inside a loop's first level, innermost first; the words beyond its last level, innermost first).
+
+    With no loop, (the whole stack, the whole stack)."""
+    if loop is None or not loop.return_addresses:
+        return list(words), list(words)
+    marker = loop.return_addresses[0][1]
+    first = words.index(marker)
+    last = len(words) - 1 - list(reversed(words)).index(marker)
+    return list(words[:first]), list(words[last + loop.spacing_words:])
+
+
+def _distinct_code(words, limit, is_code=lambda value: CODE_LOW <= value < CODE_HIGH):
+    seen = []
+    for value in words:
+        if is_code(value) and value not in seen:
+            seen.append(value)
+            if len(seen) >= limit:
+                break
+    return seen
+
+
+# ---- Naming addresses with dotnet-dump, from a dump that holds the full memory ----
+
+def parse_ip2md(text):
+    """[(method, module address)] for each address dotnet-dump's ip2md named, in order; and whether it stopped on a failure."""
+    named, method, failed = [], None, False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("Method Name:"):
+            method = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("Module:") and method is not None:
+            named.append((method, stripped.split(":", 1)[1].strip()))
+            method = None
+        elif stripped.startswith(("Failed", "Error", "Unknown", "Invalid")):
+            failed = True
+    return named, failed
+
+
+def parse_dumpmodule(text):
+    """[module file path] for each dumpmodule answer, in order."""
+    return [line.split(":", 1)[1].strip() for line in text.splitlines() if line.startswith("Name:")]
+
+
+def name_addresses(dump, addresses, tool, run=None):
+    """{address: (method, module file or "")} for the addresses dotnet-dump can name in a full dump.
+
+    dotnet-dump stops at the first command that fails (an address in no compiled method), so the addresses go in order, and after
+    a failure the rest are asked again without the one that failed.
+    """
+    from . import dotnet_diagnostics as dd
+    run = run or dd.subprocess.run
+    pending, found = list(addresses), {}
+    while pending:
+        _, text = dd.dump_commands_status(dump, [f"ip2md 0x{a:X}" for a in pending], tool, run)
+        named, failed = parse_ip2md(text)
+        for address, (method, module) in zip(pending, named):
+            found[address] = (method, module)
+        if not failed or len(named) >= len(pending):
+            break
+        pending = pending[len(named) + 1:]
+    modules = sorted({module for _, module in found.values()})
+    paths = {}
+    if modules:
+        _, text = dd.dump_commands_status(dump, [f"dumpmodule {m}" for m in modules], tool, run)
+        paths = dict(zip(modules, parse_dumpmodule(text)))
+    return {address: (method, paths.get(module, "")) for address, (method, module) in found.items()}
 
 
 def newest_dump(folder, program=None):

@@ -1,16 +1,22 @@
-"""rimworld-perf: where a running RimWorld spends its time, by mod, by method and by part of the main loop, from outside the game.
+"""rimworld-perf: where a running RimWorld spends its time and memory, by mod, by method and by part of the main loop, from outside.
 
     rimworld-perf record                     record the running game for 30 seconds, then report it
     rimworld-perf record --seconds 60 --label "many wounded"
     rimworld-perf report                     the newest recording again (or name one: 20261117-1845, or its label)
     rimworld-perf mod "Combat Extended"      one mod in a recording: its busiest methods and where its time went
     rimworld-perf compare                    the last two recordings, as shares of the main thread and of ticking
-    rimworld-perf list                       every recording kept
+    rimworld-perf list                       every recording and snapshot kept
     rimworld-perf index FILE.speedscope.json [--counters FILE.json]   a trace recorded by hand
+    rimworld-perf stack --label "frozen"     a frozen or stuck game: every thread's stack, 3 times, 2 s apart
+    rimworld-perf stack-report               the newest stack snapshots again
+    rimworld-perf heap --label "day 40"      what holds the game's memory, by type and by mod
+    rimworld-perf heap-report                the newest heap again
+    rimworld-perf heap-compare               the last two heaps: who grew
 
-Recording attaches Microsoft's dotnet-trace and dotnet-counters to the game through its .NET diagnostics pipe: nothing is
-installed in the game and nothing of the game is changed. The first recording installs both tools (a pinned version) into the kit's
-build folder, which needs the .NET SDK. Recordings stay in the kit's cache, outside every repository.
+Recording attaches Microsoft's dotnet-trace and dotnet-counters to the game through its .NET diagnostics pipe; stack uses
+dotnet-stack and heap dotnet-gcdump the same way. Nothing is installed in the game and nothing of it is changed, but heap forces a
+full garbage collection, which pauses the game until it is done. The first use of each tool installs it (a pinned version) into the
+kit's build folder, which needs the .NET SDK. Everything is kept in the kit's cache, outside every repository.
 """
 from __future__ import annotations
 
@@ -24,17 +30,20 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import time
 
 from ... import __version__
 from ... import cache as derived
 from ... import dotnet_diagnostics as dd
+from ...dotnet_snapshots import SnapshotError
 from ...manifest import READS, RUNS
 from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
 from ...sampling import CPU, MOD, UNKNOWN, Recording, SamplingError, index_speedscope, modules, read_counters, write_counters, write_owners
-from . import paths, perf
+from . import perf
+from . import perf_snapshots as snap
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
-REPORTS = ("report", "record", "index", "mod", "compare", "list")
+REPORTS = ("report", "record", "index", "mod", "compare", "list", "stack", "stack-report", "heap", "heap-report", "heap-compare")
 CACHE_FOLDER = "rimworld-perf"
 INDEX_NAME = "index.sqlite"
 DEFAULT_SECONDS = 30
@@ -84,7 +93,24 @@ def _parser():
     k = sub.add_parser("compare", parents=[common], help="two recordings, as shares of the main thread and of ticking")
     k.add_argument("first", nargs="?", help="the earlier recording; the second newest when both are left out")
     k.add_argument("second", nargs="?", help="the later recording; the newest when both are left out")
-    sub.add_parser("list", parents=[common], help="every recording kept")
+    sub.add_parser("list", parents=[common], help="every recording and snapshot kept")
+    s = sub.add_parser("stack", parents=[common], help="a frozen or stuck game: every thread's stack, a few times")
+    s.add_argument("--times", type=int, default=snap.DEFAULT_TIMES, help=f"how many snapshots (default {snap.DEFAULT_TIMES})")
+    s.add_argument("--every", type=float, default=snap.DEFAULT_EVERY, help=f"seconds between them (default {snap.DEFAULT_EVERY:g})")
+    s.add_argument("--label", help="a few words to find the snapshots by, such as what the game was doing")
+    s.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
+    s.add_argument("--frames", type=int, default=snap.DEFAULT_FRAMES, help=f"frames of the main thread shown (default {snap.DEFAULT_FRAMES})")
+    sr = sub.add_parser("stack-report", parents=[common], help="stack snapshots taken earlier")
+    sr.add_argument("snapshot", nargs="?", help="its ID (its start is enough) or label; the newest when left out")
+    sr.add_argument("--frames", type=int, default=snap.DEFAULT_FRAMES, help=f"frames of the main thread shown (default {snap.DEFAULT_FRAMES})")
+    h = sub.add_parser("heap", parents=[common], help="what holds the game's memory, by type and by mod (pauses the game)")
+    h.add_argument("--label", help="a few words to find the heap by, such as the in-game day")
+    h.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
+    hr = sub.add_parser("heap-report", parents=[common], help="a heap taken earlier")
+    hr.add_argument("snapshot", nargs="?", help="its ID (its start is enough) or label; the newest when left out")
+    hc = sub.add_parser("heap-compare", parents=[common], help="two heaps: who grew")
+    hc.add_argument("first", nargs="?", help="the earlier heap; the second newest when both are left out")
+    hc.add_argument("second", nargs="?", help="the later heap; the newest when both are left out")
     return p
 
 
@@ -147,27 +173,19 @@ def new_folder(root, label, now):
     return folder
 
 
+def _owners(names, args, environ, settings_file):
+    return perf.module_owners(names, args.game, args.workshop, args.config, environ, settings_file)
+
+
 def build_index(folder, speedscope, counters_file, meta, args, environ, settings_file):
     """Index a trace into folder, record who owns each module against today's mod list, and add the counters. Returns notes."""
     index = Path(folder) / INDEX_NAME
     index_speedscope(speedscope, index, meta)
-    notes = []
-    game = config = workshop = None
-    try:
-        game = paths.game_path(args.game, environ, settings_file)
-        workshop = paths.workshop_path(game, args.workshop, environ, settings_file)
-        config = paths.config_path(args.config, environ, settings_file)
-        mod_owners, shared = perf.active_mod_assemblies(game, workshop, config)
-        if shared:
-            notes.append(f"{len(shared)} assembly names are shipped by more than one active mod; each counts for the first in load order.")
-    except Exception as error:  # best effort: a report without mod names beats no report
-        mod_owners = {}
-        notes.append(f"The mod list could not be read ({error}), so no time is put down to a mod.")
-    owners = perf.classify(modules(index), perf.install_assemblies(game), mod_owners)
+    owners, notes = _owners(modules(index), args, environ, settings_file)
     write_owners(index, owners)
     write_counters(index, read_counters(counters_file) if counters_file else {})
     with closing(sqlite3.connect(index)) as conn:
-        derived.write_meta(conn, {"notes": "\n".join(notes), "mods_matched": len(mod_owners)})
+        derived.write_meta(conn, {"notes": "\n".join(notes), "mods_matched": sum(1 for owner in owners.values() if owner.kind == MOD)})
         conn.commit()
     return notes
 
@@ -359,17 +377,21 @@ def list_report(root):
 
 # ---- Running ----
 
+def _pid(args, run, missing):
+    if args.pid is not None:
+        return args.pid
+    running = dd.find_processes(perf.PROCESS_NAME, run)
+    if not running:
+        raise PerfError(missing)
+    if len(running) > 1:
+        raise PerfError("More than one RimWorld is running (" + ", ".join(str(p) for p, _ in running) + "); name one with --pid.")
+    return running[0][0]
+
+
 def _record(args, root, environ, settings_file, run, popen, now):
     if not MIN_SECONDS <= args.seconds <= MAX_SECONDS:
         raise PerfError(f"--seconds must be between {MIN_SECONDS} and {MAX_SECONDS}.")
-    pid = args.pid
-    if pid is None:
-        running = dd.find_processes(perf.PROCESS_NAME, run)
-        if not running:
-            raise PerfError("RimWorld is not running. Start it, load the save, unpause at the speed that feels slow, then record.")
-        if len(running) > 1:
-            raise PerfError("More than one RimWorld is running (" + ", ".join(str(p) for p, _ in running) + "); name one with --pid.")
-        pid = running[0][0]
+    pid = _pid(args, run, "RimWorld is not running. Start it, load the save, unpause at the speed that feels slow, then record.")
     trace_tool, counters_tool, installed = dd.ensure_tools(environ, run)
     folder = new_folder(root, args.label, now)
     speedscope, counters_file, notes = dd.record(pid, args.seconds, folder, trace_tool, counters_tool, popen)
@@ -399,7 +421,56 @@ def _index(args, root, environ, settings_file, now):
     return folder, notes
 
 
-def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.run, popen=subprocess.Popen, now=None):
+def _snapshots(args, environ, settings_file, run, now, sleep):
+    """The report for stack, stack-report, heap, heap-report and heap-compare."""
+    stacks_root, heaps_root = snap.roots(args.cache, environ, settings_file)
+    notes = []
+    if args.report == "stack":
+        pid = _pid(args, run, "RimWorld is not running. A stack snapshot needs the game open, frozen or not.")
+        found, installed = dd.ensure([dd.STACK], environ, run)
+        if installed:
+            notes.append(f"Installed dotnet-stack {dd.TOOLS_VERSION} into {dd.tools_folder(environ)} first.")
+        folder = snap.new_folder(stacks_root, args.label, now)
+        try:
+            snap.take_stacks(pid, folder, found[dd.STACK], args.times, args.every, run, sleep, now, args.label)
+        except Exception:
+            shutil.rmtree(folder, ignore_errors=True)
+            raise
+    if args.report in ("stack", "stack-report"):
+        folder = folder if args.report == "stack" else snap.find(stacks_root, args.snapshot, "stack snapshots")
+        meta, snapshots = snap.read_stacks(folder)
+        names = sorted({f.module for snapshot in snapshots for s in snapshot for f in s.frames if f.module})
+        owners, more = _owners(names, args, environ, settings_file)
+        return snap.stack_report(folder, meta, snapshots, owners, notes + more, args.frames, args.top)
+    if args.report == "heap":
+        pid = _pid(args, run, "RimWorld is not running. Load the save you want to measure first.")
+        found, installed = dd.ensure([dd.GCDUMP], environ, run)
+        if installed:
+            notes.append(f"Installed dotnet-gcdump {dd.TOOLS_VERSION} into {dd.tools_folder(environ)} first.")
+        folder = snap.new_folder(heaps_root, args.label, now)
+        try:
+            snap.take_heap(pid, folder, found[dd.GCDUMP], run, now, args.label)
+        except Exception:
+            shutil.rmtree(folder, ignore_errors=True)
+            raise
+    if args.report in ("heap", "heap-report"):
+        folder = folder if args.report == "heap" else snap.find(heaps_root, args.snapshot, "heaps")
+        meta, heap = snap.read_heap(folder)
+        owners, more = _owners(sorted({t.module for t in heap.types}), args, environ, settings_file)
+        return snap.heap_report(folder, meta, heap, owners, notes + more, args.top)
+    if bool(args.first) != bool(args.second):
+        raise PerfError("Name two heaps, or none for the last two.")
+    kept = snap.kept(heaps_root)
+    if not args.first and len(kept) < 2:
+        raise PerfError("Fewer than two heaps are kept, so there is nothing to compare.")
+    first = snap.find(heaps_root, args.first, "heaps") if args.first else kept[-2]
+    second = snap.find(heaps_root, args.second, "heaps") if args.second else kept[-1]
+    (_, before), (_, after) = snap.read_heap(first), snap.read_heap(second)
+    owners, _ = _owners(sorted({t.module for t in before.types} | {t.module for t in after.types}), args, environ, settings_file)
+    return snap.heap_compare((first.name, second.name), before, after, owners, args.top)
+
+
+def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.run, popen=subprocess.Popen, now=None, sleep=time.sleep):
     out = out or sys.stdout
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or (argv[0] not in REPORTS and argv[0] not in ("-h", "--help")):
@@ -415,6 +486,9 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
     try:
         if args.report == "list":
             report = list_report(root)
+            snap.list_sections(report, *snap.roots(args.cache, environ, settings_file))
+        elif args.report in ("stack", "stack-report", "heap", "heap-report", "heap-compare"):
+            report = _snapshots(args, environ, settings_file, run, now or datetime.now(), sleep)
         elif args.report == "compare":
             if bool(args.first) != bool(args.second):
                 raise PerfError("Name two recordings, or none for the last two.")
@@ -439,21 +513,31 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
             for note in notes:
                 if note not in report.lines:
                     report.lines.insert(1, note)
-    except (PerfError, SamplingError, dd.DiagnosticsError) as error:
+    except (PerfError, SamplingError, SnapshotError, snap.SnapshotsError, dd.DiagnosticsError) as error:
         report, code = Report("rimworld-perf: error", [str(error)]), EXIT_FAILED
     print(envelope_text("rimworld-perf", report, redact) if args.json else render_markdown(report, redact), file=out)
     return code
 
 
 CACHE_POLICIES = [{"folder": CACHE_FOLDER,
-                   "aged": "a recording of the game, unchanged for {days} days; it cannot be made again, so compare against it first if it matters"}]
+                   "aged": "a recording of the game, unchanged for {days} days; it cannot be made again, so compare against it first if it matters"},
+                  {"folder": snap.STACKS_FOLDER,
+                   "aged": "stack snapshots of the game, {days} days old; they cannot be taken again"},
+                  {"folder": snap.HEAPS_FOLDER,
+                   "aged": "a heap snapshot of the game, {days} days old; it cannot be taken again, so compare against it first if memory matters"}]
 
 MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
-            "note": "Recording attaches Microsoft's dotnet-trace and dotnet-counters to the running game; it changes nothing in it.",
+            "note": "Attaches Microsoft's dotnet-trace, dotnet-counters, dotnet-stack or dotnet-gcdump to the running game; it changes nothing in it.",
             "reports": {
     "report": {"question": "Where does my game spend its time, and which mods cause it?"},
     "record": {"effect": RUNS, "question": "What is my running game doing right now?"},
     "index": {"question": "What does a trace I recorded by hand say?"},
     "mod": {"question": "What does one mod cost while the game runs?"},
     "compare": {"question": "Did a change make the game faster?"},
+    "stack": {"effect": RUNS, "question": "My game froze: where is it stuck, and whose code is it?"},
+    "stack-report": {"question": "What did the stack snapshots show?"},
+    "heap": {"effect": RUNS, "question": "What is holding my game's memory, and which mods?",
+             "note": "Forces a full garbage collection: the game pauses until it is done."},
+    "heap-report": {"question": "What did a heap snapshot show?"},
+    "heap-compare": {"question": "Is my game's memory growing, and whose?"},
 }}
