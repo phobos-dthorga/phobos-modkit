@@ -15,6 +15,8 @@ questions in a short summary instead of a long read. One shared home for code th
   [startup sessions](docs/rimworld-startup.md), [the readiness scan](docs/rimworld-readiness.md) and [the target check](docs/rimworld-targets.md).
 - **rimworld-archive (1.15.0) keeps every version of the game's assembly and of the mods a project ties into**, outside the
   cache, so two builds can be compared after Steam has replaced the older one. See [rimworld-archive](docs/rimworld-archive.md).
+- **rimworld-code (1.49.0) shows another author's code to a program**: a type's or member's source from its public clone or a
+  decompile, which assembly declares it, and a decompile on request. See [rimworld-code](docs/rimworld-code.md).
 - **rimworld-sources (1.16.0) finds where each tied mod's public source lives**, checking each repository's About.xml against
   the mod's package ID, keyless and paced. See [rimworld-sources](docs/rimworld-sources.md).
 - **rimworld-perf (1.13.0) records a running RimWorld 1.7 from outside** with Microsoft's dotnet-trace and dotnet-counters, which
@@ -67,6 +69,7 @@ python -m phobos_modkit code --each-in DIR show Type.Member   a C# member's sour
 python -m phobos_modkit code compare OLD.dll NEW.dll   what changed between two builds, member by member
 python -m phobos_modkit rimworld-archive snapshot --root ..   keep every new version of the game and tied mods; also list, compare, get
 python -m phobos_modkit rimworld-sources --root .. --write   where each tied mod's public source lives, checked
+python -m phobos_modkit rimworld-code show Type.Member --root REPO   another author's code, from a clone or a decompile
 python -m phobos_modkit rimworld-upstream --root REPO --clones DIR   updates and upstream commits that changed members we patch
 python -m phobos_modkit crash-dump               why a program crashed, from its Windows crash dump; names methods in a full one
 python -m phobos_modkit windows-dumps --program X   whether Windows keeps full crash dumps of a program; --apply asks it to
@@ -159,6 +162,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/rimworld-perf.md](docs/rimworld-perf.md) | Recording a running RimWorld from outside: what is recorded, how time is put down to mods, and the limits |
 | [docs/rimworld-readiness.md](docs/rimworld-readiness.md) | Which active mods declare a game version, and how closely each depends on the game |
 | [docs/manifest.md](docs/manifest.md) | The JSON envelope every command prints, and the manifest of commands, options and effects |
+| [docs/rimworld-code.md](docs/rimworld-code.md) | Another author's code for a program: where it is looked for, which assembly holds a type, and decompiling on request |
 | [docs/rimworld-upstream.md](docs/rimworld-upstream.md) | Whether an update or another author's source changed a member our code patches or names |
 | [docs/crash-dump.md](docs/crash-dump.md) | Windows crash dumps: the exception, a call loop that ran away, the methods in a full dump, what a small dump cannot say, and windows-dumps |
 | [docs/cleanup.md](docs/cleanup.md) | Cleanup: the kit's cache, its development build and a repository's own leftovers, previewed before anything is deleted |

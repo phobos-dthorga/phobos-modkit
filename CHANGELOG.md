@@ -4,6 +4,18 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.49.0] - 2026-11-19
+
+The owner chose (19 November 2026) that D'thorga Companion should read and compare other authors' code on their press: follow one of our patches into the method it patches, and see what an update changed. The tools could already do both from a console, but only phobos-rimworld's own script knew where the source clones and decompiles were kept.
+
+### Added
+
+- rimworld-code show: a type's or member's source from the best copy kept, public clones first, then the repository's own decompiles, then the kit's. Each line comes with its own number, and the decompiler's IL notes are left out. The first search indexes every place once (about four minutes on the owner's machine), then answers in under a second.
+- rimworld-code holder: which of the game's and active mods' assemblies declares a type, and which mod ships it, read through metadata alone (about five seconds).
+- rimworld-code decompile: decompiles one assembly into the kit's cache on request, once per build, shared with code compare and rimworld-upstream.
+- rimworld-archive list gives each kept file as data (owner, versions kept, the newest and the one before), so a program can offer a comparison wherever there are two.
+- Manifest surfaces other-code (rimworld-code's three reports) and updates (rimworld-archive list and compare).
+
 ## [1.48.0] - 2026-11-19
 
 The owner found the top of D'thorga Companion's atlas cluttered (19 November 2026): every save report opened with one long sentence naming the save, how it was read and a count of every kind of element in it, and the atlas added another for the world seed.

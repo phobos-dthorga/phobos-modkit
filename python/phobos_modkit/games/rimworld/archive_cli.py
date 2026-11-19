@@ -183,6 +183,20 @@ def list_report(archive, file, top):
     return report
 
 
+def list_data(archive):
+    """Every kept file for a program (1.49.0, D'thorga Companion's "what did an update change?"): its owner, how many
+    versions are kept and the newest, so it can offer a comparison wherever there are two."""
+    groups = {}
+    for v in archive.versions():
+        groups.setdefault((v.owner, v.file), []).append(v)
+    files = [{"owner": chain[-1].owner, "owner_name": chain[-1].owner_name, "file": chain[-1].file, "versions": len(chain),
+              "newest_version": chain[-1].version or None, "newest_seen": chain[-1].seen_at,
+              "previous_seen": chain[-2].seen_at if len(chain) > 1 else None}
+             for chain in groups.values()]
+    files.sort(key=lambda f: (f["newest_seen"] or ""), reverse=True)
+    return {"files": files}
+
+
 def main(argv=None, settings_file=None, environ=None, out=None, now=None):
     out = out or sys.stdout
     argv = list(sys.argv[1:] if argv is None else argv) or ["list"]
@@ -194,6 +208,7 @@ def main(argv=None, settings_file=None, environ=None, out=None, now=None):
     redact = keep if args.no_redact else home_redactor()
     archive = Archive(archive_root(args.archive, environ, settings_file))
     code = EXIT_OK
+    data = None
     try:
         if args.report == "snapshot":
             game = paths.game_path(args.game, environ, settings_file)
@@ -230,14 +245,17 @@ def main(argv=None, settings_file=None, environ=None, out=None, now=None):
             return code_main(forwarded, settings_file=settings_file, environ=environ, out=out)
         else:
             report = list_report(archive, getattr(args, "file", None), args.top)
+            data = list_data(archive)
     except (ArchiveError, CacheError, OSError, ET.ParseError) as error:
         report, code = Report("rimworld-archive: error", [str(error)]), EXIT_FAILED
-    print(envelope_text("rimworld-archive", report, redact) if args.json else render_markdown(report, redact), file=out)
+    print(envelope_text("rimworld-archive", report, redact, data) if args.json else render_markdown(report, redact), file=out)
     return code
 
 
 MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
-            "reports": {"snapshot": {"effect": WRITES, "note": "writes only to the archive folder, never to the game or Workshop"},
+            "reports": {"list": {"effect": READS, "surface": "updates"},
+                        "snapshot": {"effect": WRITES, "note": "writes only to the archive folder, never to the game or Workshop"},
                         "get": {"effect": WRITES, "note": "unpacks a kept file inside the archive folder"},
-                        "compare": {"effect": RUNS, "note": "unpacks both sides inside the archive folder and runs ilspycmd, "
+                        "compare": {"effect": RUNS, "surface": "updates",
+                                    "note": "unpacks both sides inside the archive folder and runs ilspycmd, "
                                                             "which reads a file without loading or running it"}}}

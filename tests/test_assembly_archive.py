@@ -3,6 +3,7 @@
 Files here are made-up bytes, never real assemblies: the archive keeps files without reading them as .NET.
 """
 import io
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -168,6 +169,11 @@ class RimWorldTests(unittest.TestCase):
         self.assertIn("day two", text)
         code, text = self.run_main(["get", "Assembly-CSharp.dll", "--back", "1"] + self.common)
         self.assertEqual(Path(text.strip()).read_bytes(), b"game build one")
+        # A program reads the kept files as data (1.49.0): the one kept twice can be compared.
+        code, text = self.run_main(["list", "--json"] + self.common)
+        files = json.loads(text)["data"]["files"]
+        game = [f for f in files if f["file"] == "Assembly-CSharp.dll"][0]
+        self.assertEqual((game["versions"], game["newest_seen"], game["previous_seen"]), (2, "day two", "day one"))
 
     def test_asking_for_a_file_the_archive_never_kept_says_so(self):
         self.run_main(self.snapshot)
