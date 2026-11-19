@@ -42,7 +42,7 @@ class Setting:
 
 def _known():
     """The settings the kit itself reads, each from the module that owns it."""
-    from . import assembly_archive, claims, history, records
+    from . import assembly_archive, claims, decisions, history, records
     from .code import compare
     from .games.rimworld import paths as rimworld
     from .games.rimworld import textures
@@ -58,6 +58,8 @@ def _known():
                 "folder"),
         Setting(*claims.BOARD, "The board where agent sessions say what they are working on", "file",
                 default=lambda environ: paths.companion_data(environ) / "claims.json"),
+        Setting(*decisions.ANSWERS, "Where your answers to waiting decisions are kept (one file for each repository)", "folder",
+                default=lambda environ: paths.companion_data(environ) / "decisions"),
         Setting(*paths.CACHE, "Where the tools keep what they work out from your files: save indexes, cached pages, the "
                 "changelogs' history", "folder", default=lambda environ: paths.DEFAULT_CACHE),
         Setting(*VERDICTS, "Where your test verdicts are kept (one file for each repository)", "folder",

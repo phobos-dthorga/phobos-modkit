@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.45.0] - 2026-11-19
+
+The owner said yes (19 November 2026) to a Decisions page in D'thorga Companion, gathering the choices agents made for them to revise.
+
+### Added
+
+- decisions list: each repository's open questions from its config/decisions.json, with their options, the agent's lean and why, open ones first, and the owner's answer where given.
+- decisions answer records the owner's answer (an option, or other with words), one line appended to a file per repository in the Companion's folder; the last answer decides. Agents act on an answer and remove the decision from the config in the same commit.
+- companionDecisionsPath (PHOBOS_DECISIONS), the folder for those answers, listed with every other setting.
 ## [1.44.0] - 2026-11-19
 
 The owner said yes (19 November 2026) to a claims board, so agent sessions sharing the machine stop asking each other in messages which version number is free.

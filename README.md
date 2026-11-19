@@ -115,6 +115,7 @@ in order of expected saving.
 | 17 | [Installs](docs/installs.md) | Each mod's installed copy, the repository's and every backup, and what moving between them gains or loses by their changelogs; backs up, goes back to a backup, or runs the repository's install, on request | Python | Built: 1.20.0 |
 | 15 | [Art audit](docs/art-audit.md) | Every shipped image with its record and how it was made; images drawn in code or without a record; pictures a Def borrows from another thing or another mod | Python | Built: 1.12.0 |
 | 16 | [Performance in play](docs/rimworld-perf.md) (RimWorld 1.7) | Where the running game spends its time: by part of the game loop, by the mod that caused it, by method, with garbage collection; and whether a change made it faster. Since 1.22.0, where a frozen game is stuck and what holds its memory, by mod. Since 1.42.0, the game's memory over time, without pausing it: average or bursts, .NET's heap or the rest, with what the log says at each jump | Python, with Microsoft's dotnet-trace, dotnet-counters, dotnet-stack and dotnet-gcdump, and Windows' own memory figures | Built: 1.13.0, 1.22.0, 1.42.0 |
+| 29 | [Decisions](docs/decisions.md) | The questions waiting for the owner, from each repository's config/decisions.json, with options and the agent's lean; the owner's answers, kept in the Companion's folder | Python | Built: 1.45.0 |
 | 28 | [Claims](docs/claims.md) | Who is working on what: agent sessions sharing a machine take and release version numbers, test rows and files on one board, and are refused what another holds | Python | Built: 1.44.0 |
 | 27 | [Records](docs/records.md) | A copy of D'thorga Companion's own records (verdicts, history log, marks, screen notes, shortcuts, central settings) in a folder of your choosing, and how old the newest copy is; never deletes | Python | Built: 1.43.0 |
 | 26 | [Screen notes](docs/screen-notes.md) | What the owner flagged as looking wrong in D'thorga Companion with one key: the page's picture, its address and their words, for agent sessions to read at the start; marked dealt with, never deleted | Python | Built: 1.41.0 |
@@ -165,6 +166,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/art-audit.md](docs/art-audit.md) | The art audit: how images find their records, how a record's first statement sets the kind, the config, and what counts as borrowed |
 | [docs/makeup.md](docs/makeup.md) | Make-up: products, kinds, what counts as a line, the history cache, and the answers |
 | [docs/pins.md](docs/pins.md) | Pins: which kit version each repository records, and what a move would bring |
+| [docs/decisions.md](docs/decisions.md) | Decisions: the config, the answers file, and acting on an answer |
 | [docs/claims.md](docs/claims.md) | Claims: naming a thing, the board file and its lock |
 | [docs/records.md](docs/records.md) | Records: what is copied, where, and what each copy holds |
 | [docs/screen-notes.md](docs/screen-notes.md) | Screen notes: a note's folder, its files, and resolving one |
