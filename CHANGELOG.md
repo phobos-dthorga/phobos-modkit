@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.48.0] - 2026-11-19
+
+The owner found the top of D'thorga Companion's atlas cluttered (19 November 2026): every save report opened with one long sentence naming the save, how it was read and a count of every kind of element in it, and the atlas added another for the world seed.
+
+### Added
+
+- A report may carry facts: short labelled values saying where it came from, such as the save it read. JSON gives them as a list of label and value under report.facts (an empty list when a report has none); Markdown prints them as one line before the opening. Redaction reaches them as it does every other text.
+
+### Changed
+
+- **rimworld-save reports open with facts instead of the "Index of" sentence**: Save, Read (now, from a frozen copy, in how many seconds; or from the index already built) and, when built just now, how many elements the index holds. The count of each kind of element moved to the JSON data, as elements.
+- The atlas gives the world seed and the number of surface tiles as facts; its note on how tile positions are worked out stays as the opening line.
+
 ## [1.47.0] - 2026-11-19
 
 The owner chose (19 November 2026) to run memory profiling from D'thorga Companion rather than through agents, and two reloads asked for during watches never reached the log; a program could not stop a watch, follow it, or put the owner's intentions beside its figures.

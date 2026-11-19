@@ -1,6 +1,7 @@
 """One report model for every tool, rendered as Markdown for people and agent sessions, or as JSON for programs.
 
-A report has a title, intro lines (one paragraph, one line each), further opening blocks, and sections. A block is a
+A report has a title, facts (short labelled values saying where it came from, such as the save it read), intro lines
+(one paragraph, one line each), further opening blocks, and sections. A block is a
 paragraph (a plain string), Bullets, a Table, Code, a Chart (text bars in Markdown, a spec a program can draw in
 JSON) or a Globe (a planet of tiles a program can draw; a line saying what it holds in Markdown). Redaction, such as hiding the home folder, applies to every
 piece of text when the report is rendered, so no tool can forget a field.
@@ -249,11 +250,20 @@ class Section:
 
 
 @dataclass
+class Fact:
+    """A short labelled value about where a report came from or what it covers ("Save", "PG16.rws"): a program shows these
+    as a strip above the opening lines, Markdown as one line (1.48.0)."""
+    label: str
+    value: str
+
+
+@dataclass
 class Report:
     title: str
     lines: list = field(default_factory=list)     # the opening paragraph, one line each
     blocks: list = field(default_factory=list)    # further opening blocks, before the first section
     sections: list = field(default_factory=list)
+    facts: list = field(default_factory=list)     # Fact: shown before the opening lines
 
     def section(self, heading, *blocks, level=2):
         found = Section(heading, list(blocks), level)
@@ -360,6 +370,8 @@ def _block_lines(block, redact):
 def render_markdown(report, redact=None):
     redact = redact or keep
     out = [f"# {redact(report.title)}", ""]
+    if report.facts:
+        out += ["; ".join(f"{redact(f.label)}: {redact(f.value)}" for f in report.facts), ""]
     if report.lines:
         out += [*(redact(line) for line in report.lines), ""]
     for block in report.blocks:
@@ -468,7 +480,9 @@ def _block_json(block, redact):
 
 def render_json(report, redact=None):
     redact = redact or keep
-    return {"format": JSON_FORMAT, "title": redact(report.title), "lines": [redact(l) for l in report.lines],
+    return {"format": JSON_FORMAT, "title": redact(report.title),
+            "facts": [{"label": redact(f.label), "value": redact(f.value)} for f in report.facts],
+            "lines": [redact(l) for l in report.lines],
             "blocks": [_block_json(b, redact) for b in report.blocks],
             "sections": [{"heading": redact(s.heading), "level": s.level,
                           "blocks": [_block_json(b, redact) for b in s.blocks]} for s in report.sections]}

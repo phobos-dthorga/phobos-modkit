@@ -248,9 +248,9 @@ class Command(Folders):
     def test_first_run_builds_and_the_next_reuses(self):
         code, text = self.run_main()
         self.assertEqual(code, EXIT_OK)
-        self.assertIn("Index of Example.rws, built now from a frozen copy", text)
+        self.assertIn("Save: Example.rws; Read: now, from a frozen copy", text)
         self.assertIn("# Save summary", text)
-        self.assertIn("reused", self.run_main("pawns")[1])
+        self.assertIn("Read: from the index already built", self.run_main("pawns")[1])
 
     def test_each_report_runs(self):
         for args in (["schema"], ["things", "--list", "--held"], ["pawns", "--faction", "player"], ["world"],
@@ -258,16 +258,17 @@ class Command(Folders):
                      ["hediffs", "--pawn", "Annie"], ["find", "ChunkA*"], ["sql", "SELECT 1"], ["index"]):
             code, text = self.run_main(*args)
             self.assertEqual(code, EXIT_OK, args)
-            self.assertIn("Index of Example.rws", text)
+            self.assertIn("Save: Example.rws", text)
 
     def test_json_and_reading_an_index_directly(self):
         code, text = self.run_main("pawns", "--json")
         data = json.loads(text)
         self.assertEqual(data["report"]["sections"][0]["blocks"][0]["headers"][0], "Name")
+        self.assertEqual(data["report"]["facts"][0], {"label": "Save", "value": "Example.rws"})
         out = io.StringIO()
         index = self.cache / saves.CACHE_FOLDER / "Example.sqlite"
         self.assertEqual(main(["things", "--index", str(index)], environ={}, out=out), EXIT_OK)
-        self.assertIn("Index of Example.rws, reused", out.getvalue())
+        self.assertIn("Read: from the index already built", out.getvalue())
 
     def test_options_before_the_report_name_mean_summary(self):
         code, text = self.run_main("--top", "3")

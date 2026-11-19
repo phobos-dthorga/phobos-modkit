@@ -3,7 +3,7 @@ import json
 import unittest
 
 import support  # noqa: F401
-from phobos_modkit.report import (Bullets, Chart, ChartLine, ChartSeries, Code, Report, Table, home_redactor,
+from phobos_modkit.report import (Bullets, Chart, ChartLine, ChartSeries, Code, Fact, Report, Table, home_redactor,
                                   render_json, render_markdown)
 
 HOME = r"C:\Users\tester"
@@ -48,6 +48,27 @@ class Markdown(unittest.TestCase):
         report = Report("t")
         report.section("s", Table(["x"], [("abcdefghij",)], widths={0: 4}))
         self.assertIn("| abcd... |", render_markdown(report))
+
+
+class Facts(unittest.TestCase):
+    """Labelled facts (1.48.0): one line in Markdown before the opening lines, a list in JSON, redacted like everything else."""
+
+    def report(self):
+        report = Report("t", facts=[Fact("Save", HOME + r"\Saves\A.rws"), Fact("Read", "now")])
+        report.lines.append("Opening.")
+        return report
+
+    def test_markdown_puts_them_on_one_line_before_the_opening(self):
+        text = render_markdown(self.report(), home_redactor(HOME))
+        self.assertIn("Save: ~", text)
+        self.assertLess(text.index("; Read: now"), text.index("Opening."))
+        self.assertNotIn("tester", text)
+
+    def test_json_lists_them_and_a_report_without_has_none(self):
+        facts = render_json(self.report(), home_redactor(HOME))["facts"]
+        self.assertEqual([f["label"] for f in facts], ["Save", "Read"])
+        self.assertNotIn("tester", json.dumps(facts))
+        self.assertEqual(render_json(Report("t"))["facts"], [])
 
 
 class Json(unittest.TestCase):

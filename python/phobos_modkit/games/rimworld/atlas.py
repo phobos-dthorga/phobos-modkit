@@ -24,7 +24,7 @@ import math
 from pathlib import Path
 import re
 
-from ...report import (Globe, GlobeBand, GlobeCategory, GlobeLabel, GlobeLayer, GlobeLines, GlobePlace, GlobeTags,
+from ...report import (Fact, Globe,GlobeBand, GlobeCategory, GlobeLabel, GlobeLayer, GlobeLines, GlobePlace, GlobeTags,
                        Report, Table)
 from . import planet
 from . import planet_reports
@@ -366,8 +366,9 @@ def atlas(conn, cache, written=None, top=30, palette=None):
         return report
     shape = planet.load_shape(cache, subdivisions)
     seed = conn.execute("SELECT world_seed FROM game").fetchone()
-    report.lines.append(f"World seed {seed[0] if seed and seed[0] else 'unknown'}: {tiles:,} surface tiles "
-                        f"({subdivisions} subdivisions). {MODEL_NOTE}")
+    report.facts += [Fact("World seed", seed[0] if seed and seed[0] else "unknown"),
+                     Fact("Surface tiles", f"{tiles:,} ({subdivisions} subdivisions)")]
+    report.lines.append(MODEL_NOTE)
     if written is None:
         report.lines.append("The installed mods' Defs were not read, so only the game's own biomes, roads and rivers "
                             "are named.")

@@ -26,8 +26,8 @@ python -m phobos_modkit manifest --json    the whole description, in the envelop
 | `envelope` | The shape's version |
 | `tool` | The command that made it |
 | `kit_version` | The kit that made it |
-| `report` | The report: `format`, `title`, `lines`, `blocks` and `sections`. A block's `type` is `text`, `bullets`, `table` (with `values`, the number each cell sorts by), `code`, `chart` or `globe` |
-| `data` | Anything else the tool offers; empty when it has nothing. `rimworld-save` and `rimworld-defs` give `index` and `built`, `rimworld-log` gives every signature |
+| `report` | The report: `format`, `title`, `facts` (1.48.0: short labelled values, each `label` and `value`, saying where it came from, such as the save it read; a program shows them as a strip, Markdown as one line), `lines`, `blocks` and `sections`. A block's `type` is `text`, `bullets`, `table` (with `values`, the number each cell sorts by), `code`, `chart` or `globe` |
+| `data` | Anything else the tool offers; empty when it has nothing. `rimworld-save` and `rimworld-defs` give `index` and `built` (`rimworld-save` also `elements`, how many of each kind the index holds when it was built just now), `rimworld-log` gives every signature |
 
 Redaction reaches every string in `report` and `data`.
 

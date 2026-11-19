@@ -36,7 +36,7 @@ import sys
 from ... import cache as derived
 from ...native import ToolMissing, build_tools
 from ...progress import Progress
-from ...report import envelope_text, home_redactor, keep, render_markdown
+from ...report import Fact, envelope_text, home_redactor, keep, render_markdown
 from . import def_lookup
 from . import defs as def_index
 from . import grids
@@ -388,17 +388,21 @@ def main(argv=None, settings_file=None, environ=None, out=None):
         print(f"The query failed: {problem}", file=sys.stderr)
         return EXIT_FAILED
 
+    # Where the answer came from, as facts a program shows in a strip (1.48.0; it was one long opening sentence). How many of
+    # each kind of element the index holds goes in the data, for a program or session that wants it.
+    provenance = [Fact("Save", source)]
     if built is not None:
-        rows = ", ".join(f"{n:,} {t}" for t, n in built.rows.items() if n and not t.startswith("mod_"))
-        provenance = (f"Index of {source}, built now from a frozen copy in {built.seconds:.1f} s "
-                      f"({built.elements:,} elements; {rows}).")
+        provenance += [Fact("Read", f"now, from a frozen copy, in {built.seconds:.1f} s"),
+                       Fact("Index", f"{built.elements:,} elements")]
     else:
-        provenance = f"Index of {source}, reused: the save and the schema have not changed since it was built."
-    report.lines.insert(0, provenance)
+        provenance.append(Fact("Read", "from the index already built; the save has not changed since"))
+    report.facts[:0] = provenance
+    counts = {} if built is None else {t: n for t, n in built.rows.items() if n and not t.startswith("mod_")}
 
     if args.json:
         out.write(envelope_text("rimworld-save", report, redact,
-                                {"save": source, "index": str(index), "built": built is not None}) + "\n")
+                                {"save": source, "index": str(index), "built": built is not None,
+                                 "elements": counts}) + "\n")
     else:
         out.write(render_markdown(report, redact) + "\n")
     return EXIT_OK
