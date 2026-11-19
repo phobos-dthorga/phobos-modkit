@@ -42,7 +42,9 @@ changed are read again, and everything is read again when the kit's version chan
 every other active mod patching the same method (the repository's own assemblies left out, by name) and how many of those patches
 may skip the original. With `--updates` it adds rimworld-upstream's comparison of the newest two versions the assembly archive kept
 of each file in the last `--days` (30): a new signature, a new body or a removed member, matched by type and member name. Its JSON
-`data.targets` holds `{node, target, name, assembly, ours, mods, skippers, changed}`; `node` is the target's `connections` id.
+`data.targets` holds `{node, target, name, assembly, ours, mods, skippers, changed}`; `node` is the target's `connections` id. Each
+`changed` entry gives `mod`, `file`, `versions`, `change` and, from 1.51.0, `newestKept`: when the archive first kept the newer
+build, as an ISO time, so a program can tell an update since the last launch from an older one.
 D'thorga Companion's Code map shows it as badges on the methods.
 
 ## How patches are found

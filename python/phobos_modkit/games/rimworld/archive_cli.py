@@ -254,7 +254,8 @@ def main(argv=None, settings_file=None, environ=None, out=None, now=None):
 
 MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
             "reports": {"list": {"effect": READS, "surface": "updates"},
-                        "snapshot": {"effect": WRITES, "note": "writes only to the archive folder, never to the game or Workshop"},
+                        "snapshot": {"effect": WRITES, "surface": "updates",
+                                     "note": "writes only to the archive folder, never to the game or Workshop"},
                         "get": {"effect": WRITES, "note": "unpacks a kept file inside the archive folder"},
                         "compare": {"effect": RUNS, "surface": "updates",
                                     "note": "unpacks both sides inside the archive folder and runs ilspycmd, "

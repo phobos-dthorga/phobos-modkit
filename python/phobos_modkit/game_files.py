@@ -24,6 +24,7 @@ from pathlib import Path
 import re
 import sys
 
+from . import cache as derived
 from .manifest import READS
 from .report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
 
@@ -34,6 +35,10 @@ SAVE_FOLDERS = ("Saves", "saves", "save", "Save")
 SHOT_FOLDERS = ("Screenshots", "screenshots", "Screenshot")
 AUTOSAVE = re.compile(r"auto", re.IGNORECASE)
 LISTED = 200
+# The launches kept per game (1.51.0): Steam records only the latest, so while a game runs "since you last played" would mean
+# since this launch. Each report remembers the launch it sees; --since previous then means the one before.
+LAUNCHES_KEPT = 30
+PREVIOUS = "previous"
 WORKSHOP_TITLE_FILES = (("About/About.xml", re.compile(r"<name>\s*(.*?)\s*</name>", re.S)),
                         ("mod.info", re.compile(r"^name\s*=\s*(.+)$", re.M)))
 TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|([{}])')
@@ -276,9 +281,39 @@ def _when(seconds):
     return datetime.fromtimestamp(seconds, timezone.utc).isoformat(timespec="seconds")
 
 
+def launches_file(app_id, environ=None):
+    return derived.folder("game-files", None, environ) / f"launches-{app_id}.json"
+
+
+def remember_launch(app_id, last_played, environ=None):
+    """Every launch of the game this kit has seen, oldest first, with this one added; kept in the kit's cache."""
+    import json
+    path = launches_file(app_id, environ)
+    try:
+        seen = [int(t) for t in json.loads(path.read_text(encoding="utf-8"))]
+    except (OSError, ValueError, TypeError):
+        seen = []
+    if last_played and last_played not in seen:
+        seen = sorted(seen + [last_played])[-LAUNCHES_KEPT:]
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(seen), encoding="utf-8")
+        except OSError:
+            pass                                    # only a memory: the next report tries again
+    return seen
+
+
+def previous_launch(seen, last_played):
+    """The launch before the latest, as far as the kit has seen; None when it has seen no earlier one."""
+    earlier = [t for t in seen if last_played and t < last_played]
+    return earlier[-1] if earlier else None
+
+
 def _since(text):
     if not text:
         return None
+    if text == PREVIOUS:
+        return PREVIOUS
     try:
         when = datetime.fromisoformat(text)
     except ValueError:
@@ -295,7 +330,13 @@ def report(name, app_id=None, data=None, saves_folder=None, shots_folder=None, s
     own_shots = Path(shots_folder) if shots_folder else _first_child(data, SHOT_FOLDERS)
     shot_folders = [own_shots, *steam_screenshots(steam, game["appId"] if game else app_id)]
     items = workshop_items(game) if game else []
-    since_seconds = since if since is not None else (game or {}).get("lastPlayed")
+    last_played = (game or {}).get("lastPlayed")
+    seen = remember_launch(game["appId"], last_played, environ) if game else []
+    previous = previous_launch(seen, last_played)
+    if since == PREVIOUS:
+        since_seconds = previous or last_played
+    else:
+        since_seconds = since if since is not None else last_played
     updated = sorted([i for i in items if since_seconds and (i["updated"] or 0) > since_seconds],
                      key=lambda i: i["updated"], reverse=True)
     for item in items:
@@ -310,6 +351,8 @@ def report(name, app_id=None, data=None, saves_folder=None, shots_folder=None, s
         "places": {"data": str(data) if data else None, "saves": str(saves_folder) if saves_folder else None,
                    "screenshots": [str(f) for f in shot_folders if f is not None and Path(f).is_dir()]},
         "changed": {"since": _when(since_seconds), "sinceLastPlayed": since is None,
+                    "sincePrevious": since == PREVIOUS and previous is not None, "previousLaunchAt": _when(previous),
+                    "launchesSeen": len(seen),
                     "gameUpdated": bool(game and since_seconds and (game["lastUpdated"] or 0) > since_seconds),
                     "workshop": updated[:LISTED], "workshopCount": len(updated), "workshopInstalled": len(items)},
         "saves": {"list": found_saves[:LISTED], "count": len(found_saves), "bytes": sum(s["bytes"] for s in found_saves),
@@ -339,7 +382,8 @@ def _parser():
     r.add_argument("--data", help="its data folder (default: guessed from its name)")
     r.add_argument("--saves", help="its saves folder (default: inside the data folder)")
     r.add_argument("--screenshots", help="its own screenshots folder (default: inside the data folder)")
-    r.add_argument("--since", help="list Workshop items updated since this time (default: the last launch)")
+    r.add_argument("--since", help="list Workshop items updated since this time (default: the last launch); 'previous' for the "
+                                   "launch before the last, as far as the kit has seen (1.51.0: while the game runs)")
     s = sub.add_parser("steam-games", help="every game Steam has installed on this PC")
     for parser in (r, s):
         parser.add_argument("--json", action="store_true", help="print JSON instead of Markdown")

@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.51.0] - 2026-11-20
+
+For D'thorga Companion's "Since you last played" line on the Mods page (the owner's go-ahead, 20 November 2026): what updated since the session before, and whether those updates changed a method our mods patch.
+
+### Added
+
+- game-files report --since previous: the launch before the last. Steam records only the latest launch, so while a game runs "since you last played" meant since this launch; each report now remembers the launch it sees in the kit's cache (the newest 30 per game), and until it has seen an earlier one it uses the last and says so. The report's changed part adds sincePrevious, previousLaunchAt and launchesSeen.
+- rimworld-patches targets --updates gives each change's newestKept: when the assembly archive first kept the newer build, as an ISO time, so a program can tell an update since the last launch from an older one.
+- rimworld-archive snapshot carries the manifest surface updates, so a program can offer to keep new builds before comparing them.
+
 ## [1.50.0] - 2026-11-20
 
 The owner asked (20 November 2026) for an ongoing cleanup in D'thorga Companion, with their yes before anything goes; the listing found 33.7 GB, 29 GB of it the kit's development build, beside install backups they may want to keep.

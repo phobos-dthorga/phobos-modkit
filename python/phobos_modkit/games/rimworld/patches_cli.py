@@ -105,12 +105,13 @@ def _join_updates(found, args, environ, settings_file):
         archive = Archive(archive_root(args.archive, environ, settings_file))
         decompiled = derived.folder(code_compare.CACHE_FOLDER, args.cache, environ, settings_file)
         code_cache = derived.folder(code_index.CACHE_FOLDER, args.cache, environ, settings_file)
+        seen = {}
         rows, skipped, compared = update_rows(
             archive, wanted, args.days, datetime.now(timezone.utc), decompiled, code_cache,
-            lambda: code_compare._find_decompiler(args.decompiler, environ, settings_file))
+            lambda: code_compare._find_decompiler(args.decompiler, environ, settings_file), seen=seen)
     except (ArchiveError, code_index.CodeError, OSError) as error:
         return f"Updates were not compared: {error}"
-    patch_targets.join_updates(found, rows)
+    patch_targets.join_updates(found, rows, seen)
     if not compared:
         return f"No update in the last {args.days} days was kept by the assembly archive, so none was compared."
     return None

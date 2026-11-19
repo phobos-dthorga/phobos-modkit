@@ -69,7 +69,7 @@ class GameFilesTests(unittest.TestCase):
         (data / "Cache" / "big.bin").write_bytes(b"x" * 500)
         self.data = data
         self.environ = {"PHOBOS_STEAM": str(self.steam), "USERPROFILE": str(self.home), "HOME": str(self.home),
-                        "PHOBOS_SETTINGS": str(base / "none.json")}
+                        "PHOBOS_SETTINGS": str(base / "none.json"), "PHOBOS_MODKIT_CACHE": str(base / "cache")}
 
     def tearDown(self):
         self.temp.cleanup()
@@ -96,6 +96,12 @@ class GameFilesTests(unittest.TestCase):
         self.assertEqual(found["space"]["data"][0]["name"], "Cache")
         self.assertEqual(found["space"]["install"], 1048576)
 
+    def test_since_previous_falls_back_to_the_last_launch_until_one_before_is_seen(self):
+        found = game_files.report("Sample Colony", since=game_files.PREVIOUS, environ=self.environ)
+        self.assertFalse(found["changed"]["sincePrevious"])
+        self.assertEqual(found["changed"]["launchesSeen"], 1)
+        self.assertEqual(found["changed"]["since"], found["game"]["lastPlayedAt"])
+
     def test_since_moves_the_line(self):
         found = game_files.report("Sample Colony", since=500, environ=self.environ)
         self.assertEqual(found["changed"]["workshopCount"], 2)
@@ -121,6 +127,32 @@ class GameFilesTests(unittest.TestCase):
         out = io.StringIO()
         game_files.main(["steam-games", "--json"], out, self.environ)
         self.assertEqual(json.loads(out.getvalue())["data"]["games"][0]["appId"], 4242)
+
+
+class Launches(unittest.TestCase):
+    """Launches remembered (1.51.0): Steam keeps only the latest, so while a game runs the kit compares with the one before."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.environ = {"PHOBOS_MODKIT_CACHE": self.temp.name, "PHOBOS_SETTINGS": str(Path(self.temp.name) / "none.json")}
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_each_launch_is_kept_once_and_the_one_before_is_known(self):
+        self.assertEqual(game_files.remember_launch(9, 100, self.environ), [100])
+        self.assertEqual(game_files.remember_launch(9, 100, self.environ), [100])
+        seen = game_files.remember_launch(9, 300, self.environ)
+        self.assertEqual(seen, [100, 300])
+        self.assertEqual(game_files.previous_launch(seen, 300), 100)
+        self.assertIsNone(game_files.previous_launch([300], 300))
+        self.assertEqual(game_files.remember_launch(10, 50, self.environ), [50])
+
+    def test_only_the_newest_launches_are_kept(self):
+        for when in range(1, game_files.LAUNCHES_KEPT + 6):
+            seen = game_files.remember_launch(9, when, self.environ)
+        self.assertEqual(len(seen), game_files.LAUNCHES_KEPT)
+        self.assertEqual(seen[-1], game_files.LAUNCHES_KEPT + 5)
 
 
 if __name__ == "__main__":

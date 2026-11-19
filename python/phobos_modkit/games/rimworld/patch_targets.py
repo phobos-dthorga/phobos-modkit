@@ -58,8 +58,18 @@ def targets(graph, index, root):
     return list(found.values())
 
 
-def join_updates(found, rows):
-    """Adds each update row (rimworld-upstream's: owner, file, versions, Type.Member, change, ours) to the targets it names."""
+def kept_at(text):
+    """The archive's "2026-11-19 09:08 UTC" as an ISO time a program can compare; empty when it cannot be read."""
+    from datetime import datetime, timezone
+    try:
+        return datetime.strptime(text or "", "%Y-%m-%d %H:%M UTC").replace(tzinfo=timezone.utc).isoformat(timespec="seconds")
+    except ValueError:
+        return ""
+
+
+def join_updates(found, rows, seen=None):
+    """Adds each update row (rimworld-upstream's: owner, file, versions, Type.Member, change, ours) to the targets it names, with
+    when the archive kept the newer build (`newestKept`, 1.51.0) where `seen` says."""
     by_member = {}
     for item in found:
         owner, member = item["target"].rsplit(".", 1)
@@ -67,7 +77,8 @@ def join_updates(found, rows):
     for mod, file, versions, member, change, _ in rows:
         bare, _, name = member.rpartition(".")
         for item in by_member.get((bare, name), []):
-            item["changed"].append({"mod": mod, "file": file, "versions": versions, "change": change.replace("**", "")})
+            item["changed"].append({"mod": mod, "file": file, "versions": versions, "change": change.replace("**", ""),
+                                    "newestKept": kept_at((seen or {}).get((mod, file)))})
     return found
 
 

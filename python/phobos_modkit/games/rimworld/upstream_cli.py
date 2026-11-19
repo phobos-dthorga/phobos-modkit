@@ -83,8 +83,9 @@ def _matches(full, wanted):
     return wanted.get((owner, member))
 
 
-def update_rows(archive, wanted, days, now, decompiled, code_cache, find_tool, only_file=None):
-    """([(owner name, file, versions, member, what changed, ours)], [(file, why skipped)], [files compared])."""
+def update_rows(archive, wanted, days, now, decompiled, code_cache, find_tool, only_file=None, seen=None):
+    """([(owner name, file, versions, member, what changed, ours)], [(file, why skipped)], [files compared]). When `seen` is a
+    dict, it is filled with when the archive first kept each compared file's newer build, by (owner name, file) (1.51.0)."""
     groups = defaultdict(list)
     for version in archive.versions():
         groups[(version.owner, version.file)].append(version)
@@ -110,6 +111,8 @@ def update_rows(archive, wanted, days, now, decompiled, code_cache, find_tool, o
             continue
         changes, removed, _, _, _, _ = code_compare.compare(sides[0], sides[1], patterns)
         compared.append(file)
+        if seen is not None:
+            seen[(newer.owner_name or owner, file)] = newer.seen_at
         when = f"{older.version or older.seen_at} to {newer.version or newer.seen_at}"
         for change in changes:
             hit = _matches(change.right.full, wanted)

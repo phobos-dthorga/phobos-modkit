@@ -72,8 +72,15 @@ class TargetTests(unittest.TestCase):
             ("Other", "Other.dll", "1 to 2", "Thing.Tick", "**removed**", "src/y.cs:2"),
         ])
         self.assertEqual(found[0]["changed"], [{"mod": "RimWorld", "file": "Assembly-CSharp.dll", "versions": "1.7.1 to 1.7.2",
-                                                "change": "new body (+3 -1)"}])
+                                                "change": "new body (+3 -1)", "newestKept": ""}])
         self.assertEqual(found[1]["changed"], [])
+
+    def test_when_the_newer_build_was_kept_comes_as_a_time(self):
+        found = [{"target": "Verse.Pawn.Tick", "changed": []}]
+        patch_targets.join_updates(found, [("RimWorld", "Assembly-CSharp.dll", "a to b", "Pawn.Tick", "new body", "x")],
+                                   {("RimWorld", "Assembly-CSharp.dll"): "2026-11-19 09:08 UTC"})
+        self.assertEqual(found[0]["changed"][0]["newestKept"], "2026-11-19T09:08:00+00:00")
+        self.assertEqual(patch_targets.kept_at("not a time"), "")
 
     def test_a_members_id_splits_into_type_and_member(self):
         self.assertEqual(patch_targets.split_target("cs:Verse.AI.Pawn_PathFollower.TryEnterNextPathCell"),
