@@ -13,11 +13,15 @@ todds with RimSort's "optimized" preset on one mod folder at a time, which re-en
 """
 from __future__ import annotations
 
+from contextlib import closing
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
+import sqlite3
 import subprocess
+import threading
 
+from ... import cache
 from ...paths import resolve
 
 # RimSort's "optimized" todds preset, as its source has it (RimSort/RimSort, app/utils/todds/wrapper.py, commit c02f2b3, 15 Oct 2026):
@@ -47,17 +51,19 @@ class Freshness:
     stale: list = field(default_factory=list)       # relative paths of .png files newer than their .dds
     missing: list = field(default_factory=list)     # relative paths of .png files with no .dds
     left_over: list = field(default_factory=list)   # relative paths of .dds files with no .png
+    unpacked: list = field(default_factory=list)    # relative paths of .dds files Waylith unpacks and encode would shorten
 
     @property
     def needs_encoding(self):
-        return bool(self.stale or self.missing)
+        return bool(self.stale or self.missing or self.unpacked)
 
 
-def check_folder(folder, slack=SLACK_SECONDS):
-    """How a mod folder's encoded textures stand against its pictures. Reads file names and dates only."""
+def check_folder(folder, slack=SLACK_SECONDS, headers=None):
+    """How a mod folder's encoded textures stand against its pictures. Reads file names and dates only, and with headers (a
+    HeaderCache) each .dds file's first 148 bytes, once per size and date, for the textures Waylith would unpack."""
     folder = Path(folder)
     base = len(str(folder)) + 1
-    pictures, encoded = {}, {}
+    pictures, encoded, unpacked = {}, {}, []
     stack = [str(folder)]
     while stack:
         try:
@@ -70,14 +76,17 @@ def check_folder(folder, slack=SLACK_SECONDS):
                         lower = entry.name.lower()
                         if not (lower.endswith(SOURCE_SUFFIX) or lower.endswith(DDS_SUFFIX)) or PATH_SEGMENT not in entry.path:
                             continue
-                        mtime = entry.stat(follow_symlinks=False).st_mtime   # from the listing itself on Windows
+                        info = entry.stat(follow_symlinks=False)    # from the listing itself on Windows
                     except OSError:
                         continue
                     relative = entry.path[base:].replace("\\", "/")
-                    (pictures if lower.endswith(SOURCE_SUFFIX) else encoded)[entry.path[:-4].lower()] = (mtime, relative)
+                    (pictures if lower.endswith(SOURCE_SUFFIX) else encoded)[entry.path[:-4].lower()] = (info.st_mtime, relative)
+                    if headers is not None and lower.endswith(DDS_SUFFIX) and \
+                            headers.verdict(entry.path, info.st_size, info.st_mtime_ns) == FIXABLE:
+                        unpacked.append(relative)
         except OSError:
             continue
-    found = Freshness(pictures=len(pictures))
+    found = Freshness(pictures=len(pictures), unpacked=sorted(unpacked))
     for stem, (mtime, relative) in sorted(pictures.items(), key=lambda item: item[1][1]):
         if stem not in encoded:
             found.missing.append(relative)
@@ -166,6 +175,19 @@ def kept_mips(height, mips):
 
 
 TRIMMED, IN_STEP, LEFT_WHOLE, NOT_COMPRESSED = "trimmed", "in step", "left whole", "not compressed"
+FIXABLE = "fixable"      # Waylith unpacks it, and shortening its chain would keep it compressed
+
+
+def classify(head, file_size, min_kept=MIN_KEPT_MIPS):
+    """(verdict, layout, levels to keep) for a DDS file from its first 148 bytes and its size: FIXABLE, IN_STEP, LEFT_WHOLE (Waylith
+    unpacks it, but fewer than min_kept levels would remain) or NOT_COMPRESSED."""
+    layout = read_layout(head, file_size)
+    if layout is None:
+        return NOT_COMPRESSED, None, 0
+    keep = kept_mips(layout.height, layout.mips)
+    if keep == layout.mips:
+        return IN_STEP, layout, keep
+    return (LEFT_WHOLE if keep < min_kept else FIXABLE), layout, keep
 
 
 def trim_mips(path, min_kept=MIN_KEPT_MIPS):
@@ -174,14 +196,9 @@ def trim_mips(path, min_kept=MIN_KEPT_MIPS):
     path = Path(path)
     with path.open("rb") as handle:
         head = handle.read(DX10_HEADER_BYTES)
-    layout = read_layout(head, path.stat().st_size)
-    if layout is None:
-        return NOT_COMPRESSED
-    keep = kept_mips(layout.height, layout.mips)
-    if keep == layout.mips:
-        return IN_STEP
-    if keep < min_kept:
-        return LEFT_WHOLE
+    verdict, layout, keep = classify(head, path.stat().st_size, min_kept)
+    if verdict != FIXABLE:
+        return verdict
     data = path.read_bytes()
     header = bytearray(data[:layout.header_bytes])
     header[28:32] = keep.to_bytes(4, "little")
@@ -219,3 +236,70 @@ def trim_folder(folder, min_kept=MIN_KEPT_MIPS):
         elif outcome == LEFT_WHOLE:
             found.left_whole.append(relative)
     return found
+
+
+# What status remembers of each .dds (kit 1.57.0): its verdict, keyed by path, size and modification time, so a check of every active
+# mod reads only the headers of files that changed. A cold read of the owner's 36,447 encoded textures took 35 seconds on 20 Nov 2026;
+# names and dates alone take about three. A file whose size or date changed (an update, encode's own shortening) is read again.
+HEADER_CACHE_NAMESPACE = "rimworld-textures"
+HEADER_CACHE_FILE = "dds-headers.sqlite"
+HEADER_RULES = f"waylith-height-4/min-kept-{MIN_KEPT_MIPS}"     # a change to the rule or its threshold reads every file again
+
+
+class HeaderCache:
+    """Verdicts on .dds files (FIXABLE, IN_STEP, LEFT_WHOLE, NOT_COMPRESSED), read from disk only when a file is new or changed. Safe
+    to share between the threads status checks mods in: lookups read a dictionary loaded at the start, new verdicts go in under a
+    lock, and save() writes them once, dropping files not seen in this run. Without a path it remembers nothing between runs."""
+
+    def __init__(self, path=None):
+        self.path = Path(path) if path else None
+        self._known, self._seen, self._lock = {}, {}, threading.Lock()
+        self.read_now = 0
+        if self.path is not None and cache.is_current(self.path, {"rules": HEADER_RULES}):
+            try:
+                with closing(cache.open_read_only(self.path)) as conn:
+                    self._known = {row[0]: tuple(row[1:]) for row in conn.execute("SELECT path, size, mtime_ns, verdict FROM headers")}
+            except sqlite3.Error:
+                self._known = {}
+
+    @classmethod
+    def default(cls, environ=None, settings=None):
+        return cls(cache.folder(HEADER_CACHE_NAMESPACE, None, environ, settings) / HEADER_CACHE_FILE)
+
+    def verdict(self, path, size, mtime_ns):
+        key = str(path).lower()
+        known = self._known.get(key)
+        if known is not None and known[0] == size and known[1] == mtime_ns:
+            found = known[2]
+        else:
+            try:
+                with open(path, "rb") as handle:
+                    found = classify(handle.read(DX10_HEADER_BYTES), size)[0]
+            except OSError:
+                return NOT_COMPRESSED          # unreadable now: neither counted nor remembered
+            with self._lock:
+                self.read_now += 1
+        with self._lock:
+            self._seen[key] = (size, mtime_ns, found)
+        return found
+
+    def save(self):
+        """Writes what this run saw; a cache folder that cannot be written only costs the next run its reading time."""
+        if self.path is None:
+            return False
+        if self.read_now == 0 and self._seen.keys() == self._known.keys():
+            return True                        # nothing new and nothing gone: the file already says it
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.path.with_name(self.path.name + ".writing")
+            cache.remove(temporary)
+            with closing(sqlite3.connect(temporary)) as conn:
+                conn.execute("CREATE TABLE headers (path TEXT PRIMARY KEY, size INTEGER, mtime_ns INTEGER, verdict TEXT)")
+                conn.executemany("INSERT INTO headers VALUES (?, ?, ?, ?)",
+                                 sorted((key, *values) for key, values in self._seen.items()))
+                cache.write_meta(conn, {"rules": HEADER_RULES, "files": len(self._seen)})
+                conn.commit()
+            os.replace(temporary, self.path)
+            return True
+        except (OSError, sqlite3.Error):
+            return False

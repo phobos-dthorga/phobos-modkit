@@ -68,21 +68,31 @@ def active_mods(settings=None, environ=None, game=None):
 def _mod_data(mod, fresh):
     return {"name": mod.name, "packageId": mod.package_id, "folder": str(mod.folder), "folderName": mod.folder.name,
             "source": mod.source, "pictures": fresh.pictures, "stale": len(fresh.stale), "missing": len(fresh.missing),
-            "leftOver": len(fresh.left_over), "stalePaths": fresh.stale[:textures.SAMPLE_PATHS],
-            "missingPaths": fresh.missing[:textures.SAMPLE_PATHS], "leftOverPaths": fresh.left_over[:textures.SAMPLE_PATHS]}
+            "leftOver": len(fresh.left_over), "unpacked": len(fresh.unpacked), "stalePaths": fresh.stale[:textures.SAMPLE_PATHS],
+            "missingPaths": fresh.missing[:textures.SAMPLE_PATHS], "leftOverPaths": fresh.left_over[:textures.SAMPLE_PATHS],
+            "unpackedPaths": fresh.unpacked[:textures.SAMPLE_PATHS]}
 
 
-def status(mods, running, todds, everything=False, top=40, now=None, progress=None):
+def status(mods, running, todds, everything=False, top=40, now=None, progress=None, headers=None):
+    headers = headers if headers is not None else textures.HeaderCache()
     rows = []
     with ThreadPoolExecutor(max_workers=CHECK_THREADS) as pool:     # the disk does the waiting, so folders are read side by side
-        for row in pool.map(lambda mod: _mod_data(mod, textures.check_folder(mod.folder)), mods):
+        for row in pool.map(lambda mod: _mod_data(mod, textures.check_folder(mod.folder, headers=headers)), mods):
             rows.append(row)
             if progress and (len(rows) % PROGRESS_EVERY == 0 or len(rows) == len(mods)):
                 progress("Checking each active mod's textures against its pictures", len(rows), len(mods))
+    headers.save()
     stale = [r for r in rows if r["stale"]]
     missing = [r for r in rows if r["missing"] and not r["stale"]]
-    title = ("Textures: in step" if not stale and not missing else
-             f"Textures: {len(stale):,} mods would show old pictures, {len(missing):,} more have pictures never encoded")
+    unpacked = [r for r in rows if r["unpacked"] and not r["stale"] and not r["missing"]]
+    if not stale and not missing and not unpacked:
+        title = "Textures: in step"
+    elif not stale and not missing:
+        title = f"Textures: {len(unpacked):,} mods hold textures Waylith unpacks at four times the memory"
+    else:
+        title = f"Textures: {len(stale):,} mods would show old pictures, {len(missing):,} more have pictures never encoded"
+        if unpacked:
+            title += f", {len(unpacked):,} more hold textures Waylith unpacks"
     report = Report(title)
     report.lines.append(f"{len(rows):,} active mods read, {sum(r['pictures'] for r in rows):,} pictures. The game loads a mod's .dds "
                         "instead of the .png beside it without comparing dates, so a stale .dds shows the old picture.")
@@ -90,14 +100,18 @@ def status(mods, running, todds, everything=False, top=40, now=None, progress=No
         report.lines.append(f"**The game is running ({', '.join(running)}): encoding waits until it closes.**")
     if todds is None:
         report.lines.append("**RimSort's todds was not found**: pass --todds, set RIMSORT_TODDS, or install RimSort.")
-    columns = ["Mod", "From", "Stale", "Never encoded", "Left over", "Pictures"]
-    cells = lambda r: [r["name"], r["source"], f"{r['stale']:,}", f"{r['missing']:,}", f"{r['leftOver']:,}", f"{r['pictures']:,}"]
+    columns = ["Mod", "From", "Stale", "Never encoded", "Unpacked by Waylith", "Left over", "Pictures"]
+    cells = lambda r: [r["name"], r["source"], f"{r['stale']:,}", f"{r['missing']:,}", f"{r['unpacked']:,}", f"{r['leftOver']:,}",
+                       f"{r['pictures']:,}"]
     if stale:
         report.section("Would show old pictures: encode before the next launch", Table(columns, [cells(r) for r in stale[:top]],
                                                                                       total=len(stale)))
     if missing:
         report.section("Pictures never encoded: slower loading, more memory", Table(columns, [cells(r) for r in missing[:top]],
                                                                                     total=len(missing)))
+    if unpacked:
+        report.section("Unpacked by Waylith at four times the memory: encode keeps them compressed",
+                       Table(columns, [cells(r) for r in unpacked[:top]], total=len(unpacked)))
     if everything:
         report.section("Every active mod", Table(columns, [cells(r) for r in rows[:top]], total=len(rows)))
     left = [r for r in rows if r["leftOver"]]
@@ -107,9 +121,11 @@ def status(mods, running, todds, everything=False, top=40, now=None, progress=No
     data = {"checkedAt": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds"), "gameRunning": running,
             "todds": str(todds) if todds else None, "slackSeconds": textures.SLACK_SECONDS,
             "totals": {"mods": len(rows), "pictures": sum(r["pictures"] for r in rows), "staleMods": len(stale),
-                       "missingMods": len(missing), "stale": sum(r["stale"] for r in rows), "missing": sum(r["missing"] for r in rows),
+                       "missingMods": len(missing), "unpackedMods": len(unpacked), "stale": sum(r["stale"] for r in rows),
+                       "missing": sum(r["missing"] for r in rows), "unpacked": sum(r["unpacked"] for r in rows),
                        "leftOver": sum(r["leftOver"] for r in rows)},
-            "mods": rows if everything else [r for r in rows if r["stale"] or r["missing"] or r["leftOver"]]}
+            "headersReadNow": headers.read_now,
+            "mods": rows if everything else [r for r in rows if r["stale"] or r["missing"] or r["unpacked"] or r["leftOver"]]}
     return report, data
 
 
@@ -147,7 +163,8 @@ def main(argv=None, environ=None, out=None, running=None, run=None, mods=None, n
         progress("Finding the active mods")
         found = mods if mods is not None else active_mods(args.settings, environ, args.game)
         if args.report == "status":
-            report, data = status(found, running, todds, args.all, args.top, now, progress)
+            report, data = status(found, running, todds, args.all, args.top, now, progress,
+                                  textures.HeaderCache.default(environ, args.settings))
         else:
             picked = _pick(found, args.mod)
             if running:

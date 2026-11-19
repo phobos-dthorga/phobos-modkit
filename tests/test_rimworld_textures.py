@@ -130,6 +130,45 @@ class MipTests(unittest.TestCase):
             self.assertEqual(textures.trim_folder(tmp).trimmed, [])
 
 
+class HeaderCacheTests(unittest.TestCase):
+    def test_check_folder_counts_only_what_encode_would_fix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, height in (("Truck", 1408), ("Square", 1024), ("Nacelle", 1156)):
+                write(Path(tmp) / "Textures" / f"{name}.png", time.time() - 600)
+                dds(Path(tmp) / "Textures" / f"{name}.dds", 228 if name == "Nacelle" else 8, height)
+            found = textures.check_folder(tmp, headers=textures.HeaderCache())
+            self.assertEqual(found.unpacked, ["Textures/Truck.dds"])
+            self.assertTrue(found.needs_encoding)
+            self.assertEqual(textures.check_folder(tmp).unpacked, [])     # without headers, names and dates only
+
+    def test_verdicts_are_remembered_until_a_file_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            truck = dds(Path(tmp) / "mod" / "Textures" / "Truck.dds", 8, 1408)
+            store = Path(tmp) / "cache" / "headers.sqlite"
+            first = textures.HeaderCache(store)
+            self.assertEqual(textures.check_folder(Path(tmp) / "mod", headers=first).unpacked, ["Textures/Truck.dds"])
+            self.assertEqual(first.read_now, 1)
+            self.assertTrue(first.save())
+            second = textures.HeaderCache(store)
+            self.assertEqual(textures.check_folder(Path(tmp) / "mod", headers=second).unpacked, ["Textures/Truck.dds"])
+            self.assertEqual(second.read_now, 0, "an unchanged file is not read again")
+            textures.trim_mips(truck)                                       # encode's shortening changes its size
+            third = textures.HeaderCache(store)
+            self.assertEqual(textures.check_folder(Path(tmp) / "mod", headers=third).unpacked, [])
+            self.assertEqual(third.read_now, 1)
+
+    def test_an_older_rule_or_an_unreadable_store_reads_everything_again(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dds(Path(tmp) / "mod" / "Textures" / "Truck.dds", 8, 1408)
+            store = Path(tmp) / "headers.sqlite"
+            store.write_bytes(b"not a database")
+            headers = textures.HeaderCache(store)
+            textures.check_folder(Path(tmp) / "mod", headers=headers)
+            self.assertEqual(headers.read_now, 1)
+            self.assertTrue(headers.save())
+            self.assertTrue(textures.HeaderCache(store)._known)
+
+
 def installed(folder, name="Sample Mod", package="test.sample", source="Workshop"):
     return InstalledMod(package, name, source, Path(folder))
 
@@ -137,9 +176,22 @@ def installed(folder, name="Sample Mod", package="test.sample", source="Workshop
 class CliTests(unittest.TestCase):
     def run_cli(self, argv, mods, running=lambda names: [], run=None):
         out = io.StringIO()
-        code = textures_cli.main([*argv, "--json", "--todds", __file__], environ=support.isolated_environ(), out=out, running=running,
-                                 run=run, mods=mods)
+        environ = support.isolated_environ(PHOBOS_MODKIT_CACHE=str(Path(mods[0].folder).parent / "cache"))
+        code = textures_cli.main([*argv, "--json", "--todds", __file__], environ=environ, out=out, running=running, run=run, mods=mods)
         return code, json.loads(out.getvalue())
+
+    def test_status_names_the_mods_whose_textures_waylith_unpacks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(Path(tmp) / "a" / "Textures" / "Truck.png", time.time() - 600)
+            dds(Path(tmp) / "a" / "Textures" / "Truck.dds", 8, 1408)
+            code, answer = self.run_cli(["status"], [installed(Path(tmp) / "a")])
+            self.assertEqual(code, 0)
+            totals = answer["data"]["totals"]
+            self.assertEqual((totals["unpackedMods"], totals["unpacked"], totals["staleMods"]), (1, 1, 0))
+            self.assertIn("Waylith unpacks", answer["report"]["title"])
+            self.assertTrue((Path(tmp) / "cache" / textures.HEADER_CACHE_NAMESPACE / textures.HEADER_CACHE_FILE).is_file())
+            _, again = self.run_cli(["status"], [installed(Path(tmp) / "a")])
+            self.assertEqual(again["data"]["headersReadNow"], 0)
 
     def test_status_names_the_mods_that_would_show_old_pictures(self):
         with tempfile.TemporaryDirectory() as tmp:

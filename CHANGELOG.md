@@ -4,6 +4,27 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.57.0] - 2026-11-20
+
+The owner (20 November 2026): the Waylith fix in 1.54.0 is truly effective only once D'thorga Companion's own install and encode steps
+carry it. Its install runs the repository's deploy, and its encode runs this kit, but its texture check read names and dates only, so a
+mod whose textures Waylith unpacks looked in step and was never offered encoding. A first check of the owner's 358 active mods found
+4,770 such textures in 116 mods, about 7.75 GiB of what Graphics Settings' profiler counts.
+
+### Added
+
+- rimworld-textures status counts, for each mod, the encoded textures Waylith unpacks that encode would shorten (unpacked, unpackedPaths;
+  totals unpackedMods and unpacked), in their own section and in the title. Those left whole are not counted, since encode cannot help.
+- Each .dds header is read once and its verdict remembered in the kit's cache (rimworld-textures/dds-headers.sqlite) by path, size and
+  date; only new or changed files are read again, and the file is rewritten only when something changed. The JSON says how many were
+  read this run (headersReadNow). On the owner's PC the first run took about 9 seconds, later ones about 0.3 seconds more than before.
+- textures.HeaderCache and textures.classify; check_folder takes headers to count them.
+
+### Compatibility and limits
+
+- A mod with only unpacked textures now counts as needing encoding (Freshness.needs_encoding), so a program offering encode from it
+  offers it for those mods too.
+
 ## [1.56.0] - 2026-11-20
 
 A new shared rule, at the owner's word (20 November 2026): a new behaviour in any game or mod says what outside the thing itself

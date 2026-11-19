@@ -1,7 +1,8 @@
 # Textures: does any mod need its textures encoded before the next launch?
 
-**Status (20 Nov 2026):** built in 1.21.0; mip chains shortened for Waylith in 1.54.0. D'thorga Companion's Mods page shows it;
-phobos-rimworld's deploy.py uses the same todds preset and the same shortening from here. Shortening not yet seen in game.
+**Status (20 Nov 2026):** built in 1.21.0; mip chains shortened for Waylith in 1.54.0, and counted by status in 1.57.0. D'thorga
+Companion's Mods page shows it; phobos-rimworld's deploy.py uses the same todds preset and the same shortening from here. Shortening
+not yet seen in game.
 
 ## Read this first (gotchas)
 
@@ -13,7 +14,9 @@ phobos-rimworld's deploy.py uses the same todds preset and the same shortening f
 - **A stale `.dds` shows the old picture.** The game loads a `.dds` instead of the `.png` beside it, without comparing their dates
   (RimWorld 1.7, `Verse.ModContentLoader.ShadowedByDds`, read in a decompile on 18 Nov 2026). When a mod update changes a picture
   after RimSort encoded it, the game keeps showing the old one until it is encoded again.
-- **status only reads file names and dates**; about 3 seconds for 342 active mods and 35,000 pictures on the owner's PC.
+- **status reads file names and dates, and each `.dds` header once** (1.57.0): what it found is remembered in the kit's cache
+  (`rimworld-textures/dds-headers.sqlite`) by path, size and date, so only new or changed files are read again. On the owner's PC,
+  358 active mods and 36,447 encoded textures: about 9 seconds the first time, then about 0.3 seconds more than names and dates alone.
 - **encode writes `.dds` files into the mods' own folders, Workshop ones included** (owner, 18 Nov 2026), with RimSort's own todds
   preset, only for the mods it is named, and never while the game runs. It never deletes anything.
 - **Steam dates files when it downloads them**, so a changed picture is newer than its old `.dds`: checked on 18 Nov 2026, the oldest
@@ -38,6 +41,7 @@ Paths come from `--settings` (a JSON file with `rimworldPath`, `workshopPath`, `
 | Stale | A `.png` newer than its `.dds` by more than two minutes | The old picture shows |
 | Never encoded | A `.png` with no `.dds` | The right picture, loaded more slowly, held in more memory |
 | Left over | A `.dds` whose `.png` is gone | Still loaded under its name; usually harmless; never touched |
+| Unpacked by Waylith | A `.dds` Waylith unpacks that encode would shorten (not those left whole) | Four times the memory; encode fixes it |
 
 - Only active mods in the game's `Mods` folder and the Workshop folder; never the game's own `Data`.
 - Only paths containing `Textures`, as RimSort's preset reads them; names match without regard to letter case.
