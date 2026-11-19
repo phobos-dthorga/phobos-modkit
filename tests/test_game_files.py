@@ -86,6 +86,35 @@ class GameFilesTests(unittest.TestCase):
     def test_the_data_folder_is_guessed_through_its_makers_folder(self):
         self.assertEqual(game_files.guess_data("Sample Colony", self.environ), self.data)
 
+    def test_guesses_find_a_moved_documents_folder_and_names_that_differ(self):
+        # The owner's PC (20 Nov 2026): Documents lives in SynologyDrive; Farming Simulator 25 writes FarmingSimulator2025;
+        # Project Zomboid writes Zomboid beside a folder of the person's own mods; Vortex keeps folders named for games.
+        documents = Path(self.temp.name) / "elsewhere" / "Documents"
+        farm = documents / "My Games" / "FarmingSimulator2025"
+        farm.mkdir(parents=True)
+        (documents / "My Games" / "Project Zomboid (mods)").mkdir()
+        (self.home / "Zomboid").mkdir()
+        (self.home / "AppData" / "Roaming" / "Vortex" / "farmingsimulator25").mkdir(parents=True)
+        (self.home / "AppData" / "Local" / "AutomationGame").mkdir(parents=True)
+        (self.home / "AppData" / "Local" / "Projects").mkdir(parents=True)
+        (self.home / "AppData" / "Local" / "Unreal Engine" / "Engine").mkdir(parents=True)
+        environ = {**self.environ, game_files.DOCUMENTS: str(documents)}
+        self.assertIsNone(game_files.guess_data("Farming Simulator 25", self.environ))
+        found = game_files.guess_candidates("Farming Simulator 25", environ)
+        self.assertEqual([(c["path"], c["score"]) for c in found], [(str(farm), 80)])
+        zomboid = game_files.guess_candidates("Project Zomboid", environ)
+        self.assertEqual(zomboid[0]["path"], str(self.home / "Zomboid"))
+        self.assertEqual(zomboid[1]["reason"], "named for the game's mods")
+        self.assertEqual(game_files.guess_data("Automation - The Car Company Tycoon Game", environ),
+                         self.home / "AppData" / "Local" / "AutomationGame")
+        self.assertEqual(game_files.guess_candidates("Wallpaper Engine", environ), [])
+
+    def test_steam_games_carry_their_guesses(self):
+        out = io.StringIO()
+        game_files.main(["steam-games", "--json"], out, self.environ)
+        guesses = json.loads(out.getvalue())["data"]["games"][0]["dataGuesses"]
+        self.assertEqual(guesses[0]["reason"], "named for the game, with more after, inside Sample Studio")
+
     def test_the_report_holds_what_changed_saves_screenshots_and_space(self):
         found = game_files.report("Sample Colony", environ=self.environ)
         self.assertTrue(found["changed"]["gameUpdated"])

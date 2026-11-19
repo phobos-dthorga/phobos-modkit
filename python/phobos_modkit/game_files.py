@@ -42,6 +42,19 @@ PREVIOUS = "previous"
 WORKSHOP_TITLE_FILES = (("About/About.xml", re.compile(r"<name>\s*(.*?)\s*</name>", re.S)),
                         ("mod.info", re.compile(r"^name\s*=\s*(.+)$", re.M)))
 TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|([{}])')
+# Guessing a game's data folder (1.58.0; agent defaults, the owner confirms each guess when adding a game in D'thorga Companion).
+DOCUMENTS = "PHOBOS_DOCUMENTS"
+SHELL_FOLDERS = r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+GUESSES_KEPT = 3
+MIN_WORD = 7          # letters a last word needs before a folder named for it alone counts ("Zomboid"; not "Engine", "Studio")
+MIN_FIRST = 8         # letters a first word needs for a folder starting with it ("Automation"; not "Project", "Euro")
+MIN_BARE = 8          # letters a name needs, digits aside, before its numbering may differ ("FarmingSimulator2025")
+MIN_TAIL, MAX_TAIL = 3, 6    # letters a folder may add after the game's first word ("AutomationGame"; not "Projects")
+# Folders never looked inside for a game's: temporary files, and mod managers' and engines' own copies named for games
+# (Vortex\farmingsimulator25 outranked Farming Simulator's real folder on the owner's PC).
+NOT_MAKERS = frozenset({"temp", "tmp", "cache", "packages", "vortex", "modorganizer", "modorganizer2", "nexusmodmanager",
+                        "unrealengine", "unity", "nvidia", "nvidiacorporation", "microsoft", "google", "mozilla"})
+SIDE_FOLDERS = frozenset({"mods", "mod", "backup", "backups", "old", "tools", "editor", "server", "dedicatedserver"})
 
 
 # ---------------------------------------------------------------- Steam's own records
@@ -154,41 +167,115 @@ def workshop_items(game):
 
 # ---------------------------------------------------------------- the game's own files
 
+def documents_folder(environ=None):
+    """The person's Documents folder where Windows keeps it, which may be moved off the home folder (the owner's is in their
+    SynologyDrive, 20 Nov 2026, so Documents\\My Games was never found). PHOBOS_DOCUMENTS names it; else Windows' own record of
+    it, read only for this process's environment; None when neither says."""
+    environ = os.environ if environ is None else environ
+    if environ.get(DOCUMENTS):
+        return Path(environ[DOCUMENTS])
+    if sys.platform != "win32" or environ is not os.environ:
+        return None
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, SHELL_FOLDERS) as key:
+            value, _ = winreg.QueryValueEx(key, "Personal")
+    except OSError:
+        return None
+    return Path(os.path.expandvars(value)) if value else None
+
+
 def _homes(environ=None):
     environ = os.environ if environ is None else environ
     home = Path(environ.get("USERPROFILE") or environ.get("HOME") or Path.home())
-    found = [home / "AppData" / "LocalLow", home / "Documents" / "My Games", home / "AppData" / "Local",
-             home / "AppData" / "Roaming", home / "Documents", home / ".config" / "unity3d", home / ".local" / "share", home]
-    return [h for h in found if h.is_dir()]
+    documents = documents_folder(environ)
+    found = [home / "AppData" / "LocalLow",
+             *([documents / "My Games", documents] if documents else []),
+             home / "Documents" / "My Games", home / "AppData" / "Local", home / "AppData" / "Roaming", home / "Documents",
+             home / ".config" / "unity3d", home / ".local" / "share", home]
+    unique = []
+    for folder in found:
+        if folder.is_dir() and folder not in unique:
+            unique.append(folder)
+    return unique
 
 
 def _key(text):
     return re.sub(r"[^a-z0-9]", "", str(text).casefold())
 
 
-def guess_data(name, environ=None):
-    """The game's data folder, guessed from the usual homes by its name: a folder named for it, or for its maker with one inside
-    named for it (LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios). None when nothing matches."""
-    wanted = _key(name)
-    if not wanted:
+def _match(folder_name, name):
+    """How a folder's name matches a game's: (score, reason in words), or None. Higher is surer (1.58.0)."""
+    folder, wanted = _key(folder_name), _key(name)
+    if not folder or not wanted:
         return None
-    for home in _homes(environ):
-        try:
-            children = [c for c in home.iterdir() if c.is_dir()]
-        except OSError:
-            continue
-        for child in children:
-            if _key(child.name) == wanted or _key(child.name).startswith(wanted):
-                return child
-        for maker in children:
-            try:
-                inner = [c for c in maker.iterdir() if c.is_dir()]
-            except OSError:
-                continue
-            for child in inner:
-                if _key(child.name).startswith(wanted):
-                    return child
+    if folder == wanted:
+        return 100, "named for the game"
+    if folder.startswith(wanted):
+        tail = folder[len(wanted):]
+        if tail in SIDE_FOLDERS:                                  # My Games\Project Zomboid (mods): the person's own, not the game's
+            return 40, f"named for the game's {tail}"
+        return 90, "named for the game, with more after"
+    bare_folder, bare_wanted = re.sub(r"[0-9]", "", folder), re.sub(r"[0-9]", "", wanted)
+    if len(bare_wanted) >= MIN_BARE and bare_folder == bare_wanted:
+        return 80, "named for the game, numbered differently"     # Farming Simulator 25: FarmingSimulator2025
+    words = [_key(w) for w in str(name).split() if _key(w)]
+    if len(folder) >= MIN_WORD and len(words) > 1 and words[-1] == folder:
+        return 70, "named for the game's last word"               # Project Zomboid: Zomboid
+    if words and len(words[0]) >= MIN_FIRST and folder.startswith(words[0]) and \
+            MIN_TAIL <= len(folder) - len(words[0]) <= MAX_TAIL:
+        return 60, "starts with the game's first word"            # Automation - The Car Company Tycoon Game: AutomationGame
     return None
+
+
+def _folders(folder):
+    """The folders directly in a folder, by name; scandir, so Windows answers each without a second look (AppData\\Local holds
+    80,000 folders one level down on the owner's PC)."""
+    try:
+        with os.scandir(folder) as entries:
+            found = [Path(e.path) for e in entries if e.is_dir(follow_symlinks=False)]
+    except OSError:
+        return []
+    return sorted(found, key=lambda f: f.name.casefold())
+
+
+def _scan(environ=None):
+    """Every folder in the usual homes, and every folder one level inside each (a maker's folder holding the game's), read once:
+    [(path, name, maker or None)]. Hidden folders, temporary files and mod managers' copies are not looked inside."""
+    found = []
+    for home in _homes(environ):
+        children = _folders(home)
+        found.extend((child, child.name, None) for child in children)
+        for maker in children:
+            if maker.name.startswith(".") or _key(maker.name) in NOT_MAKERS:
+                continue
+            found.extend((child, child.name, maker.name) for child in _folders(maker))
+    return found
+
+
+def guess_candidates(name, environ=None, scanned=None):
+    """Up to GUESSES_KEPT folders that may be the game's data folder, surest first, each {path, score, reason}. A folder inside a
+    maker's folder scores a little lower than one named for the game in a home itself. `scanned` reuses one `_scan`."""
+    found = {}
+    for path, folder_name, maker in (_scan(environ) if scanned is None else scanned):
+        matched = _match(folder_name, name)
+        if matched is None:
+            continue
+        score, reason = matched
+        if maker is not None:
+            score, reason = score - 5, f"{reason}, inside {maker}"
+        key = str(path)
+        if key not in found or found[key]["score"] < score:
+            found[key] = {"path": key, "score": score, "reason": reason}
+    ranked = sorted(found.values(), key=lambda c: -c["score"])            # stable: the homes' order breaks ties
+    return ranked[:GUESSES_KEPT]
+
+
+def guess_data(name, environ=None):
+    """The game's data folder, guessed from the usual homes by its name: the surest of `guess_candidates`, as a folder named for it,
+    or for its maker with one inside named for it (LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios). None when nothing matches."""
+    found = guess_candidates(name, environ)
+    return Path(found[0]["path"]) if found else None
 
 
 def _first_child(folder, names):
@@ -403,10 +490,14 @@ def main(argv=None, out=None, environ=None):
     redact = keep if args.no_redact else home_redactor()
     if args.report == "steam-games":
         games = installed_games(steam_root(environ))
+        scanned = _scan(environ)
+        for game in games:
+            game["dataGuesses"] = guess_candidates(game["name"], environ, scanned)
         found = Report(f"Steam games installed: {len(games)}")
-        found.section("Games", Table(["App", "Name", "Build", "Last played", "Size"],
+        found.section("Games", Table(["App", "Name", "Build", "Last played", "Size", "Data folder (surest guess)"],
                                      [[str(g["appId"]), g["name"], g["buildId"] or "", _when(g["lastPlayed"])[:10],
-                                       _size_words(g["sizeOnDisk"])] for g in games]))
+                                       _size_words(g["sizeOnDisk"]),
+                                       g["dataGuesses"][0]["path"] if g["dataGuesses"] else "none found"] for g in games]))
         out.write((envelope_text("game-files", found, redact, {"games": games}) if args.json
                    else render_markdown(found, redact)) + "\n")
         return EXIT_OK

@@ -1,8 +1,8 @@
 # Game files: what a game writes, and what Steam records
 
-**Status (19 Nov 2026):** built in 1.46.0, for any Steam game. D'thorga Companion's Game files page shows it from 0.22.0. Checked on
-RimWorld (everything), Farming Simulator 25 (Steam's records; its data folder is not guessed) and Project Zomboid (its files, given
-`--data`; it is not installed through Steam at the moment).
+**Status (20 Nov 2026):** built in 1.46.0, for any Steam game. D'thorga Companion's Game files page shows it from 0.22.0. Checked on
+RimWorld (everything), Farming Simulator 25 (Steam's records, and from 1.58.0 its data folder) and Project Zomboid (its files; from
+1.58.0 its data folder is guessed too). **1.58.0 guesses better and offers candidates**, for the Companion's Add a game from Steam.
 
 ## Read this first (gotchas)
 
@@ -14,9 +14,23 @@ RimWorld (everything), Farming Simulator 25 (Steam's records; its data folder is
   game runs a program can still ask what changed since the session before; until the kit has seen an earlier launch it uses
   the last one and says so (`sincePrevious` false).
 - **The data folder is guessed by the game's name** in the usual homes of game data (`AppData\LocalLow`, `Documents\My Games`,
-  `AppData\Local` and `Roaming`, `Documents`, the home folder), directly or one maker's folder down. A game whose folder is named
-  otherwise (Project Zomboid's `Zomboid`, Farming Simulator 25's `FarmingSimulator2025`) needs `--data`; the Companion passes it
-  from the game's `places` in its list.
+  `AppData\Local` and `Roaming`, `Documents`, the home folder), directly or one maker's folder down. **From 1.58.0 Documents is
+  where Windows keeps it** (`PHOBOS_DOCUMENTS` names it; the owner's is moved into SynologyDrive), and a name may differ in the
+  ways games' folders do. A guess is a guess: `--data` overrides it, and the Companion passes the game's `places` from its list.
+- **`steam-games` gives each game up to three candidates** (`dataGuesses`: `path`, `score`, `reason`), surest first:
+
+  | Score | Rule | Example on the owner's PC |
+  | --- | --- | --- |
+  | 100 | named for the game | `Documents\Euro Truck Simulator 2` |
+  | 90 | named for the game, with more after | `RimWorld by Ludeon Studios` (85: inside a maker's folder, 5 less) |
+  | 80 | named for the game, numbered differently (8 letters or more, digits aside) | `FarmingSimulator2025` for Farming Simulator 25 |
+  | 70 | named for the game's last word (7 letters or more) | `Zomboid` for Project Zomboid |
+  | 60 | starts with the game's first word (8 letters or more), 3 to 6 letters more | `AutomationGame` |
+  | 40 | named for the game, then a side word (mods, backup, tools, server...) | `Project Zomboid (mods)` |
+
+  Hidden folders, temporary files and mod managers' or engines' folders (Vortex, Unreal Engine...) are not looked inside: Vortex keeps
+  folders named for games. Folders are read with `os.scandir` (0.4 s on the owner's PC; 15 s before, `AppData\Local` holding 80,000
+  folders one level down). Agent defaults, all.
 - **Steam's folder** is `steamPath` (`PHOBOS_STEAM`), else Steam's usual place on each system.
 
 ## Use

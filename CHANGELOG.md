@@ -4,6 +4,25 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.58.0] - 2026-11-20
+
+For D'thorga Companion's Add a game from Steam (docs/later.md, item 5, agreed by the owner on 19 November 2026; built overnight on
+their go-ahead of 20 November).
+
+### Added
+
+- game-files steam-games gives each game up to three candidates for its data folder (dataGuesses: path, score, reason), surest
+  first, read in one look at the usual homes.
+
+### Fixed
+
+- The data folder is found where Windows keeps Documents (the owner's is moved into SynologyDrive, so Documents\My Games was never
+  looked in), or PHOBOS_DOCUMENTS. Names that differ the way games' folders do now match: FarmingSimulator2025 for Farming
+  Simulator 25, Zomboid for Project Zomboid, AutomationGame for Automation. A folder for the game's mods or backups ranks below the
+  game's own, and mod managers' copies (Vortex) are not looked inside.
+- Looking for a data folder takes 0.4 s instead of 15 s on the owner's PC: folders are read with os.scandir, and temporary files
+  are not looked inside.
+
 ## [1.57.1] - 2026-11-20
 
 The owner, on D'thorga Companion's code viewer (20 November 2026): "It doesn't seem to be showing the full extent of the code
