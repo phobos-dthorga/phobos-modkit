@@ -16,6 +16,7 @@ Read the file named before doing the work, even when no file of that kind is ope
 | Before | Read |
 | --- | --- |
 | Setting up or changing how a repository builds code, or adding a project or a build script | [builds.md](builds.md) |
+| Designing or building a new behaviour for a game or mod | [designs.md](designs.md) |
 
 ## Commits and changelog entries
 

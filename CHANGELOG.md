@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.56.0] - 2026-11-20
+
+A new shared rule, at the owner's word (20 November 2026): a new behaviour in any game or mod says what outside the thing itself
+notices it. A review of the RimWorld vehicles had found them detailed within each vehicle, with almost nothing reaching the rest
+of the game.
+
+### Added
+
+- rules/designs.md, read before designing or building a new behaviour: the three questions every new behaviour answers (what it
+  lets the player do, what it stops them doing, how it changes the way they do things; the owner's rule of 8 November 2026, moved
+  here from phobos-rimworld so the four stand together) and the new fourth (what outside the thing itself notices; nothing is
+  allowed as a stated choice, never by accident). every-session.md's table and the rules index name it.
+
 ## [1.55.0] - 2026-11-20
 
 For D'thorga Companion's automatic records backup (the owner, 20 November 2026: "every few hours when it's open, and if the

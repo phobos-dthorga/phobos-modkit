@@ -2,7 +2,9 @@
 
 **Status (19 Nov 2026):** created at the owner's request, with its first rules (commits and changelog entries), and a second file
 the same day (builds: the same code builds to the same bytes). phobos-rimworld and D'thorga Companion read it through their pinned
-copy of this repository. The rules waiting to move here are listed below; none has been moved yet.
+copy of this repository. On 20 Nov 2026 a third file followed (designs: the four questions a new behaviour answers), its first
+three questions moved here from phobos-rimworld with the fourth. The rules waiting to move here are listed below; none of those
+has been moved yet.
 
 ## Read this first (gotchas)
 
@@ -21,6 +23,7 @@ copy of this repository. The rules waiting to move here are listed below; none h
 | --- | --- | --- |
 | [every-session.md](every-session.md) | At the start of every session | Commits and changelog entries; claims when sharing the machine with other sessions; which file to read before which work |
 | [builds.md](builds.md) | Before setting up or changing how code is built | The same code builds to the same bytes |
+| [designs.md](designs.md) | Before designing or building a new behaviour | The four questions a new behaviour answers: what it lets, stops and changes, and what outside it notices |
 | [first-class.md](first-class.md) | Before adding a new kind of thing to the tools or the Companion | A design to edit, not yet rules: the things every tool and page treats as real, and what makes them first-class |
 
 `python -m phobos_modkit rules list` prints this with each file's rules counted, and `tests/test_rules.py` fails if a file here is
