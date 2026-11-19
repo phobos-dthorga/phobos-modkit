@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.44.0] - 2026-11-19
+
+The owner said yes (19 November 2026) to a claims board, so agent sessions sharing the machine stop asking each other in messages which version number is free.
+
+### Added
+
+- claims list, take and release: one board where a session holds a version number, a test row or a file, refused while another session holds the same thing (compared ignoring case and spacing). A claim over a day old is shown as old, and --force takes it over. Changes hold a lock file and write the board whole, so sessions taking at once lose nothing.
+- claimsPath (PHOBOS_CLAIMS), the board's file, listed with every other setting.
+- A shared rule in rules/every-session.md: take a claim before using anything another session may want, release it once committed, and ask a claim's holder rather than pick around it.
+
+### Fixed
+
+- records backup and screen-notes resolve and reopen now answer a refusal in JSON (ok false, with the reason) when asked for JSON, as every other command does, instead of plain text a program could not read.
 ## [1.43.0] - 2026-11-19
 
 The owner said yes (19 November 2026) to backing up D'thorga Companion's own records, which sit in a folder their NAS does not back up.

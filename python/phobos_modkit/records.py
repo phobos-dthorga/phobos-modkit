@@ -213,7 +213,8 @@ def main(argv=None, out=None, environ=None):
         try:
             made = backup(args.to, environ)
         except RecordsError as refused:
-            out.write(f"Refused: {refused}\n")
+            out.write((envelope_text("records", Report("Refused"), redact, {"ok": False, "refusal": str(refused)})
+                       if args.json else f"Refused: {refused}") + "\n")
             return EXIT_REFUSED
         report = Report(f"Records copied: {made['files']} files, {_kb(made['bytes'])}")
         report.section("Where", Bullets([made["path"]]))

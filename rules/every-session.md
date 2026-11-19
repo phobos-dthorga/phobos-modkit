@@ -38,3 +38,12 @@ Read the file named before doing the work, even when no file of that kind is ope
 What this costs, said plainly: where a repository checks every commit (a gate, a commit guard), each separate commit needs its own
 passing run. That is why the rule is "finish one before starting the next", where the run is one the change needed anyway, and not
 "one commit for every entry", which the owner set aside.
+
+## Sharing the machine with other sessions
+
+- **Take a claim before using anything another session may also want** (owner's go-ahead, 19 Nov 2026, for the claims board in
+  D'thorga Companion): a version number, a test row, a file being reworked. `python -m phobos_modkit claims list` shows who holds
+  what; `claims take "phobos-modkit 1.44.0" --by <your session's name>` takes it, and is refused while another session holds it.
+  **Release it once committed** (`claims release ... --by ...`, or `--all`). The Companion's Home shows the board.
+- **A refused claim is a question for its holder**, sent as a message, never a reason to pick around it silently. A claim more than
+  a day old is shown as old; take it over with `--force` only once its session has ended or agreed.

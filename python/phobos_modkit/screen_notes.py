@@ -170,7 +170,8 @@ def main(argv=None, out=None, environ=None):
         try:
             note = resolve(where, args.id, args.how) if args.report == "resolve" else reopen(where, args.id)
         except NoteError as refused:
-            out.write(f"Refused: {refused}\n")
+            out.write((envelope_text("screen-notes", Report("Refused"), redact, {"ok": False, "refusal": str(refused)})
+                       if args.json else f"Refused: {refused}") + "\n")
             return EXIT_REFUSED
         report = Report(f"Screen note {note['id']} " + ("dealt with" if args.report == "resolve" else "open again"))
         report.section("The note", Bullets([f"{note['page']} ({note['game']}), {note['time']}: {_short(note['words']) or '(no words)'}"]))
