@@ -37,6 +37,7 @@ COMMANDS = {
     "makeup": (".makeup_cli", "what a repository is made of, how it grew, where the work goes, and what each product holds"),
     "pins": (".pins", "which version of this tool kit each repository pins, and what moving the pin would bring"),
     "screen-notes": (".screen_notes", "what the owner flagged as looking wrong in D'thorga Companion; marks a note dealt with"),
+    "records": (".records", "a copy of D'thorga Companion's own records in a folder of your choosing, and how old the newest is"),
     "rules": (".rules_cli", "the rules every repository shares, and whether a repository reads them"),
     "settings": (".settings_cli", "the settings the tools read, where each value comes from, and the central settings file"),
     "test-pass": (".testpass_cli", "what a repository's in-game test list is waiting for, from the game's notes and the owner's verdicts"),

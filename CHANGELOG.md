@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.43.0] - 2026-11-19
+
+The owner said yes (19 November 2026) to backing up D'thorga Companion's own records, which sit in a folder their NAS does not back up.
+
+### Added
+
+- records status: what would be copied (everything in the Companion's folder but the window's browser cache, and any record a setting keeps elsewhere), the backup folder, the copies already there, and whether the newest is at least a week old.
+- records backup copies them into a new folder named for the local time, written whole, with a backup.json saying what it holds. It never deletes.
+- recordsBackupPath (PHOBOS_RECORDS_BACKUP), the folder the copies go into, listed with every other setting.
 ## [1.42.0] - 2026-11-19
 
 The owner asked (19 November 2026) to take memory profiles of the running game and see where it goes, after RimWorld's use climbed from about 12.5 GB to 17.5 GB and more.
