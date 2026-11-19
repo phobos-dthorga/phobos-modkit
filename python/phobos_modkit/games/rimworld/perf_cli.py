@@ -14,6 +14,9 @@
     rimworld-perf heap-compare               the last two heaps: who grew
     rimworld-perf watch --minutes 120 --label "reloads"   the game's memory over time: average or bursts, .NET's or not
     rimworld-perf watch-report               the newest watch again (or name one)
+    rimworld-perf watch-status               a running watch as it stands (for a program to read every few seconds)
+    rimworld-perf watch-mark "reloading now"  your own words beside the running watch's figures
+    rimworld-perf watch-stop                 end the running watch early, from another console
 
 Recording attaches Microsoft's dotnet-trace and dotnet-counters to the game through its .NET diagnostics pipe; stack uses
 dotnet-stack and heap dotnet-gcdump the same way, and watch dotnet-counters with Windows' own figures. Nothing is installed in the
@@ -39,7 +42,7 @@ from ... import cache as derived
 from ... import dotnet_diagnostics as dd
 from ...dotnet_snapshots import SnapshotError
 from ... import process_memory as pm
-from ...manifest import READS, RUNS
+from ...manifest import READS, RUNS, WRITES
 from ...progress import Progress
 from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
 from ...sampling import CPU, MOD, UNKNOWN, Recording, SamplingError, index_speedscope, modules, read_counters, write_counters, write_owners
@@ -49,7 +52,8 @@ from . import perf_watch as pw
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 REPORTS = ("report", "record", "index", "mod", "compare", "list", "stack", "stack-report", "heap", "heap-report", "heap-compare",
-           "watch", "watch-report")
+           "watch", "watch-report", "watch-status", "watch-stop", "watch-mark")
+MEMORY_SURFACE = "memory-watch"     # D'thorga Companion's Memory page finds the watch's commands by this, never by the game's name
 CACHE_FOLDER = "rimworld-perf"
 INDEX_NAME = "index.sqlite"
 DEFAULT_SECONDS = 30
@@ -128,6 +132,14 @@ def _parser():
     wt.add_argument("--logs", help="the folder holding Player.log (else RIMWORLD_LOGS_PATH, settings, default)")
     wr = sub.add_parser("watch-report", parents=[common], help="a memory watch taken earlier")
     wr.add_argument("watch", nargs="?", help="its ID (its start is enough) or label; the newest when left out")
+    ws = sub.add_parser("watch-status", parents=[common], help="a running or kept watch as it stands, light enough to read every few seconds")
+    ws.add_argument("watch", nargs="?", help="its ID or label; the one running, else the newest, when left out")
+    wp = sub.add_parser("watch-stop", parents=[common], help="end a running watch early, from another console or a program")
+    wp.add_argument("watch", nargs="?", help="its ID or label; the one running when left out")
+    wm = sub.add_parser("watch-mark", parents=[common], help="put a few words of your own beside a watch's figures")
+    wm.add_argument("text", help='what you are doing or about to do, such as "reloading now" (at most 200 characters)')
+    wm.add_argument("--watch", help="its ID or label; the one running, else the newest, when left out")
+    wm.add_argument("--at", type=float, help="the moment it names, in seconds since 1970; now when left out")
     return p
 
 
@@ -506,14 +518,41 @@ def _watch(args, environ, settings_file, run, popen, now, sleep, clock):
         notes += pw.watch(pid, folder, args.minutes, args.every, args.map_every, counters_tool, args.label,
                           Progress(environ), clock, sleep, popen, pm.Process, log_file)
     else:
-        folder = pw.find(where, args.watch)
+        folder = pw.find(where, args.watch, prefer_running=not args.watch, now=clock())
     watched = pw.Watch(folder)
     owners, more = _owners(pw.file_stems(watched), args, environ, settings_file)
     report = pw.watch_report(watched, owners, args.top)
     for note in notes + more:
         if note not in report.lines:
             report.lines.insert(1, note)
-    return report
+    return report, {"watch": folder.name, "state": pw.state(folder, clock(), watched.meta)}
+
+
+def _steer(args, environ, settings_file, clock):
+    """watch-status, watch-stop and watch-mark: (report, data). A refusal is data with ok false and its reason, as every tool's."""
+    where = pw.root(args.cache, environ, settings_file)
+    now = clock()
+    if args.report == "watch-status":
+        return pw.status(where, args.watch, now)
+    try:
+        if args.report == "watch-stop":
+            if args.watch:
+                folder = pw.find(where, args.watch)
+            else:
+                running = [p for p in pw.kept(where) if pw.state(p, now) == pw.RUNNING]
+                if not running:
+                    raise pw.WatchError("No memory watch is running, so there is nothing to stop.")
+                folder = running[-1]
+            pw.ask_to_stop(folder, now)
+            return (Report("rimworld-perf: watch stopping", [f"Asked the watch {folder.name} to stop: it ends within a second or two, "
+                                                             "then reads in its counters and the log."]),
+                    {"ok": True, "watch": folder.name})
+        folder = pw.find(where, args.watch, prefer_running=not args.watch, now=now)
+        at, text = pw.add_mark(folder, args.text, args.at, now)
+        return (Report("rimworld-perf: watch marked", [f'Marked "{text}" at {pw.clock(at)} in the watch {folder.name}.']),
+                {"ok": True, "watch": folder.name, "t": at, "text": text})
+    except pw.WatchError as refused:
+        return Report("Refused", [str(refused)]), {"ok": False, "refusal": str(refused)}
 
 
 def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.run, popen=subprocess.Popen, now=None, sleep=time.sleep,
@@ -529,9 +568,14 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
     settings_file = args.settings or settings_file
     redact = keep if args.no_redact else home_redactor()
     code = EXIT_OK
+    data = None
     root = recordings_root(args, environ, settings_file)
     try:
-        if args.report == "list":
+        if args.report in ("watch-status", "watch-stop", "watch-mark"):
+            report, data = _steer(args, environ, settings_file, clock)
+            if data.get("ok") is False:
+                code = EXIT_FAILED
+        elif args.report == "list":
             report = list_report(root)
             snap.list_sections(report, *snap.roots(args.cache, environ, settings_file))
             watches = pw.summary_rows(pw.root(args.cache, environ, settings_file))
@@ -540,7 +584,7 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
         elif args.report in ("stack", "stack-report", "heap", "heap-report", "heap-compare"):
             report = _snapshots(args, environ, settings_file, run, now or datetime.now(), sleep)
         elif args.report in ("watch", "watch-report"):
-            report = _watch(args, environ, settings_file, run, popen, now or datetime.now(), sleep, clock)
+            report, data = _watch(args, environ, settings_file, run, popen, now or datetime.now(), sleep, clock)
         elif args.report == "compare":
             if bool(args.first) != bool(args.second):
                 raise PerfError("Name two recordings, or none for the last two.")
@@ -567,7 +611,8 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
                     report.lines.insert(1, note)
     except (PerfError, SamplingError, SnapshotError, snap.SnapshotsError, dd.DiagnosticsError, pw.WatchError, pm.MemoryError_) as error:
         report, code = Report("rimworld-perf: error", [str(error)]), EXIT_FAILED
-    print(envelope_text("rimworld-perf", report, redact) if args.json else render_markdown(report, redact), file=out)
+        data = {"ok": False, "refusal": str(error)}
+    print(envelope_text("rimworld-perf", report, redact, data) if args.json else render_markdown(report, redact), file=out)
     return code
 
 
@@ -595,6 +640,13 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
     "heap-report": {"question": "What did a heap snapshot show?"},
     "heap-compare": {"question": "Is my game's memory growing, and whose?"},
     "watch": {"effect": RUNS, "question": "Does my game's memory climb steadily or in bursts, and is it .NET's or the engine's?",
-              "note": "Reads Windows' memory figures without pausing the game; attaches dotnet-counters once unless --no-counters."},
-    "watch-report": {"question": "What did a memory watch show?"},
+              "note": "Reads Windows' memory figures without pausing the game; attaches dotnet-counters once unless --no-counters. "
+                      "Ends early when watch-stop asks.", "surface": MEMORY_SURFACE},
+    "watch-report": {"question": "What did a memory watch show?", "surface": MEMORY_SURFACE},
+    "watch-status": {"question": "Is a memory watch running, and how is it going?", "surface": MEMORY_SURFACE,
+                     "note": "Light enough to read every few seconds: the latest figures, the timeline so far, your marks, the watches kept."},
+    "watch-stop": {"effect": WRITES, "surface": MEMORY_SURFACE,
+                   "note": "Writes a stop file into the running watch's own folder in the kit's cache; the watch ends at its next look."},
+    "watch-mark": {"effect": WRITES, "surface": MEMORY_SURFACE,
+                   "note": "Adds the owner's words to the watch's own database in the kit's cache; nothing else."},
 }}

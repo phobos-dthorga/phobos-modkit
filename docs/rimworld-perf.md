@@ -106,6 +106,30 @@ python -m phobos_modkit rimworld-perf watch-report                             t
 Watches are kept in the kit's cache, `rimworld-memory/<start>-<label>/watch.sqlite` (with dotnet-counters' own file beside it),
 and listed by `list`; cleanup lists them once a fortnight old.
 
+### Following and steering a watch from a program (1.47.0)
+
+Built for D'thorga Companion's Memory page, after the owner chose (19 November 2026) to run memory profiling from there rather
+than through agents. All five commands carry the manifest surface `memory-watch`, so a program finds them without naming the game.
+
+```text
+python -m phobos_modkit rimworld-perf watch-status --json            the running watch (else the newest) as it stands
+python -m phobos_modkit rimworld-perf watch-mark "reloading now"     your words beside the running watch's figures
+python -m phobos_modkit rimworld-perf watch-stop                     end the running watch early
+```
+
+- **watch-status** is light enough to read every few seconds (about 0.2 s): the state (`running`, `finishing`, `ended`, or
+  `cut-off` when its watcher stopped without finishing), the latest figures, the timeline so far (up to 120 points), the marks and
+  the 20 newest watches. While a watch runs, .NET's figures come from dotnet-counters' own file as far as it has written it; if
+  the tool holds them back until it closes, they show only at the end (not yet seen on the owner's game).
+- **watch-stop** writes a `stop` file into the running watch's folder. The watch looks for it every second, ends, stops
+  dotnet-counters (whose file is read up to where it was cut) and writes its report as usual. Ctrl+C in its console still works.
+- **watch-mark** adds an `owner-mark` event to the watch's database, now or `--at` a moment up to a minute either side of the
+  watch. It exists because two reloads asked for during watches never reached the log: **the report now says what happened
+  before any figure** (the saves the log shows loaded, or that none was; the marks; the errors), and says so in bold when a mark
+  naming a load or reload is not followed by a save loading within 3 minutes. The jumps table names marks beside the log's events.
+- **Not built:** carrying a watch across a game restart, or starting one when the game starts (owner to decide, on the
+  Companion's Decisions page).
+
 ## What a recording is
 
 `record` finds the running `RimWorld` process (`--pid` when there are two) and runs, side by side for `--seconds`:

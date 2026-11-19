@@ -257,6 +257,110 @@ class WatchTests(unittest.TestCase):
         with self.assertRaises(pw.WatchError):
             pw.watch(1, self.tmp, 10, 5, 5, None)
 
+    def test_a_stop_file_ends_the_watch_and_its_counters(self):
+        folder = pw.new_folder(self.tmp / "watches", "stopped", datetime(2026, 11, 19, 20, 0, 0))
+        counting = mock.Mock(wait=lambda timeout=None: 0)
+
+        def popen(command, **kw):
+            counters_popen(command, **kw)
+            return counting
+
+        def sleep(seconds):
+            self.clock.sleep(seconds)
+            if self.clock() - START >= 12:
+                (folder / pw.STOP_FILE).write_text("stop", encoding="utf-8")
+        pw.watch(4242, folder, 1, 5, 30, "dotnet-counters", "stopped", None, self.clock, sleep, popen, FakeProcess(self.clock))
+        watched = pw.Watch(folder)
+        self.assertEqual("it was asked to stop", watched.meta["reason"])
+        self.assertEqual(3, len(watched.samples))
+        self.assertLess(self.clock() - START, 14)
+        counting.terminate.assert_called_once()
+        self.assertFalse((folder / pw.STOP_FILE).exists())
+        self.assertEqual(pw.ENDED, pw.state(folder, self.clock()))
+
+    def test_marks_sit_beside_the_figures_and_a_reload_the_log_never_showed_is_said(self):
+        folder, _ = self.watch()
+        pw.add_mark(folder, "  loaded   PG15 ", START + 21, now=START + 70)
+        pw.add_mark(folder, "reloading now", START + 40, now=START + 70)
+        from phobos_modkit.report import render_markdown
+        text = render_markdown(pw.watch_report(pw.Watch(folder), {}))
+        self.assertIn('Your marks: "loaded PG15" at 20:00:21; "reloading now" at 20:00:40.', text)
+        self.assertIn('you marked "loaded PG15" at 20:00:21', text)
+        self.assertIn('**You marked "reloading now" at 20:00:40, but the log shows no save loaded in the 3 minutes after it**', text)
+        self.assertNotIn('You marked "loaded PG15"', text)
+
+    def test_marks_are_refused_when_empty_too_long_or_outside_the_watch(self):
+        folder, _ = self.watch()
+        for text, at in (("   ", None), ("x" * (pw.MAX_MARK + 1), None), ("late", START + 60 * 10)):
+            with self.assertRaises(pw.WatchError):
+                pw.add_mark(folder, text, at, now=START + 60 * 20)
+
+
+def _kept_watch(where, started, last, ended=None, every=5, name=None):
+    """A watch folder as a watcher leaves it: its meta, one sample at `last`, and `ended` when it finished."""
+    import sqlite3
+    from contextlib import closing
+    from phobos_modkit import cache as derived
+    folder = Path(where) / (name or datetime.fromtimestamp(started).strftime("%Y%m%d-%H%M%S"))
+    folder.mkdir(parents=True)
+    with closing(sqlite3.connect(folder / pw.DATABASE)) as conn:
+        conn.executescript(pw.SCHEMA)
+        meta = {"started": started, "every": every, "minutes": 15, "counters": True, "label": ""}
+        if ended:
+            meta.update({"ended": ended, "reason": "the time asked for ran out"})
+        derived.write_meta(conn, meta)
+        conn.execute("INSERT INTO sample VALUES (?, ?, ?, ?)", (last, 10 * GB, 5 * GB, 20 * GB))
+        conn.commit()
+    return folder
+
+
+class StatusTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def test_running_cut_off_and_ended(self):
+        running = _kept_watch(self.tmp, START, START + 100)
+        self.assertEqual(pw.RUNNING, pw.state(running, START + 110))
+        self.assertEqual(pw.CUT_OFF, pw.state(running, START + 200))
+        ended = _kept_watch(self.tmp, START + 1000, START + 1100, ended=START + 1101)
+        self.assertEqual(pw.ENDED, pw.state(ended, START + 9999))
+
+    def test_a_running_watch_is_read_with_the_counters_written_so_far(self):
+        folder = _kept_watch(self.tmp, START, START + 10)
+        (folder / pw.COUNTERS_FILE).write_text(counters_json(
+            [(5, "dotnet.gc.last_collection.memory.committed_size (By)", "", 4 * GB)], cut=False)[:-2], encoding="utf-8")
+        pw.add_mark(folder, "opened the world map", START + 8, now=START + 12)
+        report, data = pw.status(self.tmp, now=START + 12)
+        self.assertEqual(pw.RUNNING, data["state"])
+        self.assertEqual(4 * 10 ** 9, data["latest"]["collector"])
+        self.assertEqual(6 * 10 ** 9, data["latest"]["outside"])
+        self.assertEqual(12, data["elapsed"])
+        self.assertEqual([{"t": START + 8, "text": "opened the world map"}], data["marks"])
+        from phobos_modkit.report import render_markdown
+        text = render_markdown(report)
+        self.assertIn("**Watching**: 0 of 15 minutes", text)
+        self.assertIn("only your marks show", text)
+        self.assertEqual(pw.RUNNING, data["kept"][0]["state"])
+
+    def test_the_running_watch_is_preferred_to_a_newer_one(self):
+        running = _kept_watch(self.tmp, START, START + 100, name="20261119-200000-a")
+        _kept_watch(self.tmp, START + 50, START + 60, ended=START + 61, name="20261119-200050-b")
+        self.assertEqual(running, pw.find(self.tmp, None, prefer_running=True, now=START + 105))
+        self.assertEqual("20261119-200050-b", pw.find(self.tmp, None).name)
+
+    def test_nothing_kept(self):
+        _, data = pw.status(self.tmp / "none", now=START)
+        self.assertEqual("none", data["state"])
+
+    def test_only_a_running_watch_can_be_asked_to_stop(self):
+        running = _kept_watch(self.tmp, START, START + 100)
+        pw.ask_to_stop(running, START + 101)
+        self.assertTrue((running / pw.STOP_FILE).exists())
+        ended = _kept_watch(self.tmp, START + 1000, START + 1100, ended=START + 1101)
+        with self.assertRaises(pw.WatchError):
+            pw.ask_to_stop(ended, START + 1200)
+
 
 class CommandTests(unittest.TestCase):
     def setUp(self):
@@ -290,12 +394,47 @@ class CommandTests(unittest.TestCase):
         perf_cli.main(["list", *self.common], environ=self.environ, out=out)
         self.assertIn("Memory watches, newest first", out.getvalue())
 
+    def test_status_mark_and_stop_from_a_program(self):
+        where = self.tmp / "cache" / pw.WATCH_FOLDER
+        clock_ = FakeClock()
+        _kept_watch(where, START, START)
+        clock_.t = START + 4
+
+        def run(*argv):
+            out = io.StringIO()
+            code = perf_cli.main([*argv, "--json", *self.common], environ=self.environ, out=out, clock=clock_)
+            return code, json.loads(out.getvalue())
+        code, answer = run("watch-mark", "reloading now")
+        self.assertEqual((perf_cli.EXIT_OK, True, "reloading now"), (code, answer["data"]["ok"], answer["data"]["text"]))
+        code, answer = run("watch-status")
+        self.assertEqual(pw.RUNNING, answer["data"]["state"])
+        self.assertEqual("reloading now", answer["data"]["marks"][0]["text"])
+        code, answer = run("watch-stop")
+        self.assertEqual((perf_cli.EXIT_OK, True), (code, answer["data"]["ok"]))
+        clock_.t = START + 3600
+        code, answer = run("watch-stop")
+        self.assertEqual(perf_cli.EXIT_FAILED, code)
+        self.assertEqual(False, answer["data"]["ok"])
+        self.assertIn("No memory watch is running", answer["data"]["refusal"])
+
+    def test_the_memory_page_finds_every_watch_command_by_its_surface(self):
+        reports = perf_cli.MANIFEST["reports"]
+        found = sorted(name for name, report in reports.items() if report.get("surface") == perf_cli.MEMORY_SURFACE)
+        self.assertEqual(["watch", "watch-mark", "watch-report", "watch-status", "watch-stop"], found)
+
     def test_watch_without_the_game(self):
         with mock.patch.object(dd, "find_processes", return_value=[]):
             out = io.StringIO()
             code = perf_cli.main(["watch", *self.common], environ=self.environ, out=out, run=lambda *a, **k: subprocess.CompletedProcess(a, 0, "", ""))
         self.assertEqual(perf_cli.EXIT_FAILED, code)
         self.assertIn("RimWorld is not running", out.getvalue())
+        out = io.StringIO()
+        with mock.patch.object(dd, "find_processes", return_value=[]):
+            perf_cli.main(["watch", "--json", *self.common], environ=self.environ, out=out,
+                          run=lambda *a, **k: subprocess.CompletedProcess(a, 0, "", ""))
+        data = json.loads(out.getvalue())["data"]
+        self.assertEqual(False, data["ok"])
+        self.assertIn("RimWorld is not running", data["refusal"])
 
 
 if __name__ == "__main__":

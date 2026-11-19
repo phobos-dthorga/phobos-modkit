@@ -17,12 +17,18 @@ drivers, native code, and .NET's own bookkeeping (compiled code, type data). Not
 counters attach once at the start, which can hitch the game for a moment.
 
 Watches are kept in the kit's cache (`rimworld-memory/<start>-<label>/watch.sqlite`), outside every repository.
+
+A program can follow a watch while it runs and steer it without a console (1.47.0, for D'thorga Companion): `status` reads it as
+it fills, with the runtime's counters from dotnet-counters' own file as far as that has been written; a `stop` file in its folder
+ends it within a second, the counters too; and `add_mark` puts the owner's own words beside the figures ("reloading now"), so
+what was meant to happen can be checked against what the log shows did.
 """
 from __future__ import annotations
 
 from bisect import bisect_right
 from contextlib import closing
 from datetime import datetime
+import os
 from pathlib import Path
 import re
 import sqlite3
@@ -51,6 +57,19 @@ TIMELINE_POINTS = 24
 STOP_SECONDS = 60                   # how long dotnet-counters may take to close its file once the watch ends
 HEAP_MATCH = 0.10                   # a block within 10 % of the collector's committed figure is taken to be .NET's heap
 GB = 1e9
+STOP_FILE = "stop"                  # a file of this name in a running watch's folder ends it at its next look
+STOP_LOOK = 1.0                     # seconds: how often a waiting watch looks for the stop file
+STOP_COUNTERS = 15                  # seconds dotnet-counters is given to close its file once asked to stop early
+OWNER_MARK = "owner-mark"           # the event kind of the owner's own words
+MAX_MARK = 200                      # characters in one mark
+MARK_SLACK = 60                     # seconds before a watch's start or after its end that a mark may still name
+ALIVE_LOOKS = 3                     # a running watch has sampled within this many of its intervals...
+ALIVE_SECONDS = 30                  # ...or this many seconds, whichever is longer; else it was cut off
+LIVE_POINTS = 120                   # points in a running watch's chart
+KEPT_LISTED = 20                    # watches listed by status
+RUNNING, FINISHING, ENDED, CUT_OFF = "running", "finishing", "ended", "cut-off"
+RELOAD_WORDS = ("reload", "load")   # a mark naming one of these expects a save to be loaded soon after it
+RELOAD_WITHIN = 180                 # seconds after such a mark in which the log should show the save loaded
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sample (t REAL, private INTEGER, working_set INTEGER, free_ram INTEGER);
 CREATE TABLE IF NOT EXISTS counter (t REAL, name TEXT, tags TEXT, value REAL);
@@ -116,11 +135,16 @@ def kept(where):
     return sorted(p for p in where.iterdir() if (p / DATABASE).is_file()) if where.is_dir() else []
 
 
-def find(where, text):
+def find(where, text, prefer_running=False, now=None):
+    """The watch named by its ID (its start is enough) or label; with no name, the newest, or the newest still running."""
     found = kept(where)
     if not found:
         raise WatchError(f"No memory watches kept in {where}. Start one with: rimworld-perf watch")
     if not text:
+        if prefer_running:
+            alive = [p for p in found if state(p, now) in (RUNNING, FINISHING)]
+            if alive:
+                return alive[-1]
         return found[-1]
     wanted = text.lower()
     matches = [p for p in found if p.name.lower().startswith(wanted)] or \
@@ -128,6 +152,63 @@ def find(where, text):
     if len(matches) != 1:
         raise WatchError(f'"{text}" matches {len(matches)} watches. Kept: ' + ", ".join(p.name for p in found) + ".")
     return matches[0]
+
+
+def _last_sample(folder):
+    try:
+        with closing(sqlite3.connect(Path(folder) / DATABASE, timeout=10)) as conn:
+            return conn.execute("SELECT MAX(t) FROM sample").fetchone()[0]
+    except sqlite3.Error:
+        return None
+
+
+def state(folder, now=None, meta=None):
+    """Whether a kept watch is running, finishing (its counters and log being read in), ended, or was cut off: its watcher
+    stopped without saying why (closed, killed, the machine slept)."""
+    meta = derived.read_meta(Path(folder) / DATABASE) if meta is None else meta
+    if meta.get("ended"):
+        return ENDED
+    now = time.time() if now is None else now
+    if meta.get("finishing"):
+        return FINISHING if now - float(meta["finishing"]) <= STOP_SECONDS + ALIVE_SECONDS + 60 else CUT_OFF
+    last = _last_sample(folder) or float(meta.get("started") or 0)
+    every = float(meta.get("every") or DEFAULT_EVERY)
+    return RUNNING if now - last <= max(ALIVE_LOOKS * every, ALIVE_SECONDS) else CUT_OFF
+
+
+def ask_to_stop(folder, now=None):
+    """Asks a running watch to end at its next look, as Ctrl+C would in its console. Raises WatchError when it is not running."""
+    folder = Path(folder)
+    found = state(folder, now)
+    if found not in (RUNNING, FINISHING):
+        raise WatchError(f"The watch {folder.name} is not running ({found.replace('-', ' ')}), so there is nothing to stop.")
+    (folder / STOP_FILE).write_text("stop\n", encoding="utf-8")
+    return found
+
+
+def add_mark(folder, text, at=None, now=None):
+    """Puts the owner's own words beside a watch's figures, at `at` (seconds since 1970; now when left out). Returns (t, text).
+
+    The watch may be running (its watcher commits between samples, so this waits its turn) or kept: a mark may name a moment
+    up to a minute either side of it.
+    """
+    folder = Path(folder)
+    text = " ".join((text or "").split())
+    if not text:
+        raise WatchError("A mark needs a few words, such as what you are about to do.")
+    if len(text) > MAX_MARK:
+        raise WatchError(f"A mark is at most {MAX_MARK} characters; this one has {len(text)}.")
+    now = time.time() if now is None else now
+    at = now if at is None else float(at)
+    meta = derived.read_meta(folder / DATABASE)
+    started = float(meta.get("started") or 0)
+    ended = float(meta["ended"]) if meta.get("ended") else max(now, _last_sample(folder) or started)
+    if not started - MARK_SLACK <= at <= ended + MARK_SLACK:
+        raise WatchError(f"{clock(at)} is outside the watch {folder.name} ({clock(started)} to {clock(ended)}).")
+    with closing(sqlite3.connect(folder / DATABASE, timeout=30)) as conn:
+        conn.execute("INSERT INTO event VALUES (?, ?, ?)", (at, OWNER_MARK, text))
+        conn.commit()
+    return at, text
 
 
 # ---- Watching ----
@@ -168,9 +249,22 @@ def log_events(text, start, end):
     return sorted(found)
 
 
+def _wait(folder, until, end, clock_, sleep):
+    """Waits until the next sample is due (or the watch's end), looking for the stop file every second. True when asked to stop."""
+    stop = Path(folder) / STOP_FILE
+    while True:
+        if stop.exists():
+            return True
+        left = min(until, end) - clock_()
+        if left <= 0:
+            return False
+        sleep(min(STOP_LOOK, left))
+
+
 def watch(pid, folder, minutes, every, map_every, counters_tool, label="", progress=None, clock_=time.time, sleep=time.sleep,
           popen=subprocess.Popen, process=pm.Process, log_file=None):
-    """Watch a running program until `minutes` pass, it closes, or Ctrl+C; store everything in folder. Returns notes."""
+    """Watch a running program until `minutes` pass, it closes, Ctrl+C, or a stop file appears in the folder; store everything
+    in folder. Returns notes."""
     if not 1 <= minutes <= MAX_MINUTES:
         raise WatchError(f"--minutes must be between 1 and {MAX_MINUTES}.")
     if every < MIN_EVERY:
@@ -178,7 +272,8 @@ def watch(pid, folder, minutes, every, map_every, counters_tool, label="", progr
     if map_every and map_every < MIN_MAP_EVERY:
         raise WatchError(f"--map-every must be 0 (never) or at least {MIN_MAP_EVERY} seconds.")
     folder = Path(folder)
-    notes, reason = [], "the time asked for ran out"
+    notes, reason, asked = [], "the time asked for ran out", False
+    (folder / STOP_FILE).unlink(missing_ok=True)
     start = clock_()
     end = start + minutes * 60
     seconds = int(minutes * 60)
@@ -186,7 +281,7 @@ def watch(pid, folder, minutes, every, map_every, counters_tool, label="", progr
         conn.executescript(SCHEMA)
         derived.write_meta(conn, {"kit_version": __version__, "label": label or "", "pid": pid, "started": start,
                                   "minutes": minutes, "every": every, "map_every": map_every, "tools_version": dd.TOOLS_VERSION,
-                                  "counters": bool(counters_tool)})
+                                  "counters": bool(counters_tool), "watcher_pid": os.getpid()})
         conn.commit()
         counting = None
         with open(folder / COUNTERS_LOG, "w", encoding="utf-8") as counters_log, process(pid) as target:
@@ -218,17 +313,26 @@ def watch(pid, folder, minutes, every, map_every, counters_tool, label="", progr
                     if progress:
                         progress("Watching the game's memory", int(now - start), seconds,
                                  f"{size(figures.private)} claimed, {size(figures.working_set)} in RAM")
-                    sleep(max(0.0, min(every - (clock_() - now), end - clock_())))
+                    if _wait(folder, now + every, end, clock_, sleep):
+                        reason, asked = "it was asked to stop", True
+                        break
             except KeyboardInterrupt:
                 reason = "stopped with Ctrl+C"
+            derived.write_meta(conn, {"finishing": clock_()})
+            conn.commit()
             if counting is not None:
                 try:
-                    counting.wait(timeout=STOP_SECONDS)
+                    if asked:
+                        # Asked to stop early: dotnet-counters would run on to its own duration, so end it; whatever it wrote
+                        # up to then is read (counter_events reads a file cut off mid-write).
+                        counting.terminate()
+                    counting.wait(timeout=STOP_COUNTERS if asked else STOP_SECONDS)
                 except subprocess.TimeoutExpired:
                     counting.kill()
                     notes.append("dotnet-counters did not stop on time and was cut off; its figures up to then are kept.")
                 except KeyboardInterrupt:
                     counting.kill()
+        (folder / STOP_FILE).unlink(missing_ok=True)
         ended = clock_()
         events = dd.counter_events(folder / COUNTERS_FILE)
         conn.executemany("INSERT INTO counter VALUES (?, ?, ?, ?)", events)
@@ -251,10 +355,15 @@ class Watch:
     def __init__(self, folder):
         self.folder = Path(folder)
         self.meta = derived.read_meta(self.folder / DATABASE)
-        with closing(sqlite3.connect(self.folder / DATABASE)) as conn:
+        with closing(sqlite3.connect(self.folder / DATABASE, timeout=10)) as conn:
             self.samples = conn.execute("SELECT t, private, working_set, free_ram FROM sample ORDER BY t").fetchall()
             series = {}
-            for t, name, tags, value in conn.execute("SELECT t, name, tags, value FROM counter ORDER BY t"):
+            counted = conn.execute("SELECT t, name, tags, value FROM counter ORDER BY t").fetchall()
+            if not counted and not self.meta.get("ended"):
+                # Still running: the counters are read in at the end, so take them from dotnet-counters' own file as far as
+                # it has written it (a file cut off mid-write gives every whole event before the cut).
+                counted = sorted(dd.counter_events(self.folder / COUNTERS_FILE))
+            for t, name, tags, value in counted:
                 series.setdefault((name, tags), ([], []))
                 series[(name, tags)][0].append(t)
                 series[(name, tags)][1].append(value)
@@ -315,7 +424,8 @@ def _jumps(samples, window=JUMP_WINDOW, smallest=JUMP_SIZE, limit=JUMPS_SHOWN):
 def _near(events, start, end, around=NEARBY):
     """What the log says between start - around and end + around: saves and stops by name, errors and held allocations counted."""
     picked = [e for e in events if start - around <= e[0] <= end + around]
-    said = [f"{text} at {clock(t)}" for t, kind, text in picked if kind in ("save-loaded", "logging-stopped")]
+    said = [f'you marked "{text}" at {clock(t)}' if kind == OWNER_MARK else f"{text} at {clock(t)}"
+            for t, kind, text in picked if kind in ("save-loaded", "logging-stopped", OWNER_MARK)]
     errors = sum(1 for e in picked if e[1] == "error")
     held = sum(1 for e in picked if e[1] == "engine-held")
     if errors:
@@ -323,6 +433,32 @@ def _near(events, start, end, around=NEARBY):
     if held:
         said.append(f"{held:,} engine allocation warnings")
     return "; ".join(said) or "nothing logged"
+
+
+def _happened(events, ended):
+    """What happened during a watch, said before any figure: the saves the log shows loaded, the owner's marks, errors, and a
+    mark that promised a reload the log never showed. A watch read before it ended has no log events yet."""
+    saves = [(t, text) for t, kind, text in events if kind == "save-loaded"]
+    marks = [(t, text) for t, kind, text in events if kind == OWNER_MARK]
+    errors = sum(1 for e in events if e[1] == "error")
+    lines = []
+    if not ended:
+        lines.append("**What happened** is read from the log when the watch ends; until then only your marks show.")
+    elif saves:
+        lines.append("Saves loaded during the watch: " + "; ".join(f"{text} at {clock(t)}" for t, text in saves) + ".")
+    else:
+        lines.append("**No save was loaded during the watch**, by the log: it shows no reload.")
+    if marks:
+        lines.append("Your marks: " + "; ".join(f'"{text}" at {clock(t)}' for t, text in marks) + ".")
+    if ended:
+        for t, text in marks:
+            if any(word in text.lower() for word in RELOAD_WORDS) and not any(t <= s <= t + RELOAD_WITHIN for s, _ in saves):
+                lines.append(f'**You marked "{text}" at {clock(t)}, but the log shows no save loaded in the {RELOAD_WITHIN // 60} '
+                             "minutes after it**: the load may not have happened, or was done in a way the log does not "
+                             "record. Read the figures around it with that in mind.")
+        if errors:
+            lines.append(f"{errors:,} error{'s' if errors != 1 else ''} logged during the watch.")
+    return lines
 
 
 def _verdict(private, jumps):
@@ -359,21 +495,19 @@ def watch_report(watch, owner_map, top=15):
     times = [s[0] for s in samples]
     label = f' ("{meta["label"]}")' if meta.get("label") else ""
     minutes = (times[-1] - times[0]) / 60
+    found = state(watch.folder, meta=meta)
+    how = {RUNNING: "It is still running.", FINISHING: "It is finishing: reading in the counters and the log."}.get(
+        found, f"It ended because {meta.get('reason', 'it was cut off')}.")
     report.lines.append(f"Watched the game for **{minutes:,.0f} minutes**{label}, {clock(times[0])} to {clock(times[-1])} on "
                         f"{datetime.fromtimestamp(times[0]).strftime('%Y-%m-%d')}: {len(samples):,} samples every "
-                        f"{meta.get('every', '?')} s and {len(watch.map_times):,} memory maps. It ended because "
-                        f"{meta.get('reason', 'it was cut off')}.")
+                        f"{meta.get('every', '?')} s and {len(watch.map_times):,} memory maps. {how}")
     counters = watch.has_counters()
     report.lines.append(CAVEAT if meta.get("counters", str(counters)) == "True" else CAVEAT_ALONE)
     for note in (meta.get("notes") or "").splitlines():
         report.lines.append(note)
-    private = [s[1] for s in samples]
-    heap = [watch.counter_at(dd.HEAP_SIZE, t) for t in times]
-    committed = [watch.counter_at(dd.HEAP_COMMITTED, t) for t in times]
-    gaps = [watch.counter_at(dd.HEAP_FRAGMENTATION, t) for t in times]
+    report.lines += _happened(watch.events, found == ENDED)
     # The runtime's heap size counts the gaps between objects too (Microsoft's metrics reference), so live objects are the rest.
-    live = [h - g if h is not None and g is not None else None for h, g in zip(heap, gaps)]
-    outside = [p - c if c is not None else None for p, c in zip(private, committed)]
+    private, committed, heap, gaps, live, outside = _figures(watch)
 
     jumps = _jumps(samples)
     report.lines.append(_verdict(private, jumps))
@@ -405,30 +539,116 @@ def watch_report(watch, owner_map, top=15):
             rows.append((f"{clock(ti)} to {clock(tj)}", signed(rise), signed(dnet) if dnet is not None else "-",
                          signed(dout) if dout is not None else "-", _near(watch.events, ti, tj)))
         report.section("The largest jumps, in time order",
-                       f"Rises of {size(JUMP_SIZE)} or more within a minute, with what the log says from a minute before to a "
+                       f"Rises of {size(JUMP_SIZE)} or more within a minute, with what the log and your marks say from a minute before to a "
                        "minute after.",
-                       Table(["When", "Claimed", ".NET's collector", "Outside .NET", "What the log says"], rows))
+                       Table(["When", "Claimed", ".NET's collector", "Outside .NET", "What the log and your marks say"], rows))
 
-    step = max(1, -(-len(samples) // TIMELINE_POINTS))
-    picks = list(range(0, len(samples), step))
-    if picks[-1] != len(samples) - 1:
-        picks.append(len(samples) - 1)
-    series = [ChartSeries("Claimed", [round(private[i] / GB, 2) for i in picks], "accent")]
-    if counters:
-        series += [ChartSeries(".NET's collector", [round(committed[i] / GB, 2) if committed[i] is not None else None for i in picks], "comparison"),
-                   ChartSeries("Outside .NET", [round(outside[i] / GB, 2) if outside[i] is not None else None for i in picks], "observed")]
-    series.append(ChartSeries("In RAM", [round(samples[i][2] / GB, 2) for i in picks], "neutral"))
-    report.section("Over time", Chart("Memory over the watch", "What the game claimed, split into .NET's collector and the rest, "
-                                      "with what sat in RAM, in GB.", [clock(times[i]) for i in picks], series, kind="line",
-                                      unit=" GB", value_label="GB"))
-    saves = [(t, text) for t, kind, text in watch.events if kind == "save-loaded"]
-    if saves:
-        report.lines.append("Saves loaded during the watch: " + "; ".join(f"{text} at {clock(t)}" for t, text in saves) + ".")
-
+    report.section("Over time", _chart(samples, committed, outside, counters, TIMELINE_POINTS, "Memory over the watch"))
     if watch.map_times:
         _map_sections(report, watch, committed, times, owner_map, top)
     report.section("What a watch cannot say", Bullets(LIMITS))
     return report
+
+
+def _chart(samples, committed, outside, counters, points, title):
+    """The timeline: what the game claimed, split into .NET's collector and the rest, with what sat in RAM, at most `points`
+    points along the samples, the last always among them."""
+    step = max(1, -(-len(samples) // points))
+    picks = list(range(0, len(samples), step))
+    if picks[-1] != len(samples) - 1:
+        picks.append(len(samples) - 1)
+    series = [ChartSeries("Claimed", [round(samples[i][1] / GB, 2) for i in picks], "accent")]
+    if counters:
+        series += [ChartSeries(".NET's collector", [round(committed[i] / GB, 2) if committed[i] is not None else None for i in picks], "comparison"),
+                   ChartSeries("Outside .NET", [round(outside[i] / GB, 2) if outside[i] is not None else None for i in picks], "observed")]
+    series.append(ChartSeries("In RAM", [round(samples[i][2] / GB, 2) for i in picks], "neutral"))
+    return Chart(title, "What the game claimed, split into .NET's collector and the rest, with what sat in RAM, in GB.",
+                 [clock(samples[i][0]) for i in picks], series, kind="line", unit=" GB", value_label="GB")
+
+
+def _figures(watch):
+    """Per sample: claimed, .NET's collector, the heap with its gaps, the gaps, live objects and outside .NET (None when the
+    runtime had not counted yet)."""
+    times = [s[0] for s in watch.samples]
+    private = [s[1] for s in watch.samples]
+    heap = [watch.counter_at(dd.HEAP_SIZE, t) for t in times]
+    committed = [watch.counter_at(dd.HEAP_COMMITTED, t) for t in times]
+    gaps = [watch.counter_at(dd.HEAP_FRAGMENTATION, t) for t in times]
+    live = [h - g if h is not None and g is not None else None for h, g in zip(heap, gaps)]
+    outside = [p - c if c is not None else None for p, c in zip(private, committed)]
+    return private, committed, heap, gaps, live, outside
+
+
+def _number(value):
+    return None if value is None else int(round(value))
+
+
+def status(where, text=None, now=None):
+    """A running or kept watch as it stands, light enough to read every few seconds: its state, its latest figures, its
+    timeline so far, the owner's marks, and the watches kept. Returns (report, data)."""
+    now = time.time() if now is None else now
+    report = Report("rimworld-perf: memory watch status")
+    data = {"state": "none", "watch": None, "most_mark": MAX_MARK, "kept": _kept_rows(where, now)}
+    if not kept(where):
+        report.lines.append("No memory watch is kept yet.")
+        return report, data
+    folder = find(where, text, prefer_running=True, now=now)
+    watched = Watch(folder)
+    meta, samples = watched.meta, watched.samples
+    found = state(folder, now, meta)
+    counters = meta.get("counters") == "True"
+    started = float(meta.get("started") or 0)
+    seconds = int(float(meta.get("minutes") or 0) * 60)
+    last = samples[-1][0] if samples else started
+    data.update({"state": found, "watch": folder.name, "label": meta.get("label") or "", "started": started,
+                 "minutes": float(meta.get("minutes") or 0), "every": float(meta.get("every") or DEFAULT_EVERY),
+                 "seconds": seconds, "elapsed": int(max(0, (now if found == RUNNING else last) - started)),
+                 "counters": counters, "reason": meta.get("reason"), "samples": len(samples),
+                 "marks": [{"t": t, "text": text} for t, kind, text in watched.events if kind == OWNER_MARK],
+                 "saves": [{"t": t, "text": text} for t, kind, text in watched.events if kind == "save-loaded"],
+                 "latest": None})
+    title = f' ("{meta["label"]}")' if meta.get("label") else ""
+    said = {RUNNING: f"**Watching**{title}: {data['elapsed'] // 60} of {seconds // 60} minutes, started {clock(started)}.",
+            FINISHING: f"**Finishing**{title}: reading in the counters and the log.",
+            ENDED: f"**Ended**{title}, {clock(started)} to {clock(last)}, because {meta.get('reason', 'it was cut off')}.",
+            CUT_OFF: f"**Cut off**{title}: its watcher stopped at {clock(last)} without finishing (closed, ended by force, or "
+                     "the computer slept). What it saw up to then is kept."}
+    report.lines.append(said[found])
+    if not samples:
+        report.lines.append("No samples yet.")
+        return report, data
+    private, committed, heap, gaps, live, outside = _figures(watched)
+    latest = {"t": last, "claimed": private[-1], "in_ram": samples[-1][2], "free_ram": samples[-1][3],
+              "collector": _number(committed[-1]), "heap": _number(heap[-1]), "gaps": _number(gaps[-1]),
+              "live": _number(live[-1]), "outside": _number(outside[-1])}
+    data["latest"] = latest
+    rows = [("Claimed by the game", size(private[-1]), signed(private[-1] - private[0])),
+            ("In RAM", size(samples[-1][2]), signed(samples[-1][2] - samples[0][2]))]
+    has_counted = committed[-1] is not None
+    if has_counted:
+        first = next(i for i, c in enumerate(committed) if c is not None)
+        rows += [(".NET's collector holds", size(committed[-1]), signed(committed[-1] - committed[first])),
+                 ("Outside .NET", size(outside[-1]), signed(outside[-1] - outside[first]))]
+        if live[-1] is not None:
+            rows.append(("Of .NET's heap, live objects", size(live[-1]), signed(live[-1] - (live[first] or 0))))
+    elif counters and found == RUNNING:
+        report.lines.append(".NET's figures have not arrived yet: they come as dotnet-counters writes them, and may come only "
+                            "when the watch ends.")
+    report.lines.append(f"Latest at {clock(last)}.")
+    report.section("Now", Table(["Measure", "Now", "Since the start"], rows))
+    report.section("So far", _chart(samples, committed, outside, has_counted, LIVE_POINTS, "Memory so far"))
+    report.lines += _happened(watched.events, found == ENDED)
+    return report, data
+
+
+def _kept_rows(where, now):
+    rows = []
+    for folder in reversed(kept(where)[-KEPT_LISTED:]):
+        meta = derived.read_meta(folder / DATABASE)
+        rows.append({"watch": folder.name, "started": float(meta.get("started") or 0), "label": meta.get("label") or "",
+                     "minutes": float(meta.get("minutes") or 0), "samples": int(meta.get("samples") or 0),
+                     "state": state(folder, now, meta), "reason": meta.get("reason"), "counters": meta.get("counters") == "True"})
+    return rows
 
 
 def _map_sections(report, watch, committed, times, owner_map, top):

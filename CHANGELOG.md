@@ -4,6 +4,23 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.47.0] - 2026-11-19
+
+The owner chose (19 November 2026) to run memory profiling from D'thorga Companion rather than through agents, and two reloads asked for during watches never reached the log; a program could not stop a watch, follow it, or put the owner's intentions beside its figures.
+
+### Added
+
+- rimworld-perf watch-status: a running or kept watch as it stands, in about 0.2 s, light enough for a program to read every few seconds: its state (running, finishing, ended, or cut off when its watcher stopped without finishing), the latest figures, the timeline so far, the marks and the watches kept. .NET's figures come from dotnet-counters' own file as far as it has been written.
+- rimworld-perf watch-stop ends a running watch early from another console or a program: it writes a stop file the watch looks for every second, and the watch then stops dotnet-counters too and writes its report as usual.
+- rimworld-perf watch-mark puts your own words beside a watch's figures ("reloading now"), now or at a moment up to a minute either side of it.
+- The manifest surface memory-watch on watch, watch-report, watch-status, watch-stop and watch-mark, so a program finds them without naming the game.
+
+### Changed
+
+- **A watch's report says what happened before any figure**: the saves the log shows loaded, or in bold that none was; your marks; the errors logged; and, in bold, a mark naming a load or reload that no save loading followed within 3 minutes. The jumps table names your marks beside the log's events.
+- rimworld-perf's --json answers a failure (the game not running, a watch not found) with ok false and the reason in data, as every other tool refuses, so a program can say it in words.
+- watch-report with no name reads the watch still running, if one is, before a newer one; a report of a running watch says so instead of "it ended because".
+
 ## [1.46.0] - 2026-11-19
 
 The owner asked (19 November 2026) what the games themselves write that D'thorga Companion could show, made general so a new game needs little setting up, and said yes to the views proposed.
