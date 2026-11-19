@@ -58,12 +58,21 @@ class ClaimsTests(unittest.TestCase):
         self.assertFalse(found[1]["old"])
 
     def test_sessions_taking_at_once_never_lose_a_claim(self):
-        threads = [threading.Thread(target=claims.take, args=(self.board, f"row {n}", f"session-{n}")) for n in range(12)]
+        errors = []
+
+        def take(n):
+            try:
+                claims.take(self.board, f"row {n}", f"session-{n}")
+            except Exception as error:  # noqa: BLE001  (a lost claim must say why)
+                errors.append(repr(error))
+
+        threads = [threading.Thread(target=take, args=(n,)) for n in range(24)]
         for thread in threads:
             thread.start()
         for thread in threads:
             thread.join()
-        self.assertEqual(len(claims.read_board(self.board)), 12)
+        self.assertEqual(errors, [])
+        self.assertEqual(len(claims.read_board(self.board)), 24)
         self.assertFalse(Path(str(self.board) + ".lock").exists())
 
     def test_a_lock_left_by_a_crashed_run_is_broken(self):

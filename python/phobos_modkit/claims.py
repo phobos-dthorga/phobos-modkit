@@ -35,6 +35,9 @@ OLD_HOURS = 24
 LOCK_WAIT_S = 10.0
 LOCK_STALE_S = 60.0
 LOCK_POLL_S = 0.05
+# Windows can refuse a rename or a delete for a moment while a virus scanner or the indexer holds a file just written.
+HELD_TRIES = 50
+HELD_WAIT_S = 0.02
 MAX_WORDS = 200
 MAX_NOTE = 500
 
@@ -57,6 +60,18 @@ def _now(now=None):
     return (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
 
 
+def _patiently(step):
+    """Runs a file step, trying again for up to a second while Windows says another program holds the file."""
+    for attempt in range(HELD_TRIES):
+        try:
+            return step()
+        except PermissionError:
+            if attempt == HELD_TRIES - 1:
+                raise
+            time.sleep(HELD_WAIT_S)
+    return None
+
+
 @contextmanager
 def _locked(path):
     """Holds the board's lock file while the board is read and rewritten; a lock left by a crashed run is broken after a minute."""
@@ -68,7 +83,8 @@ def _locked(path):
             handle = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             os.close(handle)
             break
-        except FileExistsError:
+        except (FileExistsError, PermissionError):
+            # Windows answers PermissionError, not FileExistsError, while a lock just let go is still being deleted: busy either way.
             try:
                 if time.time() - lock.stat().st_mtime > LOCK_STALE_S:
                     lock.unlink(missing_ok=True)
@@ -81,7 +97,7 @@ def _locked(path):
     try:
         yield
     finally:
-        lock.unlink(missing_ok=True)
+        _patiently(lambda: lock.unlink(missing_ok=True))
 
 
 def read_board(path):
@@ -99,7 +115,7 @@ def _write_board(path, claims):
     partial = Path(str(path) + ".partial")
     partial.write_text(json.dumps({"format": BOARD_FORMAT, "claims": claims}, indent=2, ensure_ascii=False) + "\n",
                        encoding="utf-8", newline="\n")
-    os.replace(partial, path)
+    _patiently(lambda: os.replace(partial, path))
 
 
 def _hours(taken, now):

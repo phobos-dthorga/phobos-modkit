@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.46.0] - 2026-11-19
+
+The owner asked (19 November 2026) what the games themselves write that D'thorga Companion could show, made general so a new game needs little setting up, and said yes to the views proposed.
+
+### Added
+
+- game-files report, for any Steam game: what changed since you last played (the build, and every Workshop item Steam updated since its last launch, named from the item's own files where they name it), the saves newest first with autosaves marked, the screenshots (the game's own and Steam's), and where the data folder's space goes beside the install's and the Workshop's. About a second for RimWorld. Checked on RimWorld, Farming Simulator 25 and Project Zomboid.
+- game-files steam-games: every game Steam has installed, from its library records.
+- steamPath (PHOBOS_STEAM), Steam's own folder, listed with every other setting.
+
+### Fixed
+
+- claims could lose a claim when many sessions took one at once on Windows (seen once in a gate run, 11 of 12): Windows can answer a lock being let go, or a file a virus scanner holds for a moment, with a refusal rather than "busy", and the claim was dropped. Those are now waited out. The cause is likely but was not reproduced; the test now runs 24 sessions at once and names any error.
 ## [1.45.1] - 2026-11-19
 
 The first memory watch with the runtime's counters (19 November 2026) showed the .NET heap labelled wrongly: its size counts the gaps between objects.
