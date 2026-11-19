@@ -2,10 +2,12 @@
 
     rimworld-textures status                    active mods with stale or missing encoded textures, and left-over ones
     rimworld-textures status --all              every active mod, even those in step
-    rimworld-textures encode --mod ID           re-encode one mod's textures with RimSort's own todds preset (repeatable)
+    rimworld-textures encode --mod ID           re-encode one mod's textures with RimSort's own todds preset (repeatable),
+                                                then shorten the mip chains Waylith would unpack
 
 A stale .dds makes the game show a mod's old picture: the game loads a .dds instead of the .png beside it without comparing dates
-(docs/rimworld-textures.md). Only active mods in local Mods and Workshop folders are read; the game's own Data never. encode writes
+(docs/rimworld-textures.md). Waylith unpacks a compressed texture whose mip heights stop being multiples of four, taking four times
+the memory; encode shortens those chains in every .dds of the mod, those already in step included. Only active mods in local Mods and Workshop folders are read; the game's own Data never. encode writes
 .dds files into those mod folders, Workshop ones included (owner, 18 Nov 2026), refuses while the game runs, and needs RimSort's todds.
 """
 from __future__ import annotations
@@ -156,17 +158,26 @@ def main(argv=None, environ=None, out=None, running=None, run=None, mods=None, n
             for position, mod in enumerate(picked, 1):
                 progress(f"Encoding the textures of {mod.name}", position, len(picked))
                 exit_code, line = textures.encode(mod.folder, todds, **({"run": run} if run else {}))
+                trim = textures.trim_folder(mod.folder)      # every .dds of the mod, those todds left alone included
                 after = textures.check_folder(mod.folder)
                 results.append({"name": mod.name, "packageId": mod.package_id, "exitCode": exit_code, "line": line,
-                                "staleAfter": len(after.stale), "missingAfter": len(after.missing)})
-            ok = all(r["exitCode"] == 0 for r in results)
+                                "staleAfter": len(after.stale), "missingAfter": len(after.missing),
+                                "mipsShortened": len(trim.trimmed), "leftWhole": len(trim.left_whole),
+                                "trimFailed": len(trim.failed), "leftWholePaths": trim.left_whole[:textures.SAMPLE_PATHS],
+                                "trimFailedPaths": trim.failed[:textures.SAMPLE_PATHS]})
+            ok = all(r["exitCode"] == 0 and not r["trimFailed"] for r in results)
             history.record("rimworld", "encoded", environ, args.settings, ok=ok, count=len(results),
                            mods=[r["name"] for r in results][:20])
             code = EXIT_OK if ok else EXIT_REFUSED
             report = Report(f"Encoded the textures of {len(results):,} mods" if ok else "Some textures could not be encoded")
-            report.section("Mods", Table(["Mod", "Exit", "Stale after", "Never encoded after"],
-                                         [[r["name"], str(r["exitCode"]), f"{r['staleAfter']:,}", f"{r['missingAfter']:,}"]
+            report.section("Mods", Table(["Mod", "Exit", "Stale after", "Never encoded after", "Mip chains shortened",
+                                          "Left whole", "Could not shorten"],
+                                         [[r["name"], str(r["exitCode"]), f"{r['staleAfter']:,}", f"{r['missingAfter']:,}",
+                                           f"{r['mipsShortened']:,}", f"{r['leftWhole']:,}", f"{r['trimFailed']:,}"]
                                           for r in results]))
+            report.lines.append("Mip chains are shortened so Waylith keeps those textures compressed; the full-size picture is "
+                                f"unchanged. Left whole: fewer than {textures.MIN_KEPT_MIPS} levels would remain, so Waylith still "
+                                "unpacks them, as before.")
             data = {"ok": ok, "mods": results}
     except (ValueError, OSError) as error:
         message = str(error)
@@ -183,4 +194,5 @@ def main(argv=None, environ=None, out=None, running=None, run=None, mods=None, n
 
 MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
             "reports": {"status": {"question": "Do any mods' textures need encoding before my next launch?", "surface": "textures"},
-                        "encode": {"effect": WRITES, "note": "writes .dds files into the named mods' folders, Workshop ones included"}}}
+                        "encode": {"effect": WRITES, "note": "writes .dds files into the named mods' folders, Workshop ones included, "
+                                                             "and shortens the mip chains of those Waylith would unpack"}}}

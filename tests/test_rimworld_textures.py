@@ -52,6 +52,84 @@ class CheckTests(unittest.TestCase):
             self.assertEqual((found.stale, found.missing, found.left_over), ([], [], []))
 
 
+def dds(path, width, height, fourcc=b"DX10", dxgi=98, mips=None, extra=b""):
+    """A block-compressed DDS file written from the format's published layout, with a full mip chain unless told otherwise; each
+    level's bytes are its level number, so a shortened file can be checked byte for byte."""
+    mips = mips or max(width, height).bit_length()
+    block = 8 if fourcc == b"DXT1" or dxgi in (70, 71, 72, 79, 80, 81) else 16
+    header = bytearray(148 if fourcc == b"DX10" else 128)
+    header[:4] = b"DDS "
+    for at, value in ((4, 124), (8, 0x1 | 0x2 | 0x4 | 0x1000 | 0x20000), (12, height), (16, width), (28, mips), (76, 32), (80, 0x4)):
+        header[at:at + 4] = value.to_bytes(4, "little")
+    header[84:88] = fourcc
+    if fourcc == b"DX10":
+        for at, value in ((128, dxgi), (132, 3), (140, 1)):
+            header[at:at + 4] = value.to_bytes(4, "little")
+    levels = b"".join(bytes([level]) * (-(-max(1, width >> level) // 4) * -(-max(1, height >> level) // 4) * block)
+                      for level in range(mips))
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(bytes(header) + levels + extra)
+    return path
+
+
+class MipTests(unittest.TestCase):
+    def test_a_chain_waylith_would_unpack_is_cut_at_its_first_odd_height(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = dds(Path(tmp) / "Wide.dds", 8, 320)              # 320, 160, 80, 40, 20, then 10: not a multiple of four
+            before = path.read_bytes()
+            self.assertEqual(textures.trim_mips(path), textures.TRIMMED)
+            after = path.read_bytes()
+            layout = textures.read_layout(after[:148], len(after))
+            self.assertEqual((layout.mips, layout.height, layout.width), (5, 320, 8))
+            self.assertEqual(after[148:], before[148:148 + len(after) - 148])     # the kept levels, untouched
+            self.assertEqual(after[148:], b"".join(bytes([n]) * layout.level_bytes(n) for n in range(5)))
+            self.assertEqual(textures.trim_mips(path), textures.IN_STEP)          # a second run changes nothing
+            self.assertEqual(path.read_bytes(), after)
+            self.assertFalse(list(Path(tmp).glob("*.trimming")))
+
+    def test_power_of_two_heights_and_dxt1_files_are_read_and_kept(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            square = dds(Path(tmp) / "Square.dds", 512, 512)
+            wide = dds(Path(tmp) / "Wide.dds", 1408, 512)                # width is not what Waylith checks
+            self.assertEqual([textures.trim_mips(p) for p in (square, wide)], [textures.IN_STEP] * 2)
+            bc1 = dds(Path(tmp) / "Opaque.dds", 16, 1152, fourcc=b"DXT1")   # 1152 ... 36, then 18
+            self.assertEqual(textures.trim_mips(bc1), textures.TRIMMED)
+            data = bc1.read_bytes()
+            self.assertEqual(textures.read_layout(data[:148], len(data)).mips, 6)
+
+    def test_a_chain_left_too_short_is_left_whole(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = dds(Path(tmp) / "Nacelle.dds", 228, 1156)        # 1156, then 578: only one level would remain
+            before = path.read_bytes()
+            self.assertEqual(textures.kept_mips(1156, 11), 1)
+            self.assertEqual(textures.trim_mips(path), textures.LEFT_WHOLE)
+            self.assertEqual(path.read_bytes(), before)
+            self.assertEqual(textures.trim_mips(path, min_kept=1), textures.TRIMMED)
+
+    def test_files_it_cannot_account_for_are_never_touched(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            odd = dds(Path(tmp) / "Odd.dds", 8, 320, extra=b"more")       # a size the layout does not explain
+            plain = dds(Path(tmp) / "Plain.dds", 8, 320, dxgi=28)          # plain pixels, not blocks
+            for path in (odd, plain):
+                before = path.read_bytes()
+                self.assertEqual(textures.trim_mips(path), textures.NOT_COMPRESSED)
+                self.assertEqual(path.read_bytes(), before)
+
+    def test_a_folder_is_trimmed_only_under_textures(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dds(Path(tmp) / "Textures" / "Things" / "Truck.dds", 8, 1408)
+            dds(Path(tmp) / "Textures" / "Fine.dds", 8, 1024)
+            dds(Path(tmp) / "Textures" / "Nacelle.dds", 228, 1156)
+            outside = dds(Path(tmp) / "About" / "Truck.dds", 8, 1408)
+            before = outside.read_bytes()
+            found = textures.trim_folder(tmp)
+            self.assertEqual((found.checked, found.trimmed, found.left_whole, found.failed),
+                             (3, ["Textures/Things/Truck.dds"], ["Textures/Nacelle.dds"], []))
+            self.assertEqual(outside.read_bytes(), before)
+            self.assertEqual(textures.trim_folder(tmp).trimmed, [])
+
+
 def installed(folder, name="Sample Mod", package="test.sample", source="Workshop"):
     return InstalledMod(package, name, source, Path(folder))
 
@@ -86,9 +164,11 @@ class CliTests(unittest.TestCase):
                     returncode, stdout, stderr = 0, "done", ""
                 return Result()
 
+            dds(Path(tmp) / "a" / "Textures" / "Truck.dds", 8, 1408)     # encoded earlier, so todds leaves it alone
             code, answer = self.run_cli(["encode", "--mod", "TEST.SAMPLE"], [installed(Path(tmp) / "a")], run=run)
             self.assertEqual((code, answer["data"]["ok"]), (0, True))
             self.assertEqual(calls[0][1:], [*textures.RIMSORT_OPTIMIZED, str(Path(tmp) / "a")])
+            self.assertEqual(answer["data"]["mods"][0]["mipsShortened"], 1)
 
     def test_encode_refuses_while_the_game_runs_and_for_a_mod_not_active(self):
         with tempfile.TemporaryDirectory() as tmp:

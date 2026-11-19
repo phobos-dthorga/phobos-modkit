@@ -4,6 +4,27 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.54.0] - 2026-11-20
+
+The owner asked (20 November 2026) why D'thorga Vehicles held 2.0 GB of textures in Graphics Settings' memory profiler, more than
+mods with larger art. The game was running on Waylith, which unpacks a compressed texture to plain pixels, at four times the memory,
+when any mip level four or more pixels tall has a height that is not a multiple of four: 255 of the mod's 459 textures, 1.9 of its
+2.0 GiB. The owner chose to shorten the mip chains when encoding.
+
+### Added
+
+- rimworld-textures encode shortens the mip chain of every .dds in the named mods that Waylith would unpack, those todds left alone
+  included: the chain is cut just before the first such level, the header's mip count lowered and the smaller levels dropped; the
+  full-size picture is untouched. A texture that would keep fewer than four levels is left whole (agent default: it would shimmer when
+  zoomed out). Only block-compressed 2D files whose size the header fully explains are changed. The report and its JSON give, for each
+  mod, mip chains shortened, left whole and any that could not be written; a failure to write one makes the run fail.
+- textures.trim_folder, trim_mips, read_layout and kept_mips, for phobos-rimworld's deploy to use after its own todds run.
+
+### Compatibility and limits
+
+- Not yet seen in game. Predicted from the installed files: D'thorga Vehicles from 2.0 to about 0.6 GiB in the profiler, with the
+  Osprey's 24 nacelle frames (heights 654 to 1156) still unpacked. Unity's own loader reads a shorter chain as it reads any other.
+
 ## [1.53.0] - 2026-11-20
 
 The owner's screen note on D'thorga Companion's Mods page (20 November 2026): "Why is it showing me as taking away nine

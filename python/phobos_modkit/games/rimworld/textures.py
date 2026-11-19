@@ -93,3 +93,129 @@ def encode(folder, todds, run=subprocess.run):
                  timeout=ENCODE_TIMEOUT)
     lines = ((result.stdout or "") + (result.stderr or "")).strip().splitlines()
     return result.returncode, (lines[-1][:300] if lines else "")
+
+
+# Shortened mip chains (kit 1.54.0, owner's choice of 20 Nov 2026). Waylith, a replacement engine some players run RimWorld 1.7 on,
+# turns a block-compressed texture back into plain 4-byte pixels when any of its mip levels four or more pixels tall has a height that
+# is not a multiple of four (UnityStubs' AssetBundleTextures.NeedsDecode, read in a decompile on 20 Nov 2026; width is not checked).
+# todds writes the full chain, so nearly every texture whose height is not a power of two took four times the memory: 255 of D'thorga
+# Vehicles' 459 (1.9 of its 2.0 GiB). Dropping the levels from the first such height onward keeps them compressed. The picture itself is
+# untouched; only the smallest copies, used when zoomed far out, go. Unity's own loader reads the shorter chain as it reads any other.
+DDS_MAGIC = b"DDS "
+DDS_HEADER_BYTES = 128                   # "DDS " and the 124-byte header
+DX10_HEADER_BYTES = 148                  # and the 20-byte DX10 extension
+MIPMAP_COUNT_FLAG = 0x20000              # DDSD_MIPMAPCOUNT: without it the file holds one level
+FOURCC_FLAG = 0x4                        # DDPF_FOURCC
+CUBEMAP_FLAG = 0x200                     # DDSCAPS2_CUBEMAP: six faces, never touched here
+BLOCK_PIXELS = 4
+# Fewer levels than this and a picture would shimmer when zoomed out, so it is left whole for Waylith to unpack, as before (agent default,
+# 20 Nov 2026: it caught only D'thorga Vehicles' Osprey nacelle frames, 24 narrow pictures, about 33 MB unpacked between them). Four
+# levels reach an eighth of the full size. Such a picture is better fixed in its art, at a height with more factors of two.
+MIN_KEPT_MIPS = 4
+FOURCC_BLOCK_BYTES = {b"DXT1": 8, b"DXT3": 16, b"DXT5": 16, b"ATI1": 8, b"BC4U": 8, b"ATI2": 16, b"BC5U": 16}
+DXGI_BLOCK_BYTES = {**dict.fromkeys((70, 71, 72, 79, 80, 81), 8),                                  # BC1, BC4
+                    **dict.fromkeys((73, 74, 75, 76, 77, 78, 82, 83, 84, 94, 95, 96, 97, 98, 99), 16)}  # BC2, BC3, BC5, BC6H, BC7
+
+
+@dataclass(frozen=True)
+class DdsLayout:
+    width: int
+    height: int
+    mips: int
+    block_bytes: int
+    header_bytes: int
+
+    def level_bytes(self, level):
+        width, height = max(1, self.width >> level), max(1, self.height >> level)
+        return -(-width // BLOCK_PIXELS) * -(-height // BLOCK_PIXELS) * self.block_bytes
+
+    def data_bytes(self, levels=None):
+        return sum(self.level_bytes(level) for level in range(self.mips if levels is None else levels))
+
+
+def read_layout(head, file_size):
+    """A block-compressed 2D DDS file's layout from its first 148 bytes, or None for anything else (plain pixels, cube maps, arrays,
+    a size that does not add up), which is then left alone."""
+    if len(head) < DDS_HEADER_BYTES or head[:4] != DDS_MAGIC or int.from_bytes(head[4:8], "little") != 124:
+        return None
+    flags, height, width = (int.from_bytes(head[at:at + 4], "little") for at in (8, 12, 16))
+    mips = int.from_bytes(head[28:32], "little") if flags & MIPMAP_COUNT_FLAG else 1
+    pixel_flags, fourcc = int.from_bytes(head[80:84], "little"), head[84:88]
+    if not pixel_flags & FOURCC_FLAG or int.from_bytes(head[112:116], "little") & CUBEMAP_FLAG or not (width and height):
+        return None
+    if fourcc == b"DX10":
+        if len(head) < DX10_HEADER_BYTES or int.from_bytes(head[140:144], "little") > 1:
+            return None
+        block, header = DXGI_BLOCK_BYTES.get(int.from_bytes(head[128:132], "little")), DX10_HEADER_BYTES
+    else:
+        block, header = FOURCC_BLOCK_BYTES.get(fourcc), DDS_HEADER_BYTES
+    if block is None:
+        return None
+    layout = DdsLayout(width, height, max(1, mips), block, header)
+    return layout if header + layout.data_bytes() == file_size else None
+
+
+def kept_mips(height, mips):
+    """How many mip levels stay compressed under Waylith's rule: up to the first level four or more pixels tall whose height is not a
+    multiple of four. 0 when the full-size picture itself fails (todds' -fs prevents it)."""
+    for level in range(mips):
+        level_height = max(1, height >> level)
+        if level_height >= BLOCK_PIXELS and level_height % BLOCK_PIXELS:
+            return level
+    return mips
+
+
+TRIMMED, IN_STEP, LEFT_WHOLE, NOT_COMPRESSED = "trimmed", "in step", "left whole", "not compressed"
+
+
+def trim_mips(path, min_kept=MIN_KEPT_MIPS):
+    """Shortens one DDS file's mip chain where Waylith would otherwise unpack it, writing a new file beside it and moving it into place.
+    Returns TRIMMED, IN_STEP, LEFT_WHOLE (fewer than min_kept levels would remain) or NOT_COMPRESSED; only TRIMMED changes the file."""
+    path = Path(path)
+    with path.open("rb") as handle:
+        head = handle.read(DX10_HEADER_BYTES)
+    layout = read_layout(head, path.stat().st_size)
+    if layout is None:
+        return NOT_COMPRESSED
+    keep = kept_mips(layout.height, layout.mips)
+    if keep == layout.mips:
+        return IN_STEP
+    if keep < min_kept:
+        return LEFT_WHOLE
+    data = path.read_bytes()
+    header = bytearray(data[:layout.header_bytes])
+    header[28:32] = keep.to_bytes(4, "little")
+    temporary = path.with_name(path.name + ".trimming")
+    temporary.write_bytes(bytes(header) + data[layout.header_bytes:layout.header_bytes + layout.data_bytes(keep)])
+    os.replace(temporary, path)
+    return TRIMMED
+
+
+@dataclass
+class MipTrim:
+    checked: int = 0
+    trimmed: list = field(default_factory=list)      # relative paths shortened now
+    left_whole: list = field(default_factory=list)   # relative paths Waylith still unpacks: too few levels would remain
+    failed: list = field(default_factory=list)       # relative paths that could not be read or written
+
+
+def trim_folder(folder, min_kept=MIN_KEPT_MIPS):
+    """Shortens the mip chain of every encoded texture in a mod folder that Waylith would unpack; only paths containing "Textures",
+    as todds' preset encodes them. Files already in step are only read (their first 148 bytes), so a second run changes nothing."""
+    folder = Path(folder)
+    found = MipTrim()
+    for path in sorted(folder.rglob("*")):
+        if not path.name.lower().endswith(DDS_SUFFIX) or PATH_SEGMENT not in str(path) or not path.is_file():
+            continue
+        relative = path.relative_to(folder).as_posix()
+        found.checked += 1
+        try:
+            outcome = trim_mips(path, min_kept)
+        except OSError:
+            found.failed.append(relative)
+            continue
+        if outcome == TRIMMED:
+            found.trimmed.append(relative)
+        elif outcome == LEFT_WHOLE:
+            found.left_whole.append(relative)
+    return found
