@@ -4,6 +4,18 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.57.1] - 2026-11-20
+
+The owner, on D'thorga Companion's code viewer (20 November 2026): "It doesn't seem to be showing the full extent of the code
+that was/is involved? I've had this feeling for sometime now." For an entry not yet committed it showed 25 files and 104 lines
+of D'thorga Farming's first build, which was 113 files and 5,432 lines.
+
+### Fixed
+
+- changes entry, for an entry in no commit yet, now shows every new file git has not been told of, added whole, beside the edits
+  to files it tracks. They were left out, and a new feature is mostly new files. Files .gitignore leaves out are skipped; a new
+  file over 2 MB, or with a NUL byte near its start, is listed as binary.
+
 ## [1.57.0] - 2026-11-20
 
 The owner (20 November 2026): the Waylith fix in 1.54.0 is truly effective only once D'thorga Companion's own install and encode steps

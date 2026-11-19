@@ -8,8 +8,9 @@
   it. This is right wherever a change and its changelog entry go in one commit, which is the rule in the Phobos repositories.
 - **One commit may write several entries.** The answer then holds the whole commit and names the other entries; it cannot say
   which lines belong to which. Smaller commits give sharper answers.
-- **An entry in no commit yet** shows the uncommitted changes to files git already tracks. New files git has not been told of
-  are not shown.
+- **An entry in no commit yet** shows every uncommitted change in the repository: edits to files git tracks, and from 1.57.1 every
+  new file git has not been told of, added whole (files `.gitignore` leaves out are skipped; a file over 2 MB, or with a NUL byte
+  near its start, is listed as binary). Before 1.57.1 new files were left out, so a new feature looked a fraction of its size.
 - **It only reads**, with git's optional locks and file watcher off.
 - **Any game.** It reads every `CHANGELOG.md` up to three folders deep, skipping dependency and build folders. A repository
   with no changelog file has nothing to list.

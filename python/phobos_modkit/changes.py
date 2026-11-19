@@ -25,6 +25,7 @@ MIN_NEEDLE = 12                  # an opening shorter than this could be anyone'
 MAX_FILES = 400                  # files listed for one commit
 MAX_FILE_LINES = 600             # diff lines kept for one file
 MAX_TOTAL_LINES = 8000           # diff lines kept for one answer
+NEW_FILE_BYTES = 2 * 1024 * 1024  # a new file larger than this is listed, not read (agent default)
 GIT_TIMEOUT = 120
 
 # What a file is, for ordering (code first) and for a program choosing how to colour it. Never a colour itself.
@@ -351,6 +352,35 @@ def commit_code(root, changelog, commit_hash):
     return EntryCode(commit, files[:MAX_FILES], written, max(0, len(files) - MAX_FILES))
 
 
+def new_files_diff(root):
+    """Every file git has not been told of yet (ignored ones left out), as a diff adding it whole (1.57.1).
+
+    `git diff HEAD` leaves these out, so an entry in no commit showed only the edits to files git knew, and a new feature, mostly new
+    files, looked a fraction of its size (the owner's "it doesn't seem to be showing the full extent", 20 Nov 2026: 25 files and 104
+    lines shown of 113 files and 5,432 lines). A file with a NUL byte in its first 8 KB, or over NEW_FILE_BYTES, counts as binary."""
+    listed = git(root, "ls-files", "--others", "--exclude-standard", "-z")
+    parts = []
+    for path in sorted(p for p in listed.split("\0") if p):
+        if any(part in SKIP_FOLDERS for part in Path(path).parts[:-1]):
+            continue
+        head = f"diff --git a/{path} b/{path}\nnew file mode 100644\n"
+        try:
+            data = (Path(root) / path).read_bytes()
+        except OSError:
+            continue
+        if len(data) > NEW_FILE_BYTES or b"\0" in data[:8192]:
+            parts.append(head + f"Binary files /dev/null and b/{path} differ\n")
+            continue
+        lines = data.decode("utf-8", "replace").split("\n")
+        if lines and lines[-1] == "":
+            lines.pop()
+        if not lines:
+            parts.append(head)
+            continue
+        parts.append(head + f"--- /dev/null\n+++ b/{path}\n@@ -0,0 +1,{len(lines)} @@\n" + "".join(f"+{line}\n" for line in lines))
+    return "".join(parts)
+
+
 def entry_code(root, changelog, text):
     """The code behind one entry of a changelog: its commit's changes, or the uncommitted changes when no commit holds it."""
     log = read(root, changelog)
@@ -363,7 +393,7 @@ def entry_code(root, changelog, text):
     known = commit_of(entry, entry_commits(root, changelog))
     commit = describe(root, known) if known else first_commit(root, changelog, text)
     if commit is None:
-        diff = git(root, "diff", "HEAD", "--find-renames", "--unified=3", "--no-color", "--no-ext-diff")
+        diff = git(root, "diff", "HEAD", "--find-renames", "--unified=3", "--no-color", "--no-ext-diff") + new_files_diff(root)
         written = entries_written(git(root, "diff", "HEAD", "--unified=0", "--no-color", "--no-ext-diff", "--", changelog))
     else:
         diff = git(root, "show", commit.hash, "--format=", "--find-renames", "--unified=3", "--no-color", "--no-ext-diff")

@@ -191,6 +191,25 @@ class EntryTests(unittest.TestCase):
             self.assertIsNone(found.commit)
             self.assertEqual([(f.path, f.additions) for f in found.files], [("src/Boat.cs", 1)])
 
+    def test_an_entry_in_no_commit_shows_new_files_too(self):
+        # The owner's "it doesn't seem to be showing the full extent" (20 Nov 2026): new files git had not been told of were left out.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = repository(tmp)
+            write(root / "mods" / "Thing" / "CHANGELOG.md", HEAD.rstrip("\n") + "\n\n- **Oars.** Boats row.\n\n" + V2 + V1)
+            write(root / "src" / "Oar.cs", "class Oar\n{\n    int length = 3;\n}\n")
+            write(root / "src" / "Empty.cs", "")
+            (root / "src" / "oar.png").write_bytes(b"\x89PNG\0\0\0data")
+            write(root / ".gitignore", "*.log\n")
+            write(root / "build.log", "ignored\n")
+            found = changes.entry_code(root, "mods/Thing/CHANGELOG.md", "Oars.")
+            files = {f.path: f for f in found.files}
+            self.assertNotIn("build.log", files)
+            oar = files["src/Oar.cs"]
+            self.assertEqual((oar.change, oar.additions, oar.deletions), ("added", 4, 0))
+            self.assertEqual([line["new"] for line in oar.hunks[0]["lines"]], [1, 2, 3, 4])
+            self.assertEqual(files["src/Empty.cs"].change, "added")
+            self.assertTrue(files["src/oar.png"].binary)
+
     def test_what_is_not_an_entry_or_not_a_changelog_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = repository(tmp)
