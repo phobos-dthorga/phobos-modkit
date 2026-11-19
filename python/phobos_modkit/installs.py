@@ -152,10 +152,52 @@ class Delta:
     gain: list = field(default_factory=list)
     lose: list = field(default_factory=list)
     reworded: list = field(default_factory=list)    # (as it is now, as it would be)
+    unlisted: list = field(default_factory=list)    # taken out of lose by set_aside: not a removal the changelogs can show
+    unlisted_why: dict = field(default_factory=dict)    # version -> REUSED or UNCOMMITTED
 
     @property
     def save_notes(self):
         return [e for e in self.gain + self.lose if e.about_saves]
+
+
+REUSED = "reused"              # both changelogs hold this version, each with different entries under it
+UNCOMMITTED = "uncommitted"    # installed from uncommitted work, under a version newer than any the repository's changelog holds
+
+
+def set_aside(delta, current, other, record=None):
+    """Takes out of a move's losses the entries a changelog cannot call lost: the installed copy's against the repository's.
+
+    Two cases, each a fact the changelogs and the install record show. **A version number used twice**: both changelogs have the
+    version, with no entry under it in common, so the number now names other work (one session renumbered, another took it).
+    **Uncommitted work the repository's changelog does not hold now**: the install record says the copy was built with changes not
+    yet committed, and the entry sits under a version newer than every one the repository's changelog has. In both the changelog is
+    silent on whether the code went: it may have been renumbered, not yet written up again, or set aside. Moving to a backup is
+    never set aside: a backup's changelog is what it holds. Returns the delta, changed in place."""
+    if current is None or other is None or not delta.lose:
+        return delta
+    mine, theirs = _by_version(current), _by_version(other)
+    newest = max((version_tuple(v) for v in other.headings if version_tuple(v)), default=None)
+    built_unsaved = bool((record or {}).get("uncommittedCount"))
+    for version in sorted({e.version for e in delta.lose}):
+        why = None
+        if version in theirs and mine.get(version) and theirs[version]:
+            shared = ({e.key for e in mine[version]} & {e.key for e in theirs[version]}
+                      or {e.lead for e in mine[version]} & {e.lead for e in theirs[version]})
+            why = None if shared else REUSED
+        elif version not in theirs and built_unsaved and version_tuple(version) and newest and version_tuple(version) > newest:
+            why = UNCOMMITTED
+        if why:
+            delta.unlisted_why[version] = why
+            delta.unlisted += [e for e in delta.lose if e.version == version]
+            delta.lose = [e for e in delta.lose if e.version != version]
+    return delta
+
+
+def _by_version(log):
+    found = {}
+    for entry in log.entries:
+        found.setdefault(entry.version, []).append(entry)
+    return found
 
 
 def compare(current, other):

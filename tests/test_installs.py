@@ -119,6 +119,39 @@ class ChangelogTests(unittest.TestCase):
         self.assertEqual([e.lead for e in delta.lose], ["Sails.", "Not safe to remove: saves hold the sails."])
         self.assertEqual(delta.gain, [])
 
+    def test_a_version_number_used_twice_is_set_aside_not_lost(self):
+        # The owner's screen note of 20 Nov 2026: one session's 0.3.0 was installed, another session then took 0.3.0 for other work.
+        installed = installs.parse_changelog(NEW_LOG)
+        other = installs.parse_changelog(NEW_LOG.replace("- **Lamps glow.** A lamp now glows.\n- **Sails.** Boats have sails.",
+                                                         "- **Oars.** Boats have oars.").replace(
+                                                             "Not safe to remove: saves hold the sails.", "Safe to remove."))
+        delta = installs.set_aside(installs.compare(installed, other), installed, other)
+        self.assertEqual(delta.lose, [])
+        self.assertEqual([e.lead for e in delta.unlisted], ["Lamps glow.", "Sails.", "Not safe to remove: saves hold the sails."])
+        self.assertEqual(delta.unlisted_why, {"0.3.0": installs.REUSED})
+        self.assertEqual([e.lead for e in delta.gain], ["Oars.", "Safe to remove."])
+
+    def test_an_entry_dropped_from_a_version_both_share_is_still_lost(self):
+        installed = installs.parse_changelog(NEW_LOG)
+        other = installs.parse_changelog(NEW_LOG.replace("- **Sails.** Boats have sails.\n", ""))
+        delta = installs.set_aside(installs.compare(installed, other), installed, other, {"uncommittedCount": 4})
+        self.assertEqual([e.lead for e in delta.lose], ["Sails."])
+        self.assertEqual(delta.unlisted, [])
+
+    def test_uncommitted_work_the_repository_no_longer_lists_is_set_aside(self):
+        installed, other = installs.parse_changelog(NEW_LOG), installs.parse_changelog(OLD_LOG)
+        delta = installs.set_aside(installs.compare(installed, other), installed, other, {"uncommittedCount": 4})
+        self.assertEqual(delta.lose, [])
+        self.assertEqual([e.lead for e in delta.unlisted], ["Sails.", "Not safe to remove: saves hold the sails."])
+        self.assertEqual(delta.unlisted_why, {"0.3.0": installs.UNCOMMITTED})
+
+    def test_a_committed_install_ahead_of_the_repository_still_loses(self):
+        installed, other = installs.parse_changelog(NEW_LOG), installs.parse_changelog(OLD_LOG)
+        for record in (None, {"uncommittedCount": 0}):
+            delta = installs.set_aside(installs.compare(installed, other), installed, other, record)
+            self.assertEqual([e.lead for e in delta.lose], ["Sails.", "Not safe to remove: saves hold the sails."])
+            self.assertEqual(delta.unlisted, [])
+
     def test_no_changelog_knows_nothing(self):
         self.assertEqual(installs.compare(None, installs.parse_changelog(NEW_LOG)).gain, [])
 
@@ -173,6 +206,23 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(backup["taken"], "2026-11-01T12:00:00")
             self.assertIn("Boats float.", [e["lead"] for e in backup["delta"]["lose"]])
             self.assertEqual(answer["data"]["gameRunning"], [])
+
+    def test_an_install_of_uncommitted_work_the_repository_no_longer_lists_is_not_called_a_loss(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Fixture(tmp)
+            write_mod(f.game / "Mods" / "Thing", "0.3.0", NEW_LOG)
+            installs.write_record(f.game / "Mods" / "Thing", {"format": 1, "mod": "Thing", "version": "0.3.0", "commit": None,
+                                                              "uncommittedCount": 2})
+            write_mod(f.repo / "mods" / "Thing", "0.2.0", OLD_LOG)
+            code, answer = f.run("status")
+            mod = answer["data"]["mods"][0]
+            self.assertEqual((code, mod["state"]), (0, "unlisted"))
+            self.assertEqual(mod["update"]["lose"], [])
+            self.assertEqual([e["lead"] for e in mod["update"]["unlisted"]], ["Sails.", "Not safe to remove: saves hold the sails."])
+            self.assertEqual(mod["update"]["unlistedWhy"], {"0.3.0": "uncommitted"})
+            self.assertEqual(mod["update"]["summaries"], {"0.3.0": "Third release"})
+            # Going back to a backup is what its changelog says: never set aside.
+            self.assertIn("Sails.", [e["lead"] for e in mod["backups"][0]["delta"]["lose"]])
 
     def test_an_unknown_mod_is_refused_in_the_envelope(self):
         with tempfile.TemporaryDirectory() as tmp:

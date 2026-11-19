@@ -4,6 +4,21 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.53.0] - 2026-11-20
+
+The owner's screen note on D'thorga Companion's Mods page (20 November 2026): "Why is it showing me as taking away nine
+entries?" Two sessions had both numbered their work Framework 0.184.0; the one installed was renumbered, and its nine entries
+read as a loss though their code was still in the repository.
+
+### Added
+
+- installs status sets aside, from what installing from the repository would lose, the entries a changelog cannot call lost:
+  a version number used twice (both copies have it, with no entry in common) and uncommitted work the repository's changelog
+  does not hold now (the install record says the copy was built with uncommitted changes, under a version newer than any in the
+  repository). The update's JSON adds unlisted and unlistedWhy (reused or uncommitted, by version); the state is unlisted when
+  nothing else differs, and the Markdown says why for each version. An entry dropped from a version both share, and any move to
+  a backup, is still a loss.
+
 ## [1.52.0] - 2026-11-20
 
 The owner asked (20 November 2026) for one command to read what a vehicle has saved, after a fault on a dirt bike could be

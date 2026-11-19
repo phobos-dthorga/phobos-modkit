@@ -84,9 +84,10 @@ def _delta(delta, *logs, commits=None):
         if log is not None:
             for version, line in log.summaries.items():
                 summaries.setdefault(version, line)
-    used = {e.version for e in delta.gain + delta.lose} | {pair[1].version for pair in delta.reworded}
+    used = {e.version for e in delta.gain + delta.lose + delta.unlisted} | {pair[1].version for pair in delta.reworded}
     return {"gain": [_entry(e, commits) for e in delta.gain], "lose": [_entry(e, commits) for e in delta.lose],
             "reworded": [{"now": _entry(a, commits), "would": _entry(b, commits)} for a, b in delta.reworded],
+            "unlisted": [_entry(e, commits) for e in delta.unlisted], "unlistedWhy": dict(delta.unlisted_why),
             "saveNotes": [_entry(e, commits) for e in delta.save_notes],
             "summaries": {v: s for v, s in summaries.items() if v in used}}
 
@@ -101,7 +102,7 @@ def _copy(copy, against=None):
 def state_of(state, update):
     if state.installed is None:
         return "not-installed"
-    if not (update.gain or update.lose or update.reworded):
+    if not (update.gain or update.lose or update.reworded or update.unlisted):
         files = state.files or {"total": 0}
         if not files["total"]:
             return "up-to-date"
@@ -114,7 +115,9 @@ def state_of(state, update):
         return "behind"
     if update.lose and not update.gain:
         return "ahead"
-    return "differs"
+    if update.lose:
+        return "differs"
+    return "unlisted"
 
 
 def _build_data(state):
@@ -131,6 +134,8 @@ def mod_data(state, root=None):
     # Every entry the mod's changelog ever held, with the commit that wrote it: lost entries too, since the history keeps them.
     commits = changes.entry_commits(root, state.changelog) if root and state.changelog else None
     update = installs.compare(installed.changelog, state.repository.changelog) if installed else installs.Delta()
+    if installed:
+        installs.set_aside(update, installed.changelog, state.repository.changelog, installed.record)
     backups = []
     for b in state.backups:
         moved = installs.compare(installed.changelog, b.changelog) if installed else installs.Delta()
@@ -153,7 +158,15 @@ def mod_data(state, root=None):
 
 _STATE_WORDS = {"not-installed": "not installed", "up-to-date": "up to date", "behind": "repository has more",
                 "ahead": "installed copy has entries the repository lacks", "differs": "both have entries the other lacks",
+                "unlisted": "installed copy has entries the repository's changelog does not hold now",
                 "rebuilt": "only rebuilt: its own code is unchanged", "unlogged": "files differ; the changelog says nothing new"}
+
+
+_UNLISTED_WORDS = {
+    installs.REUSED: "a number used twice: the repository's {version} is other work, so this one has been or will be renumbered. "
+                     "The changelog cannot say whether its code is still there.",
+    installs.UNCOMMITTED: "installed from changes not committed then; the repository's changelog does not hold {version} now. It "
+                          "may have been renumbered, not yet written up again, or set aside: the changelog cannot say which."}
 
 
 def _size(size):
@@ -180,13 +193,15 @@ def status_report(where, states, running, top, progress=None):
           f"{len(d['backups']):,}", _STATE_WORDS[d["state"]]] for d in datas]))
     for d in datas:
         update = d["update"]
-        if not (update["gain"] or update["lose"]):
+        if not (update["gain"] or update["lose"] or update["unlisted"]):
             continue
         items = [f"**Saves:** {e['text']} ({e['version']})" for e in update["saveNotes"]]
         items += [f"**Setting:** {c.get('label') or c.get('key')} {c.get('what')}" for c in d["settings"] or []]
         items += [f"Look out for, in play: row {r['id']}, {r['title']}" for r in d["lookOut"]]
         items += [f"Gain ({e['version']}, {e['section'] or 'no section'}): {e['lead']}" for e in update["gain"][:top]]
         items += [f"Lose ({e['version']}, {e['section'] or 'no section'}): {e['lead']}" for e in update["lose"][:top]]
+        items += [f"Not in the repository's changelog now: {version}, {_UNLISTED_WORDS[why].format(version=version)}"
+                  for version, why in sorted(update["unlistedWhy"].items())]
         report.section(f"{d['name']}: installing from the repository", Bullets(items))
     report.section("Space", Bullets([
         f"Backups: {sum(b['size'] or 0 for d in datas for b in d['backups']) / MB:,.0f} MB in {where.backups}.",

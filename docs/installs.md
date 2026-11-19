@@ -58,6 +58,12 @@ Add `--json` for the envelope. A refusal is still an envelope, with `data.ok` fa
 - An entry lost and one gained with the same version, section and bold opening are paired as **reworded**: the same change,
   described again.
 - Entries under **Save compatibility** are also listed apart (`saveNotes`), so a program can put them first.
+- **Installing from the repository sets aside what a changelog cannot call lost** (1.53.0, after the owner's screen note of 20 Nov
+  2026, "Why is it showing me as taking away nine entries?"). Such entries go to `unlisted`, not `lose`, and `unlistedWhy` gives each
+  version's reason: `reused`, when both copies have the version with no entry under it in common (the number now names other
+  work: one session renumbered, another took it); `uncommitted`, when the install record says the copy was built with changes
+  not yet committed and the version is newer than any the repository's changelog has. Either way the changelog is silent on
+  whether the code went. An entry dropped from a version both copies share, and any move to a backup, stays a loss.
 
 ## What else status compares (1.21.0)
 
@@ -67,7 +73,7 @@ Add `--json` for the envelope. A refusal is still an envelope, with `data.ok` fa
 | `build` | Per C# project of the mod: whether its sources are newer than the assembly it built. It counts the project's folder, its `Compile Include` files from elsewhere and the `shared` files, never referenced projects, whose changes need not rebuild it |
 | `installedCommit` | The install record's commit (`exact`), or for older installs the commit that first gave the mod its installed version (approximate) |
 | `settings` | The settings changes since that commit for this mod, from `settingsChanges`; read once per commit, only for mods not already in step |
-| `state` | `up-to-date`, `behind`, `ahead` or `differs` by the changelogs; when they agree but files differ, `rebuilt` (every changed file only rebuilt) or `unlogged` (1.26.0) |
+| `state` | `up-to-date`, `behind`, `ahead` or `differs` by the changelogs, or `unlisted` when the only difference is entries set aside (1.53.0); when they agree but files differ, `rebuilt` (every changed file only rebuilt) or `unlogged` (1.26.0) |
 | `lookOut` | Test-list rows still waiting whose named version of the mod lies after the installed version and no later than the repository's (test-pass's `versionNames`) |
 
 `build` runs the repository's build command; it writes only inside the repository, so it does not wait for the game to close.
