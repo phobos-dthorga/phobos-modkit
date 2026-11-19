@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.40.0] - 2026-11-19
+
+The owner asked (19 November 2026) for repeated backups to be removable, for new settings to be followed alongside the timeline, and for paging further back in D'thorga Companion.
+
+### Added
+
+- installs status marks backups that repeat the one before them: identical (the same file for file) or rebuilt (the same version and files but the assemblies, with none of the mod's own sources changed between their commits). installs dedupe removes them, keeping the oldest of each run, after checking each again. Digests are kept in the cache, so only new backups are read.
+- installs settings: every setting the repository's mods ever added, removed or gave a new default, newest first, from the repository's own settingsHistory command in installs.json.
+- history timeline adds those settings changes as facts (setting-added, setting-removed, setting-default) on each mod's lane.
+- changes list --versions 0 gives every version, and connections history --limit gives more than 25 commits (up to 500), so a program can page further back.
 ## [1.39.0] - 2026-11-19
 
 The owner asked (19 November 2026) to show "how the contents of our mods, code, etc. is consisted of in a graphical manner", for D'thorga Companion.

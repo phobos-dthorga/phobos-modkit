@@ -306,6 +306,47 @@ def repository_facts(root, environ=None, settings=None, progress=None):
     return sorted(found, key=lambda f: f["time"])
 
 
+SETTING_KINDS = {"added": "setting-added", "removed": "setting-removed", "default": "setting-default"}
+
+
+def settings_facts(root, progress=None):
+    """A fact for every committed setting change the repository's own settings history gives (installs.json "settingsHistory"):
+    added, removed or given a new default, on its mod's lane. None of it without that command, or when it fails."""
+    from . import install_checks, installs
+    root = Path(root).resolve()
+    try:
+        config = installs.load_config(root)
+    except installs.InstallsError:
+        return []
+    if not config.get("settingsHistory"):
+        return []
+    if progress:
+        progress(f"Reading the history of {root.name}'s settings")
+    found, _ = install_checks.settings_history(root, config)
+    names = {}
+    facts = []
+    for change in found or []:
+        if not change.get("commit") or change.get("what") not in SETTING_KINDS:
+            continue
+        mod = change.get("mod")
+        if mod and mod not in names:
+            path = f"{config['mods']}/{mod}/{installs.CHANGELOG}"
+            try:
+                names[mod] = changes.product_name(changes.read_listed(root, path).title, path, root)
+            except OSError:
+                names[mod] = mod
+        time = change.get("time") or ""
+        try:
+            time = datetime.fromisoformat(time).astimezone(timezone.utc).isoformat(timespec="seconds")
+        except ValueError:
+            pass
+        facts.append({"time": time, "kind": SETTING_KINDS[change["what"]], "source": "git", "repository": root.name,
+                      "commit": change["commit"], "subject": change.get("subject"), "product": names.get(mod) or mod, "mod": mod,
+                      "key": change.get("key"), "label": change.get("label"), "before": change.get("before"),
+                      "after": change.get("after")})
+    return facts
+
+
 # ---------------------------------------------------------------- a changelog as it stood
 
 def commit_at(root, path, when):

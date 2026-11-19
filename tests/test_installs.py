@@ -3,6 +3,7 @@ in temporary folders: a stand-in repository, a stand-in game folder and its back
 from datetime import datetime
 import io
 import json
+import shutil
 from pathlib import Path
 import tempfile
 import unittest
@@ -253,3 +254,50 @@ class MovingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RepeatsAndSettingsTests(unittest.TestCase):
+    def test_dedupe_removes_a_backup_repeating_the_one_before_and_keeps_the_oldest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Fixture(tmp)
+            backups = f.repo / ".local" / "backups"
+            shutil.copytree(backups / "Thing-20261101-120000", backups / "Thing-20261102-120000")
+            code, answer = f.run("status")
+            thing = answer["data"]["mods"][0]
+            self.assertEqual([(b["backup"], b["sameAs"], b["sameKind"]) for b in thing["backups"]],
+                             [("Thing-20261102-120000", "Thing-20261101-120000", "identical"),
+                              ("Thing-20261101-120000", None, None)])
+            self.assertEqual(answer["data"]["space"]["duplicates"], 1)
+            code, answer = f.run("dedupe")
+            self.assertEqual((code, [r["backup"] for r in answer["data"]["removed"]]), (0, ["Thing-20261102-120000"]))
+            self.assertEqual(sorted(p.name for p in backups.iterdir()), ["Thing-20261101-120000"])
+            code, answer = f.run("dedupe")
+            self.assertEqual(answer["data"]["removed"], [])
+
+    def test_settings_reads_the_repositorys_own_history_newest_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Fixture(tmp)
+            config = json.loads((f.repo / "config" / "installs.json").read_text(encoding="utf-8"))
+            script = f.repo / "history.py"
+            script.write_text("import json\nprint(json.dumps([\n"
+                              " {'time': '2026-11-01T10:00:00+11:00', 'commit': 'a1', 'subject': 's', 'mod': 'Thing', 'key': 'K1',"
+                              " 'label': 'One', 'what': 'added', 'before': None, 'after': 'True'},\n"
+                              " {'time': '2026-11-02T10:00:00+11:00', 'commit': 'b2', 'subject': 's', 'mod': 'Thing', 'key': 'K2',"
+                              " 'label': None, 'what': 'removed', 'before': '3', 'after': None}]))\n", encoding="utf-8")
+            config["settingsHistory"] = ["{python}", "history.py"]
+            (f.repo / "config" / "installs.json").write_text(json.dumps(config), encoding="utf-8")
+            code, answer = f.run("settings")
+            self.assertEqual(code, 0)
+            self.assertEqual([(c["key"], c["product"]) for c in answer["data"]["settings"]], [("K2", "Thing"), ("K1", "Thing")])
+            from phobos_modkit import history
+            facts = history.settings_facts(f.repo)
+            self.assertEqual([(x["kind"], x["product"], x["time"]) for x in facts],
+                             [("setting-added", "Thing", "2026-10-31T23:00:00+00:00"),
+                              ("setting-removed", "Thing", "2026-11-01T23:00:00+00:00")])
+
+    def test_a_repository_without_a_settings_history_says_so(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Fixture(tmp)
+            code, answer = f.run("settings")
+            self.assertEqual((code, answer["data"]["ok"]), (1, False))
+            self.assertIn("settings' history", answer["data"]["refusal"])

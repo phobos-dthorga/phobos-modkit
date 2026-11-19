@@ -18,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from importlib import import_module
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -326,6 +327,8 @@ class Copy:
     backup: str = ""          # a backup's folder name
     taken: str = ""           # a backup's time, from its name
     size: int = None
+    same_as: str = ""         # a backup's older twin: the oldest backup of the run it repeats (duplicates)
+    same_kind: str = ""       # how it repeats it: identical, or rebuilt only
 
 
 def read_copy(kind, folder, game, measure=False, backup=""):
@@ -358,6 +361,157 @@ def backups_of(backups, mod):
         return []
     found = [n for n in names if (m := BACKUP_NAME.match(n)) and m.group("mod") == mod]
     return sorted(found, key=lambda n: n[-15:], reverse=True)
+
+
+# ---------------------------------------------------------------- duplicate backups
+
+DIGEST_CACHE = "installs"
+DIGEST_FILE = "backup-digests.json"
+DIGEST_FORMAT = 2
+_CHUNK = 1024 * 1024
+ASSEMBLY = ".dll"
+IDENTICAL, REBUILT = "identical", "rebuilt"
+
+
+def content_digest(folder, leave_out_assemblies=False):
+    """A hash of every file under a folder, by path and bytes, leaving out the install record (and, when asked, the assemblies):
+    two copies of a mod with the same full digest hold the same mod file for file, whenever and from whichever commit each was
+    installed."""
+    folder = Path(folder)
+    digest = hashlib.sha256()
+    for path in sorted(p for p in folder.rglob("*") if p.is_file()):
+        relative = path.relative_to(folder).as_posix()
+        if relative == RECORD or (leave_out_assemblies and relative.lower().endswith(ASSEMBLY)):
+            continue
+        digest.update(relative.encode("utf-8") + b"\0")
+        with open(path, "rb") as handle:
+            while chunk := handle.read(_CHUNK):
+                digest.update(chunk)
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _digest_store(environ=None, settings=None):
+    from . import cache as derived
+    return derived.folder(DIGEST_CACHE, None, environ, settings) / DIGEST_FILE
+
+
+def backup_digests(copies, environ=None, settings=None, progress=None):
+    """{backup name: {"full": digest, "lean": digest without assemblies}} for these backups. A backup never changes once made, so
+    its digests are kept in the kit's cache by its folder and size, and only new backups are read."""
+    store = _digest_store(environ, settings)
+    try:
+        kept = json.loads(store.read_text(encoding="utf-8"))
+        if kept.get("format") != DIGEST_FORMAT:
+            kept = {}
+    except (OSError, ValueError, AttributeError):
+        kept = {}
+    folders = kept.setdefault("folders", {})
+    kept["format"] = DIGEST_FORMAT
+    found, fresh = {}, False
+    sizes = {c.backup: c.size if c.size is not None else size_of(c.folder) for c in copies}
+    unread = sum(1 for c in copies if folders.get(str(c.folder), {}).get("size") != sizes[c.backup])
+    for position, copy in enumerate(copies, 1):
+        entry = folders.get(str(copy.folder))
+        if not entry or entry.get("size") != sizes[copy.backup]:
+            if progress:
+                progress(f"Comparing backups file for file ({unread:,} not read before)", position, len(copies), copy.backup)
+            entry = folders[str(copy.folder)] = {"size": sizes[copy.backup], "full": content_digest(copy.folder),
+                                                 "lean": content_digest(copy.folder, leave_out_assemblies=True)}
+            fresh = True
+        found[copy.backup] = entry
+    if fresh:
+        try:
+            store.parent.mkdir(parents=True, exist_ok=True)
+            kept["folders"] = {k: v for k, v in folders.items() if Path(k).is_dir()}
+            store.write_text(json.dumps(kept), encoding="utf-8")
+        except OSError:
+            pass
+    return found
+
+
+def _commit_of(copy):
+    record = copy.record or {}
+    return record.get("commit") if not record.get("uncommittedCount") else None
+
+
+def sources_unchanged(root, older, newer, inputs, asked=None):
+    """Whether none of a mod's own sources (its projects' inputs) changed between two commits; False when git cannot say."""
+    if not older or not newer or not inputs:
+        return False
+    if older == newer:
+        return True
+    key = (older, newer)
+    if asked is not None and key in asked:
+        return asked[key]
+    out = checks._git(root, "diff", "--name-only", older, newer, "--", *inputs)
+    same = out is not None and not out.strip()
+    if asked is not None:
+        asked[key] = same
+    return same
+
+
+def mark_duplicates(backups, digests, rebuilt_check=None):
+    """Sets same_as and same_kind on every backup that repeats the one before it in time, naming the oldest of its run.
+
+    Identical: the same file for file. Rebuilt: the same version, every file but the assemblies the same, and rebuilt_check (given
+    the two copies) says the mod's own sources did not change between their commits, so only a rebuild against newer code it uses
+    tells them apart. Only a run counts: A, A, B, A keeps the last A, because it is the newest backup from after B, and "the newest
+    backup from before a moment" must still find it. The oldest of each run is kept."""
+    keeper = None
+    for copy in sorted(backups, key=lambda c: c.backup[-15:]):
+        mine, theirs = digests.get(copy.backup) or {}, digests.get(keeper.backup) if keeper else None
+        kind = ""
+        if theirs and mine:
+            if mine.get("full") == theirs.get("full"):
+                kind = IDENTICAL
+            elif (rebuilt_check and copy.version and copy.version == keeper.version
+                  and mine.get("lean") == theirs.get("lean") and rebuilt_check(keeper, copy)):
+                kind = REBUILT
+        if kind:
+            copy.same_as, copy.same_kind = keeper.backup, kind
+        else:
+            copy.same_as, copy.same_kind = "", ""
+            keeper = copy
+    return [c for c in backups if c.same_as]
+
+
+def _rebuilt_check(where, mod, builds=None, asked=None):
+    builds = builds if builds is not None else checks.build_states(where.root, where.config)
+    inputs = sorted({path for build in builds.get(mod, []) for path in build.get("inputs", [])})
+    asked = {} if asked is None else asked
+    return lambda older, newer: sources_unchanged(where.root, _commit_of(older), _commit_of(newer), inputs, asked)
+
+
+def dedupe(where, mods=None, kinds=(IDENTICAL, REBUILT), progress=None):
+    """Removes every backup that repeats the one before it (identical, or only rebuilt, as kinds allow), keeping the oldest of each
+    run. Each is read again and compared with the one kept just before it is removed. Returns [{mod, backup, sameAs, kind, size}]."""
+    removed = []
+    names = list(mods or mods_of(where.root, where.config))
+    builds = checks.build_states(where.root, where.config)
+    for mod in names:
+        if mods:
+            _known_mod(where, mod)
+        copies = [read_copy("backup", where.backups / name, where.game, True, name) for name in backups_of(where.backups, mod)]
+        doubles = [c for c in mark_duplicates(copies, backup_digests(copies, where.environ, where.settings, progress),
+                                              _rebuilt_check(where, mod, builds)) if c.same_kind in kinds]
+        kept = {}
+        for position, copy in enumerate(sorted(doubles, key=lambda c: c.backup), 1):
+            if progress:
+                progress(f"Removing repeated backups of {mod}", position, len(doubles), copy.backup)
+            keeper = where.backups / copy.same_as
+            lean = copy.same_kind == REBUILT
+            if (copy.same_as, lean) not in kept:
+                kept[(copy.same_as, lean)] = content_digest(keeper, lean) if keeper.is_dir() else None
+            if kept[(copy.same_as, lean)] is None or content_digest(copy.folder, lean) != kept[(copy.same_as, lean)]:
+                continue    # no longer a twin of something that is still there: leave it alone
+            remove(copy.folder)
+            removed.append({"mod": mod, "backup": copy.backup, "sameAs": copy.same_as, "kind": copy.same_kind,
+                            "size": copy.size or 0})
+    if removed:
+        note(where, "duplicates-removed", count=len(removed), size=sum(r["size"] for r in removed),
+             mods=sorted({r["mod"] for r in removed}))
+    return removed
 
 
 @dataclass
@@ -446,6 +600,12 @@ def survey(where, mods=None, measure=True, run=subprocess.run, progress=None):
             checks.mark_rebuilt(state.files, state.builds, where.root, commit)
             state.look_out = checks.look_out(where.root, repository.name, installed.version, repository.version)
         states.append(state)
+    every = [b for s in states for b in s.backups]
+    if measure and every:
+        digests = backup_digests(every, where.environ, where.settings, progress)
+        asked = {}
+        for state in states:
+            mark_duplicates(state.backups, digests, _rebuilt_check(where, state.mod, builds, asked))
     progress("Reading what settings an install would change", len(names) + 1, len(names) + 1)
     _add_settings(where, states, run)
     return states

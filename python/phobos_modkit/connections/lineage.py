@@ -13,6 +13,7 @@ import re
 from .. import changes
 
 MAX_COMMITS = 25
+LIMIT_CEILING = 500     # the most commits one request may ask for
 _PATH = re.compile(r"^\+\+\+ b/(.+)$")
 
 

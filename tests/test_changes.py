@@ -63,6 +63,13 @@ class ChangelogsTests(unittest.TestCase):
             self.assertEqual((version["heading"], version["summary"]), ("2026-11-02 - Draft", "Boats"))
             self.assertEqual([e["lead"] for e in version["entries"]], ["Boats float.", "Sails.", "Safe with a running save."])
 
+    def test_list_gives_every_version_when_asked_for_none_in_particular(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = io.StringIO()
+            changes_cli.main(["list", "--root", str(repository(tmp)), "--versions", "0", "--json"], environ={}, out=out)
+            log = json.loads(out.getvalue())["data"]["changelogs"][0]
+            self.assertEqual([v["version"] for v in log["versions"] if v["version"] != "Unreleased"], ["0.2.0", "0.1.0"])
+
     def test_a_bare_changelog_title_is_named_by_what_follows_or_its_folder(self):
         self.assertEqual(changes.product_name("Changelog (PhobosLib)", "CHANGELOG.md", "repo"), "PhobosLib")
         self.assertEqual(changes.product_name("Changelog", "mods/Cat Ledger/CHANGELOG.md", "repo"), "Cat Ledger")

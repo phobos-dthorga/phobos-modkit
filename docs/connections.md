@@ -27,7 +27,7 @@ python -m phobos_modkit connections find --root REPO --name "*Tick*"
 python -m phobos_modkit connections around --root REPO --node cs:Phobos.Framework.TopUp.Seen.Note
 python -m phobos_modkit connections flow --root REPO --node cs:Phobos.Framework.TopUp.Seen.Note --depth 2
 python -m phobos_modkit connections changed --root REPO --commit 3352e4da
-python -m phobos_modkit connections history --root REPO --node cs:Phobos.Framework.TopUp.Seen.Note
+python -m phobos_modkit connections history --root REPO --node cs:Phobos.Framework.TopUp.Seen.Note [--limit 100]
 ```
 
 Add `--json` for the envelope; `--rebuild` reads every file again.

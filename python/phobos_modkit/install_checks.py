@@ -258,6 +258,24 @@ def settings_changes(root, config, commit, run=subprocess.run):
     return found, None
 
 
+def settings_history(root, config, run=subprocess.run):
+    """[{time, commit, subject, mod, key, label, what, before, after}] the repository's own settings history command gives, oldest
+    first (config "settingsHistory"); (None, why) when it has none or it fails. The command reads only the repository's history."""
+    template = config.get("settingsHistory")
+    if not template:
+        return None, "this repository does not say how to read its settings' history"
+    command = [sys.executable if part == "{python}" else part for part in template]
+    try:
+        result = run(command, cwd=str(root), capture_output=True, text=True, check=False, timeout=900,
+                     env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+        found = json.loads(result.stdout or "null")
+    except (OSError, subprocess.SubprocessError, ValueError) as error:
+        return None, f"the settings history could not be read ({error})"
+    if result.returncode != 0 or not isinstance(found, list):
+        return None, (result.stderr or "the settings history command failed").strip()[:300]
+    return found, None
+
+
 # ---------------------------------------------------------------- test rows
 
 def look_out(root, name, installed, repository):

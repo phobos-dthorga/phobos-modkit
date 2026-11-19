@@ -21,7 +21,7 @@ import os
 from pathlib import Path
 import sys
 
-from . import changes, installs
+from . import changes, install_checks as checks, installs
 from .manifest import READS, RUNS, WRITES
 from .progress import Progress
 from .report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
@@ -38,22 +38,36 @@ def _parser():
              "backup": "copy the installed mod into the backups folder",
              "restore": "put a backup back as the installed mod; the replaced install becomes a backup first",
              "install": "run the repository's own install command for one or more mods",
-             "build": "run the repository's own build command; it writes only inside the repository"}
+             "build": "run the repository's own build command; it writes only inside the repository",
+             "dedupe": "remove every backup that repeats the one before it (the same, or only rebuilt), keeping the oldest of each run",
+             "settings": "every setting the repository's mods ever added, removed or gave a new default, with when, newest first"}
     for name, helptext in helps.items():
         s = sub.add_parser(name, help=helptext)
         s.add_argument("--root", help="the repository (default: the current folder)")
         if name == "install":
             s.add_argument("--mod", action="append", required=True, help="a mod's folder name (repeatable)")
-        elif name != "build":
-            s.add_argument("--mod", required=name != "status",
-                           help="the mod's folder name" + (" (default: every mod)" if name == "status" else ""))
+        elif name not in ("build", "settings"):
+            s.add_argument("--mod", required=name not in ("status", "dedupe"),
+                           help="the mod's folder name" + (" (default: every mod)" if name in ("status", "dedupe") else ""))
         if name == "restore":
             s.add_argument("--backup", required=True, help="the backup's folder name, as status lists it")
+        if name == "dedupe":
+            s.add_argument("--identical-only", action="store_true",
+                           help="remove only backups that are the same file for file, not those only rebuilt")
         s.add_argument("--settings", help="a JSON settings file naming the game's folder (default: the one installs.json names)")
         s.add_argument("--top", type=int, default=12, help="entries shown per list in the summary (default 12)")
         s.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
         s.add_argument("--no-redact", action="store_true", help="show the home folder instead of ~")
     return p
+
+
+def _product_of_mod(where, mod):
+    """A mod folder's product name, from its changelog's title, as the history and changes tools name products."""
+    path = f"{where.config['mods']}/{mod}/{installs.CHANGELOG}"
+    try:
+        return changes.product_name(changes.read_listed(where.root, path).title, path, where.root)
+    except OSError:
+        return mod
 
 
 # ---------------------------------------------------------------- data for programs
@@ -79,7 +93,8 @@ def _delta(delta, *logs, commits=None):
 
 def _copy(copy, against=None):
     return {"kind": copy.kind, "name": copy.name, "version": copy.version, "record": copy.record, "backup": copy.backup or None,
-            "taken": copy.taken or None, "size": copy.size, "hasChangelog": copy.changelog is not None,
+            "taken": copy.taken or None, "size": copy.size, "sameAs": copy.same_as or None, "sameKind": copy.same_kind or None,
+            "hasChangelog": copy.changelog is not None,
             "direction": installs.direction(against.version, copy.version) if against is not None else None}
 
 
@@ -183,6 +198,8 @@ def status_report(where, states, running, top, progress=None):
             "canBuild": bool((where.config.get("build") or {}).get("command")),
             "needsBuild": any(d["build"]["needsBuild"] for d in datas),
             "space": {"backups": sum(b["size"] or 0 for d in datas for b in d["backups"]),
+                      "duplicates": sum(1 for d in datas for b in d["backups"] if b["sameAs"]),
+                      "duplicatesSize": sum(b["size"] or 0 for d in datas for b in d["backups"] if b["sameAs"]),
                       "backupsFree": installs.free_bytes(where.backups), "targetFree": installs.free_bytes(where.target),
                       "spare": installs.SPARE_BYTES},
             "mods": datas}
@@ -223,6 +240,27 @@ def main(argv=None, environ=None, out=None, now=None, running=None, run=None):
             name = installs.backup(where, args.mod, now)
             report, data = _done(f"Backed up {args.mod}", [f"The installed copy was copied to {where.backups / name}."],
                                  {"ok": True, "mod": args.mod, "backup": name})
+        elif args.report == "settings":
+            progress("Reading the history of the mods' settings")
+            found, why = checks.settings_history(where.root, where.config)
+            if found is None:
+                raise installs.InstallsError(why)
+            names = {m: _product_of_mod(where, m) for m in {c.get("mod") for c in found} if m}
+            found = [{**c, "product": names.get(c.get("mod")) or c.get("mod")} for c in reversed(found)]
+            report = Report(f"Settings: {len(found):,} changes in the history of {where.root.name}'s mods")
+            report.section("Newest", Table(["When", "Mod", "Setting", "What", "Default"],
+                                           [[(c["time"] or "")[:10], c["product"] or "", c.get("label") or c["key"], c["what"],
+                                             c.get("after") if c["what"] != "removed" else c.get("before")] for c in found[:args.top]],
+                                           total=len(found)))
+            data = {"repository": where.root.name, "settings": found}
+        elif args.report == "dedupe":
+            kinds = (installs.IDENTICAL,) if args.identical_only else (installs.IDENTICAL, installs.REBUILT)
+            removed = installs.dedupe(where, [args.mod] if args.mod else None, kinds, progress)
+            freed = sum(r["size"] for r in removed)
+            lines = [f"{len(removed):,} duplicate backups removed, {freed / MB:,.0f} MB freed. The oldest of each identical run was kept."
+                     if removed else "No backup repeats the one before it file for file, so nothing was removed."]
+            report, data = _done("Removed duplicate backups" if removed else "No duplicate backups", lines,
+                                 {"ok": True, "removed": removed, "freed": freed})
         elif args.report == "restore":
             progress(f"Putting {args.backup} back; the install it replaces becomes a backup")
             replaced = installs.restore(where, args.mod, args.backup, now, running)
@@ -263,4 +301,7 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS,
                         "restore": {"effect": WRITES,
                                     "note": "replaces an installed mod with a backup; the replaced install is kept as a backup"},
                         "install": {"effect": RUNS, "note": "runs the repository's own install command, which builds and copies"},
-                        "build": {"effect": RUNS, "note": "runs the repository's own build command, which writes only inside it"}}}
+                        "build": {"effect": RUNS, "note": "runs the repository's own build command, which writes only inside it"},
+                        "settings": {"note": "the history of the mods' settings; for a program to list"},
+                        "dedupe": {"effect": WRITES,
+                                   "note": "deletes backups that repeat the one before them file for file; the oldest of each run is kept"}}}

@@ -47,6 +47,8 @@ Every fact has `kind`, `time` (UTC), `source` (`git` or `log`) and `product`; fa
 | `installed`, `went-back`, `backed-up` | log | Written by `installs` (an install through deploy writes `installed` too); `mod`, `version`, `commit`, `backup` |
 | `built` | log | Written by `installs build`; `ok`, `exitCode` |
 | `encoded` | log | Written by `rimworld-textures encode`; `ok`, `count`, `mods` |
+| `setting-added`, `setting-removed`, `setting-default` | git | (1.40.0) From the repository's `settingsHistory` command (docs/installs.md), committed changes only; `mod`, `key`, `label`, `before`, `after`, on the mod's product lane |
+| `duplicates-removed` | log | Written by `installs dedupe`; `count`, `size`, `mods` |
 
 An entry is matched across commits as `installs` matches one across copies: by version and its first words, so a rewording keeps
 its identity and a moved entry is neither gained nor lost.

@@ -22,6 +22,8 @@ python -m phobos_modkit installs backup --root REPO --mod NAME
 python -m phobos_modkit installs restore --root REPO --mod NAME --backup NAME-20261118-200751
 python -m phobos_modkit installs install --root REPO --mod NAME [--mod OTHER ...]
 python -m phobos_modkit installs build --root REPO
+python -m phobos_modkit installs dedupe --root REPO [--mod NAME] [--identical-only]
+python -m phobos_modkit installs settings --root REPO
 ```
 
 Add `--json` for the envelope. A refusal is still an envelope, with `data.ok` false and `data.refusal` saying why, and exit 1.
@@ -45,6 +47,7 @@ Add `--json` for the envelope. A refusal is still an envelope, with `data.ok` fa
 | `installOnly` | Optional: file names only an install has (patterns), left out of the file comparison; the install record always is |
 | `build` | Optional: `projects` (a glob of C# projects), `modProperty` (the project property naming the mod it builds into), `shared` (root build files every project reads) and `command` (the repository's build command) |
 | `settingsChanges` | Optional: a command printing, as JSON, the settings added, removed or given a new default since `{commit}`: `mod`, `key`, `label`, `what`, `before`, `after` |
+| `settingsHistory` | Optional (1.40.0): a command printing, as JSON, every setting change in the repository's history, oldest first: `time`, `commit` (null for what is not committed yet), `subject`, and the fields above. `installs settings` gives it newest first, with each mod's product name; `history timeline` adds the committed ones as facts |
 
 ## How gains and losses are read
 
@@ -68,6 +71,22 @@ Add `--json` for the envelope. A refusal is still an envelope, with `data.ok` fa
 | `lookOut` | Test-list rows still waiting whose named version of the mod lies after the installed version and no later than the repository's (test-pass's `versionNames`) |
 
 `build` runs the repository's build command; it writes only inside the repository, so it does not wait for the game to close.
+
+## Repeated backups (1.40.0)
+
+`status` marks each backup that repeats the one before it in time with `sameAs` (the oldest backup of its run, which is kept) and
+`sameKind`:
+
+| Kind | When |
+| --- | --- |
+| `identical` | The same file for file, the install record left out |
+| `rebuilt` | The same version and every file but the assemblies the same, and none of the mod's own sources (its projects' inputs, from `build`) changed between the two commits their install records name: only a rebuild against newer code it uses tells them apart |
+
+Only a run counts: A, A, B, A keeps the last A, since it is the newest backup from after B. `data.space` adds `duplicates` and
+`duplicatesSize`. **`dedupe` deletes the repeats** (both kinds, or `--identical-only`), keeping the oldest of each run; each is
+compared with the kept one again just before it goes, and the history log records `duplicates-removed`. Digests are kept in the
+kit's cache (`installs/backup-digests.json`) by folder and size, so only new backups are read: the first `status` after this
+reads every backup (about a minute for phobos-rimworld's 99, 5.5 GB).
 
 ## The install record
 

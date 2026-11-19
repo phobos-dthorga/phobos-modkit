@@ -43,7 +43,8 @@ def _parser():
         if name == "pending":
             pass
         elif name == "list":
-            s.add_argument("--versions", type=int, default=5, help="versions of each changelog to list, newest first (default 5)")
+            s.add_argument("--versions", type=int, default=5,
+                           help="versions of each changelog to list, newest first (default 5; 0 for every version)")
         else:
             s.add_argument("--changelog", required=True, help="the changelog's path in the repository, as list gives it")
             s.add_argument("--text", help="the entry's text, or its bold opening")
@@ -68,7 +69,8 @@ def list_report(root, versions, top, progress):
         log = changes.read_listed(root, path)
         commits = changes.entry_commits(root, path)
         order = [v for v in log.headings if v == UNRELEASED and any(e.version == v for e in log.entries)]
-        order += [v for v in log.headings if v != UNRELEASED][:max(1, versions)]
+        named = [v for v in log.headings if v != UNRELEASED]
+        order += named if versions == 0 else named[:max(1, versions)]
         logs.append({"changelog": path, "product": changes.product_name(log.title, path, root),
                      "versionsInAll": sum(v != UNRELEASED for v in log.headings),
                      "versions": [{"version": v, "heading": log.headings.get(v, ""), "summary": log.summaries.get(v, ""),

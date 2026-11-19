@@ -56,6 +56,9 @@ def _parser():
             s.add_argument("--node", required=True, help="a thing's id, as find gives it (cs:..., def:..., lua:..., py:...)")
         if name == "flow":
             s.add_argument("--depth", type=int, default=2, choices=(1, 2, 3), help="steps each way (default 2)")
+        if name == "history":
+            s.add_argument("--limit", type=int, default=lineage.MAX_COMMITS,
+                           help=f"commits to give, newest first (default {lineage.MAX_COMMITS}, at most {lineage.LIMIT_CEILING})")
         if name == "changed":
             s.add_argument("--commit", required=True, help="the commit")
         s.add_argument("--rebuild", action="store_true", help="read every file again, whatever the cache holds")
@@ -169,7 +172,7 @@ def history_report(conn, root, args):
         raise connections.ConnectionsError(f"{args.node!r} is not in this repository's connections.")
     if found["external"] or not found["file"] or not found["line"]:
         raise connections.ConnectionsError(f"{found['name']} is not in this repository's files, so it has no history here.")
-    data = lineage.history(root, found)
+    data = lineage.history(root, found, max(1, min(getattr(args, "limit", lineage.MAX_COMMITS), lineage.LIMIT_CEILING)))
     report = Report(f"Connections: {found['name']} changed in {len(data['commits']):,} commit{'' if len(data['commits']) == 1 else 's'}"
                     + (" (the newest shown)" if data["more"] else ""))
     report.lines.append(f"Lines {data['lines'][0]} to {data['lines'][1]} of {data['file']}, followed back as they moved.")

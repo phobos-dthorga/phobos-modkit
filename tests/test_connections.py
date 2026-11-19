@@ -218,6 +218,8 @@ class ByNameTests(unittest.TestCase):
             self.assertEqual([c["subject"] for c in found["commits"]], ["Lamps 0.2.0: brighter", "Lamps 0.1.0"])
             self.assertEqual(found["commits"][0]["entries"], [
                 {"changelog": "CHANGELOG.md", "product": "Lamps", "text": "**Brighter.** Lamps shine brighter."}])
+            code, found = run(["history", "--root", str(root), "--node", "lua:Lamps.shine", "--limit", "1"], tmp)
+            self.assertEqual(([c["subject"] for c in found["commits"]], found["more"]), (["Lamps 0.2.0: brighter"], True))
             code, found = run(["history", "--root", str(root), "--node", "cs:Sample.Lamps.CompGlow"], tmp)
             self.assertEqual((code, found["ok"]), (1, False))
 

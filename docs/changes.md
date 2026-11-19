@@ -19,6 +19,7 @@
 ```text
 python -m phobos_modkit changes list --root REPO
 python -m phobos_modkit changes list --root REPO --versions 10
+python -m phobos_modkit changes list --root REPO --versions 0      every version (1.40.0), for a program that pages
 python -m phobos_modkit changes entry --root REPO --changelog mods/Thing/CHANGELOG.md --text "Boats float."
 python -m phobos_modkit changes entry --root REPO --changelog mods/Thing/CHANGELOG.md --commit 401c6a93
 ```

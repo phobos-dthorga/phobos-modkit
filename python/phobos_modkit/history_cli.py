@@ -30,7 +30,9 @@ KIND_WORDS = {
     "product-started": "changelog started", "version-written": "version written", "entries-added": "entries added",
     "entries-reworded": "entries reworded", "entries-removed": "entries removed", "version-removed": "version removed",
     "version-released": "version released", "product-renamed": "renamed", "product-ended": "ended",
-    "installed": "installed", "went-back": "went back", "backed-up": "backed up", "built": "built", "encoded": "textures encoded"}
+    "installed": "installed", "went-back": "went back", "backed-up": "backed up", "built": "built", "encoded": "textures encoded",
+    "setting-added": "setting added", "setting-removed": "setting removed", "setting-default": "setting's default changed",
+    "duplicates-removed": "repeated backups removed"}
 
 
 def _parser():
@@ -68,6 +70,7 @@ def timeline_report(roots, game, since, top, environ, settings, progress):
     for position, root in enumerate(roots, 1):
         progress(f"Reading the history of {Path(root).name}", position, len(roots) + 1)
         facts += history.repository_facts(root, environ, settings, progress)
+        facts += history.settings_facts(root, progress)
     if game:
         progress("Reading what happened on this PC", len(roots) + 1, len(roots) + 1)
         names = {Path(r).name for r in roots}
