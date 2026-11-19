@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.41.0] - 2026-11-19
+
+The owner said yes (19 November 2026) to a "something's off" key in D'thorga Companion whose notes agent sessions read at the start.
+
+### Added
+
+- screen-notes list: what the owner flagged in the Companion, newest first, each with its page, address, words, the Companion's version and the path of its picture; --all adds the dealt-with ones.
+- screen-notes resolve ID --how WORDS marks a note dealt with, writing resolved.json beside it; reopen undoes that. Nothing is ever deleted.
 ## [1.40.0] - 2026-11-19
 
 The owner asked (19 November 2026) for repeated backups to be removable, for new settings to be followed alongside the timeline, and for paging further back in D'thorga Companion.
