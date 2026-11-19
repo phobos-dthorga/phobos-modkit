@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.39.0] - 2026-11-19
+
+The owner asked (19 November 2026) to show "how the contents of our mods, code, etc. is consisted of in a graphical manner", for D'thorga Companion.
+
+### Added
+
+- makeup now: every committed file by product (a changelog's folder; a C# project by its ModFolder), kind (code, tests, data, words, pictures, sounds, build, other), language, lines and size. 0.3 s for phobos-rimworld.
+- makeup growth: the same totalled by kind and by product, one point a day since the first commit; each file version's lines are kept in the kit's cache, so a run reads only new versions (about 2 s for phobos-rimworld's whole history).
+- makeup churn: the files commits changed lately, how often, lines added and removed, and when last.
+- makeup census: each product's Defs by type, pictures, sounds and text keys.
 ## [1.38.0] - 2026-11-19
 
 For D'thorga Companion's cross-links (19 November 2026, docs/cross-links.md there, S2): pins as installs.
