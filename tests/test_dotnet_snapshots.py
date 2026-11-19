@@ -48,6 +48,9 @@ HEAPSTAT = """     21,696,794  GC Heap bytes
              24        61  System.Byte[]  [System.Private.CoreLib.dll]
              40       100  Verse.Thing  [Assembly-CSharp.dll]
 """
+COUNTERS = ('{ "TargetProcess": "RimWorld", "StartTime": "2026-11-18T21:00:00", "Events": [{ "timestamp": '
+            '"2026-11-18T21:00:01.1234567+11:00", "provider": "System.Runtime", "name": "dotnet.gc.last_collection.heap.size (By)", '
+            '"tags": "gc.heap.generation=gen2", "counterType": "Metric", "meterTags": "", "instrumentTags": "", "value": 50000000 }] }')
 OWNERS = {"ExampleMedical": Owner(MOD, "Example Medical"), "Assembly-CSharp": Owner(GAME, "RimWorld"),
           "System.Private.CoreLib": Owner(RUNTIME, ".NET")}
 
@@ -144,6 +147,9 @@ class FakeTools:
             return subprocess.CompletedProcess(command, 0, '"RimWorld.exe","4242","Console","1","1 K"\n', "")
         if "report" in command and "-p" in command:
             return subprocess.CompletedProcess(command, 0, self.stacks.pop(0), "")
+        if "collect" in command and "--format" in command:      # dotnet-counters: the runtime counts a 50 MB heap
+            Path(command[command.index("-o") + 1]).write_text(COUNTERS, encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, "", "")
         if "collect" in command:
             Path(command[command.index("-o") + 1]).write_bytes(b"gcdump")
             return subprocess.CompletedProcess(command, 0, "Warning: the target runtime does not support non-lossy (Block) buffering\n", "")
@@ -157,7 +163,7 @@ class CommandTests(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         tools = self.tmp / "tools"
         tools.mkdir()
-        for name in (dd.STACK, dd.GCDUMP):
+        for name in (dd.STACK, dd.GCDUMP, dd.COUNTERS):
             (tools / dd.native.program_name(name)).write_bytes(b"")
         self.environ = {"PHOBOS_MODKIT_CACHE": str(self.tmp / "cache"), dd.TOOLS_ENV: str(tools)}
         self.common = ["--game", str(self.tmp / "game"), "--config", str(self.tmp / "config")]
@@ -203,6 +209,8 @@ class CommandTests(unittest.TestCase):
             code, text = self.run_cli("heap", "--label", "day 40", *self.common, run=FakeTools([]))
             self.assertEqual(perf_cli.EXIT_OK, code, text)
             self.assertIn("**21.7 MB in 44,028 objects**", text)
+            self.assertIn("**This snapshot holds only part of the heap: 21.7 MB of the 50.0 MB the runtime itself counted (43%).**", text)
+            self.assertIn("Taking it took 0 s", text)
             self.assertIn("can drop events on a large heap", text)
             self.assertIn("| Example Medical | mod |", text)
             self.assertIn("System.Collections.Generic.List<Example.Dosing.Dose> | Example Medical (through Example.Dosing.Dose)", text)

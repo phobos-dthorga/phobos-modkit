@@ -26,6 +26,10 @@ from . import perf
 
 STACKS_FOLDER, HEAPS_FOLDER = "rimworld-stacks", "rimworld-heaps"
 META, HEAP_DATA, HEAP_TEXT, HEAP_FILE = "meta.json", "heap.json", "heapstat.txt", "heap.gcdump"
+COUNTERS_FILE = "counters.json"
+WHOLE_SHARE = 0.9                   # a snapshot listing less than 90 % of the runtime's own count holds only part of the heap
+# dotnet-gcdump listed exactly 10,000,003 objects of a heap of several GB (19 November 2026): it stops near 10 million.
+CEILING_LOW, CEILING_HIGH = 10_000_000, 10_000_100
 SNAPSHOT = "snapshot-{n}.txt"
 DEFAULT_TIMES, DEFAULT_EVERY, DEFAULT_FRAMES = 3, 2.0, 40
 MAX_TIMES = 10
@@ -215,16 +219,61 @@ def stack_report(folder, meta, snapshots, owner_map, notes, frames_shown=DEFAULT
 
 # ---- Heaps ----
 
-def take_heap(pid, folder, tool, run, now=None, label=""):
-    """Write the heap's file and its table into folder; return (Heap, the tool's warnings)."""
+def runtime_figures(events):
+    """{"heap": bytes, "committed": bytes} from counter events: the latest value of each, the heap summed over its generations."""
+    latest = {}
+    for _, name, tags, value in events:
+        latest[(name, tags)] = value
+    found = {}
+    heap = [v for (name, _), v in latest.items() if name == dd.HEAP_SIZE]
+    if heap:
+        found["heap"] = int(sum(heap))
+    committed = [v for (name, _), v in latest.items() if name == dd.HEAP_COMMITTED]
+    if committed:
+        found["committed"] = int(committed[-1])
+    return found
+
+
+def take_heap(pid, folder, tool, run, now=None, label="", counters_tool=None, clock=time.monotonic):
+    """Write the heap's file and its table into folder; return (Heap, the tool's warnings).
+
+    With counters_tool, the runtime's own count of its heap is read straight after: its last collection is the one the snapshot
+    forced, so the two can be set side by side.
+    """
+    began = clock()
     warnings = dd.collect_gcdump(pid, Path(folder) / HEAP_FILE, tool, run)
+    seconds = clock() - began
+    runtime, failed = {}, ""
+    if counters_tool:
+        try:
+            runtime = runtime_figures(dd.counters_once(pid, Path(folder) / COUNTERS_FILE, counters_tool, run))
+        except dd.DiagnosticsError as error:
+            failed = str(error).splitlines()[0]
     text = dd.gcdump_text(Path(folder) / HEAP_FILE, tool, run)
     (Path(folder) / HEAP_TEXT).write_text(text, encoding="utf-8")
     heap = parse_heapstat(text)
     (Path(folder) / HEAP_DATA).write_text(heap.to_json(), encoding="utf-8")
     _write_meta(folder, {"kit_version": __version__, "taken_at": (now or datetime.now()).strftime("%Y-%m-%d %H:%M:%S"),
-                         "label": label or "", "pid": pid, "warnings": warnings, "tools_version": dd.TOOLS_VERSION})
+                         "label": label or "", "pid": pid, "warnings": warnings, "tools_version": dd.TOOLS_VERSION,
+                         "seconds": round(seconds, 1), "runtime": runtime, "runtime_failed": failed})
     return heap, warnings
+
+
+def partial_note(meta, heap):
+    """A bold line when the snapshot holds only part of the heap, else a plain line saying it is whole; "" when unknown."""
+    whole = (meta.get("runtime") or {}).get("heap")
+    if whole:
+        share = heap.total_bytes / whole
+        if share < WHOLE_SHARE:
+            return (f"**This snapshot holds only part of the heap: {size(heap.total_bytes)} of the {size(whole)} the runtime itself "
+                    f"counted ({100 * share:.0f}%).** dotnet-gcdump listed {heap.total_objects:,} objects. Shares below are of "
+                    "what it listed, not of the whole heap.")
+        return f"The runtime counted {size(whole)} on its heap, so this snapshot holds all of it."
+    if CEILING_LOW <= heap.total_objects < CEILING_HIGH:
+        return (f"**dotnet-gcdump listed {heap.total_objects:,} objects, a round number it seems to stop at, so this snapshot "
+                "most likely holds only part of the heap.** Shares below are of what it listed. Snapshots taken with kit 1.42.0 "
+                "or later also read the runtime's own count to say how much is missing.")
+    return ""
 
 
 def read_heap(folder):
@@ -249,20 +298,29 @@ def heap_report(folder, meta, heap, owner_map, notes, top=15):
     report = Report(f"rimworld-perf: heap {Path(folder).name}")
     report.lines.append(f"**{size(heap.total_bytes)} in {heap.total_objects:,} objects** on the managed heap{label}, at "
                         f"{meta.get('taken_at', '?')}.")
+    partial = partial_note(meta, heap)
+    if partial:
+        report.lines.append(partial)
     report.lines.append(HEAP_CAVEAT)
+    if meta.get("seconds") is not None:
+        report.lines.append(f"Taking it took {float(meta['seconds']):,.0f} s; the game was paused for most of that.")
+    if meta.get("runtime_failed"):
+        report.lines.append(f"The runtime's own count could not be read: {meta['runtime_failed']}")
     for warning in meta.get("warnings") or []:
         report.lines.append(LOSSY_NOTE if "lossy" in warning.lower() else f"dotnet-gcdump warned: {warning}")
     for note in notes:
         report.lines.append(note)
+    # Shares are of what the tool listed: its rows' sizes are averages times counts, which need not add up to its own total.
+    listed = sum(t.bytes for t in heap.types)
     totals = _by_owner(heap, owners)
-    rows = [(o.name, o.kind, size(b), pct(b, heap.total_bytes), f"{n:,}", size(c) if c else "")
+    rows = [(o.name, o.kind, size(b), pct(b, listed), f"{n:,}", size(c) if c else "")
             for o, (b, n, c) in sorted(totals.items(), key=lambda kv: (-kv[1][0], kv[0].name))[:top]]
     report.section("Who the heap belongs to", Table(["Owner", "Kind", "Bytes", "Share", "Objects", "Of it in .NET collections of its types"],
                                                     rows, len(totals)))
     rows = []
     for t in heap.types[:top]:
         owner, through = owners[(t.type, t.module)]
-        rows.append((t.type, owner.name + (f" (through {through})" if through else ""), size(t.bytes), pct(t.bytes, heap.total_bytes), f"{t.count:,}"))
+        rows.append((t.type, owner.name + (f" (through {through})" if through else ""), size(t.bytes), pct(t.bytes, listed), f"{t.count:,}"))
     report.section("The largest types", Table(["Type", "Owner", "Bytes", "Share", "Objects"], rows, len(heap.types)))
     mods = sorted((o for o in totals if o.kind == MOD), key=lambda o: -totals[o][0])
     if mods:
@@ -276,7 +334,7 @@ def heap_report(folder, meta, heap, owner_map, notes, top=15):
     return report
 
 
-def heap_compare(names, before, after, owner_map, top=15):
+def heap_compare(names, before, after, owner_map, top=15, metas=({}, {})):
     owner_of = lambda module: owner_map.get(module) or Owner(UNKNOWN, module or "?")  # noqa: E731
     owners_a, owners_b = heap_owners(before, owner_of), heap_owners(after, owner_of)
     report = Report(f"rimworld-perf: heap {names[0]} against {names[1]}")
@@ -284,6 +342,9 @@ def heap_compare(names, before, after, owner_map, top=15):
     report.lines.append(f"**{size(before.total_bytes)}, then {size(after.total_bytes)} ({signed_size(change)})**; objects "
                         f"{before.total_objects:,}, then {after.total_objects:,}.")
     report.lines.append(LEAK_NOTE)
+    if any(partial_note(meta, heap).startswith("**") for meta, heap in ((metas[0], before), (metas[1], after))):
+        report.lines.append("**At least one of these snapshots holds only part of the heap**, so a change here can be no more than "
+                            "a change in which part the tool listed. `rimworld-perf watch` follows the whole heap over time.")
     a, b = _by_owner(before, owners_a), _by_owner(after, owners_b)
     keys = sorted(set(a) | set(b), key=lambda o: (-abs(b.get(o, [0])[0] - a.get(o, [0])[0]), o.name))
     rows = [(o.name, o.kind, size(a.get(o, [0])[0]), size(b.get(o, [0])[0]), signed_size(b.get(o, [0])[0] - a.get(o, [0])[0]))

@@ -4,6 +4,20 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.42.0] - 2026-11-19
+
+The owner asked (19 November 2026) to take memory profiles of the running game and see where it goes, after RimWorld's use climbed from about 12.5 GB to 17.5 GB and more.
+
+### Added
+
+- rimworld-perf watch: the game's memory over minutes or hours without pausing it. Every few seconds, what it claimed and what is in RAM (Windows' own figures), and .NET's heap and collector (dotnet-counters, attached once; --no-counters leaves them out); every minute, the memory map by kind, block and block size, and code and mapped files by name. Ctrl+C, the game closing or the time running out ends it, keeping everything.
+- Its report says whether memory held steady, climbed in jumps or climbed steadily; the start, end, lowest, average and highest of each figure; .NET's share and the rest; the largest jumps with the saves loaded and errors logged around each; the figures over time as a chart; and which blocks grew, naming the one that is .NET's heap. watch-report shows a kept watch again; list shows them.
+- process_memory: a program's memory figures and memory map, read from outside on Windows (figures on Linux too); nothing in the program is read or paused.
+
+### Fixed
+
+- rimworld-perf heap no longer presents a partial snapshot as the whole heap. dotnet-gcdump stopped at 10,000,003 objects and 667 MB on a heap the runtime had counted at 6 GB and more; heap now reads the runtime's own count straight after, and says in bold when the snapshot holds less than 90% of it. Older snapshots near ten million objects are flagged too.
+- The heap report's shares are of what the tool listed, so they no longer add up to more than 100%. It also says how long taking the snapshot took, which is about how long the game was paused.
 ## [1.41.0] - 2026-11-19
 
 The owner said yes (19 November 2026) to a "something's off" key in D'thorga Companion whose notes agent sessions read at the start.

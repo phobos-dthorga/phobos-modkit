@@ -12,10 +12,12 @@
     rimworld-perf heap --label "day 40"      what holds the game's memory, by type and by mod
     rimworld-perf heap-report                the newest heap again
     rimworld-perf heap-compare               the last two heaps: who grew
+    rimworld-perf watch --minutes 120 --label "reloads"   the game's memory over time: average or bursts, .NET's or not
+    rimworld-perf watch-report               the newest watch again (or name one)
 
 Recording attaches Microsoft's dotnet-trace and dotnet-counters to the game through its .NET diagnostics pipe; stack uses
-dotnet-stack and heap dotnet-gcdump the same way. Nothing is installed in the game and nothing of it is changed, but heap forces a
-full garbage collection, which pauses the game until it is done. The first use of each tool installs it (a pinned version) into the
+dotnet-stack and heap dotnet-gcdump the same way, and watch dotnet-counters with Windows' own figures. Nothing is installed in the
+game and nothing of it is changed, but heap forces a full garbage collection, which pauses the game until it is done. The first use of each tool installs it (a pinned version) into the
 kit's build folder, which needs the .NET SDK. Everything is kept in the kit's cache, outside every repository.
 """
 from __future__ import annotations
@@ -36,14 +38,18 @@ from ... import __version__
 from ... import cache as derived
 from ... import dotnet_diagnostics as dd
 from ...dotnet_snapshots import SnapshotError
+from ... import process_memory as pm
 from ...manifest import READS, RUNS
+from ...progress import Progress
 from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
 from ...sampling import CPU, MOD, UNKNOWN, Recording, SamplingError, index_speedscope, modules, read_counters, write_counters, write_owners
 from . import perf
 from . import perf_snapshots as snap
+from . import perf_watch as pw
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
-REPORTS = ("report", "record", "index", "mod", "compare", "list", "stack", "stack-report", "heap", "heap-report", "heap-compare")
+REPORTS = ("report", "record", "index", "mod", "compare", "list", "stack", "stack-report", "heap", "heap-report", "heap-compare",
+           "watch", "watch-report")
 CACHE_FOLDER = "rimworld-perf"
 INDEX_NAME = "index.sqlite"
 DEFAULT_SECONDS = 30
@@ -111,6 +117,17 @@ def _parser():
     hc = sub.add_parser("heap-compare", parents=[common], help="two heaps: who grew")
     hc.add_argument("first", nargs="?", help="the earlier heap; the second newest when both are left out")
     hc.add_argument("second", nargs="?", help="the later heap; the newest when both are left out")
+    wt = sub.add_parser("watch", parents=[common], help="the game's memory over time, without pausing it; Ctrl+C ends it early")
+    wt.add_argument("--minutes", type=float, default=pw.DEFAULT_MINUTES, help=f"how long to watch (default {pw.DEFAULT_MINUTES})")
+    wt.add_argument("--every", type=float, default=pw.DEFAULT_EVERY, help=f"seconds between samples (default {pw.DEFAULT_EVERY})")
+    wt.add_argument("--map-every", type=float, default=pw.DEFAULT_MAP_EVERY,
+                    help=f"seconds between memory maps, 0 for none (default {pw.DEFAULT_MAP_EVERY}; Windows only)")
+    wt.add_argument("--no-counters", action="store_true", help="leave .NET's counters out: nothing attaches to the game at all")
+    wt.add_argument("--label", help="a few words to find the watch by, such as what you plan to do")
+    wt.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
+    wt.add_argument("--logs", help="the folder holding Player.log (else RIMWORLD_LOGS_PATH, settings, default)")
+    wr = sub.add_parser("watch-report", parents=[common], help="a memory watch taken earlier")
+    wr.add_argument("watch", nargs="?", help="its ID (its start is enough) or label; the newest when left out")
     return p
 
 
@@ -444,12 +461,12 @@ def _snapshots(args, environ, settings_file, run, now, sleep):
         return snap.stack_report(folder, meta, snapshots, owners, notes + more, args.frames, args.top)
     if args.report == "heap":
         pid = _pid(args, run, "RimWorld is not running. Load the save you want to measure first.")
-        found, installed = dd.ensure([dd.GCDUMP], environ, run)
+        found, installed = dd.ensure([dd.GCDUMP, dd.COUNTERS], environ, run)
         if installed:
-            notes.append(f"Installed dotnet-gcdump {dd.TOOLS_VERSION} into {dd.tools_folder(environ)} first.")
+            notes.append(f"Installed Microsoft's diagnostics tools {dd.TOOLS_VERSION} into {dd.tools_folder(environ)} first.")
         folder = snap.new_folder(heaps_root, args.label, now)
         try:
-            snap.take_heap(pid, folder, found[dd.GCDUMP], run, now, args.label)
+            snap.take_heap(pid, folder, found[dd.GCDUMP], run, now, args.label, found[dd.COUNTERS])
         except Exception:
             shutil.rmtree(folder, ignore_errors=True)
             raise
@@ -465,12 +482,42 @@ def _snapshots(args, environ, settings_file, run, now, sleep):
         raise PerfError("Fewer than two heaps are kept, so there is nothing to compare.")
     first = snap.find(heaps_root, args.first, "heaps") if args.first else kept[-2]
     second = snap.find(heaps_root, args.second, "heaps") if args.second else kept[-1]
-    (_, before), (_, after) = snap.read_heap(first), snap.read_heap(second)
+    (meta_a, before), (meta_b, after) = snap.read_heap(first), snap.read_heap(second)
     owners, _ = _owners(sorted({t.module for t in before.types} | {t.module for t in after.types}), args, environ, settings_file)
-    return snap.heap_compare((first.name, second.name), before, after, owners, args.top)
+    return snap.heap_compare((first.name, second.name), before, after, owners, args.top, (meta_a, meta_b))
 
 
-def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.run, popen=subprocess.Popen, now=None, sleep=time.sleep):
+def _watch(args, environ, settings_file, run, popen, now, sleep, clock):
+    """The report for watch and watch-report."""
+    where = pw.root(args.cache, environ, settings_file)
+    notes = []
+    if args.report == "watch":
+        pid = _pid(args, run, "RimWorld is not running. Start it and load the save you want to watch first.")
+        counters_tool = None
+        if not args.no_counters:
+            found, installed = dd.ensure([dd.COUNTERS], environ, run)
+            counters_tool = found[dd.COUNTERS]
+            if installed:
+                notes.append(f"Installed dotnet-counters {dd.TOOLS_VERSION} into {dd.tools_folder(environ)} first.")
+        folder = pw.new_folder(where, args.label, now)
+        log_file = pw.default_log(args.logs, environ, settings_file)
+        print(f"Watching RimWorld ({pid}) for up to {args.minutes:g} minutes; press Ctrl+C to stop early. The report follows.",
+              file=sys.stderr)
+        notes += pw.watch(pid, folder, args.minutes, args.every, args.map_every, counters_tool, args.label,
+                          Progress(environ), clock, sleep, popen, pm.Process, log_file)
+    else:
+        folder = pw.find(where, args.watch)
+    watched = pw.Watch(folder)
+    owners, more = _owners(pw.file_stems(watched), args, environ, settings_file)
+    report = pw.watch_report(watched, owners, args.top)
+    for note in notes + more:
+        if note not in report.lines:
+            report.lines.insert(1, note)
+    return report
+
+
+def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.run, popen=subprocess.Popen, now=None, sleep=time.sleep,
+         clock=time.time):
     out = out or sys.stdout
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or (argv[0] not in REPORTS and argv[0] not in ("-h", "--help")):
@@ -487,8 +534,13 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
         if args.report == "list":
             report = list_report(root)
             snap.list_sections(report, *snap.roots(args.cache, environ, settings_file))
+            watches = pw.summary_rows(pw.root(args.cache, environ, settings_file))
+            if watches:
+                report.section("Memory watches, newest first", Table(["Watch", "Started", "Samples", "Label"], watches))
         elif args.report in ("stack", "stack-report", "heap", "heap-report", "heap-compare"):
             report = _snapshots(args, environ, settings_file, run, now or datetime.now(), sleep)
+        elif args.report in ("watch", "watch-report"):
+            report = _watch(args, environ, settings_file, run, popen, now or datetime.now(), sleep, clock)
         elif args.report == "compare":
             if bool(args.first) != bool(args.second):
                 raise PerfError("Name two recordings, or none for the last two.")
@@ -513,7 +565,7 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
             for note in notes:
                 if note not in report.lines:
                     report.lines.insert(1, note)
-    except (PerfError, SamplingError, SnapshotError, snap.SnapshotsError, dd.DiagnosticsError) as error:
+    except (PerfError, SamplingError, SnapshotError, snap.SnapshotsError, dd.DiagnosticsError, pw.WatchError, pm.MemoryError_) as error:
         report, code = Report("rimworld-perf: error", [str(error)]), EXIT_FAILED
     print(envelope_text("rimworld-perf", report, redact) if args.json else render_markdown(report, redact), file=out)
     return code
@@ -524,7 +576,9 @@ CACHE_POLICIES = [{"folder": CACHE_FOLDER,
                   {"folder": snap.STACKS_FOLDER,
                    "aged": "stack snapshots of the game, {days} days old; they cannot be taken again"},
                   {"folder": snap.HEAPS_FOLDER,
-                   "aged": "a heap snapshot of the game, {days} days old; it cannot be taken again, so compare against it first if memory matters"}]
+                   "aged": "a heap snapshot of the game, {days} days old; it cannot be taken again, so compare against it first if memory matters"},
+                  {"folder": pw.WATCH_FOLDER,
+                   "aged": "a memory watch of the game, {days} days old; it cannot be taken again, so compare against it first if memory matters"}]
 
 MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
             "note": "Attaches Microsoft's dotnet-trace, dotnet-counters, dotnet-stack or dotnet-gcdump to the running game; it changes nothing in it.",
@@ -540,4 +594,7 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
              "note": "Forces a full garbage collection: the game pauses until it is done."},
     "heap-report": {"question": "What did a heap snapshot show?"},
     "heap-compare": {"question": "Is my game's memory growing, and whose?"},
+    "watch": {"effect": RUNS, "question": "Does my game's memory climb steadily or in bursts, and is it .NET's or the engine's?",
+              "note": "Reads Windows' memory figures without pausing the game; attaches dotnet-counters once unless --no-counters."},
+    "watch-report": {"question": "What did a memory watch show?"},
 }}

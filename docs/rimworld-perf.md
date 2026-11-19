@@ -26,7 +26,7 @@ python -m phobos_modkit rimworld-perf list                         every recordi
 python -m phobos_modkit rimworld-perf index FILE.speedscope.json --counters FILE.json   a trace recorded by hand
 ```
 
-## Snapshots: a frozen game, and memory (1.22.0)
+## Snapshots: a frozen game, and memory (1.22.0; the heap's completeness 1.42.0)
 
 ```text
 python -m phobos_modkit rimworld-perf stack --label "frozen"   3 snapshots of every thread's stack, 2 s apart (--times, --every)
@@ -46,12 +46,57 @@ python -m phobos_modkit rimworld-perf heap-compare             the last two heap
   module's owner, as frames do. A .NET collection whose generic arguments name a mod's type (`List<Example.Dose>`) counts for that
   mod, "through" that type. **Memory counts under the type that is it**: the arrays and strings a mod's objects hold count as
   .NET's. What holds what is in the `.gcdump` file kept beside the report, for PerfView or Visual Studio.
+- **On a large heap the snapshot holds only part of it.** On the owner's game (19 November 2026) dotnet-gcdump listed exactly
+  10,000,003 objects and 667 MB, while the runtime's own counters had put the heap at 6 to 11.5 GB in earlier recordings: it stops
+  near ten million objects (Microsoft documents no such limit; seen, not explained). **Since 1.42.0, heap reads the runtime's own
+  count straight after the snapshot** (dotnet-counters, a few seconds), and the report says in bold when the snapshot holds less
+  than 90% of it, with shares of what it listed, never of the whole heap. Older snapshots with a count near ten million are
+  flagged the same way. The report also says how long taking it took (about 20 to 30 s on the owner's game, by the owner's
+  watch). For the whole heap over time, use **watch**.
 - **On .NET 10 runtimes dotnet-gcdump warns that it can drop events on a large heap** ("non-lossy buffering requires .NET 11+"),
   so counts can come out low. The report repeats the warning; trust a difference between heaps that repeats.
 - **A leak is a heap that keeps growing** across several snapshots of the same game minutes apart with the same thing on screen.
   Two can mislead; take a third.
 - Snapshots are kept in the kit's cache, `rimworld-stacks/` and `rimworld-heaps/`, and listed by `list`; cleanup lists them once a
   fortnight old.
+
+## Memory over time: watch (1.42.0)
+
+**The question it answers: does the game's memory climb steadily or in bursts, and is it .NET's or the engine's?** A heap
+snapshot shows one instant and pauses the game; a watch follows the whole program for as long as asked, without pausing it.
+
+```text
+python -m phobos_modkit rimworld-perf watch --minutes 120 --label "reloads"   up to two hours; Ctrl+C ends it early
+python -m phobos_modkit rimworld-perf watch --no-counters                      Windows' figures only: nothing attaches
+python -m phobos_modkit rimworld-perf watch-report                             the newest again (or name one)
+```
+
+- **Run it in a console of its own and leave it**: it ends when the minutes run out, when the game closes, or on Ctrl+C, and
+  prints its report then. Everything up to that moment is kept, whichever way it ends.
+- **Cost**: reading Windows' figures and the memory map does not pause or touch the game (a map of the owner's game, about
+  21,000 regions, took 0.3 s of the watcher's own time). The runtime's counters attach once at the start, as `record` does, which
+  can hitch the game for a moment; `--no-counters` leaves them out.
+- **Every `--every` seconds (default 5)**: what the game has claimed (private bytes, Windows' commit charge) and what of it is in
+  RAM, from Windows' `GetProcessMemoryInfo`; the machine's free RAM. On Linux, `/proc/<pid>/status` stands in (anonymous resident
+  memory plus swap for private bytes; not yet checked against a running game there).
+- **From the runtime, at the same pace** (dotnet-counters): the .NET heap after its last collection, what the collector holds
+  from Windows, and the gaps inside the heap. **Claimed less the collector's is "outside .NET"**: the engine (textures, meshes,
+  sound), graphics drivers, native code and .NET's own bookkeeping together.
+- **Every `--map-every` seconds (default 60; Windows only)**: the memory map from `VirtualQueryEx`, as Microsoft's VMMap shows
+  it: committed memory by kind (private, loaded code files, mapped files), private memory by block and by block size, and code
+  and mapped files by file name (never their folder). The block whose size matches the collector's figure within 10% is named as
+  .NET's heap; other blocks have addresses only, since Windows cannot say who asked for them.
+- **The report**: a bold verdict (held steady; climbed mostly in jumps; or mostly a steady climb, with where it ended against
+  where it began); start, end, lowest, average and highest of each figure; the largest jumps (rises of 250 MB or more within a
+  minute) with what Player.log says from a minute before to a minute after (saves loaded, errors counted, the engine holding
+  allocations); the figures over time as a line chart; and the first and last memory maps side by side.
+- **First reading of the owner's game** (19 November 2026, `--no-counters`, 2 minutes, not a test): 26 GB claimed; one 135 GB
+  reservation with 12.9 GB committed (most likely .NET's heap, unconfirmed without the counters), and about 12 GB in some 2,400
+  native blocks of 1 to 64 MB. Reloading a save dropped the claim 1.6 GB, then raised it 3.4 GB within a minute, mostly in 390
+  new blocks of 1 to 16 MB.
+
+Watches are kept in the kit's cache, `rimworld-memory/<start>-<label>/watch.sqlite` (with dotnet-counters' own file beside it),
+and listed by `list`; cleanup lists them once a fortnight old.
 
 ## What a recording is
 

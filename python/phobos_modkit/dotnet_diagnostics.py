@@ -167,6 +167,72 @@ def duration_text(seconds):
     return f"{seconds // 86400:02d}:{seconds // 3600 % 24:02d}:{seconds // 60 % 60:02d}:{seconds % 60:02d}"
 
 
+HEAP_SIZE = "dotnet.gc.last_collection.heap.size"                  # bytes on the heap after the last collection, by generation
+HEAP_COMMITTED = "dotnet.gc.last_collection.memory.committed_size"  # bytes the collector holds from the system
+HEAP_FRAGMENTATION = "dotnet.gc.last_collection.heap.fragmentation.size"  # free gaps inside the heap, by generation
+COUNTERS_SECONDS = 4                # a short reading: dotnet-counters' first report comes after its first interval
+
+
+def start_counters(pid, file, tool, seconds, interval, log, popen=subprocess.Popen):
+    """Start dotnet-counters writing the runtime's counters to file every `interval` seconds for `seconds`; returns the process.
+
+    It stops by itself after `seconds`, when the program closes, or on Ctrl+C in the same console, and closes its file each way.
+    """
+    return popen([str(tool), "collect", "-p", str(pid), "--format", "json", "-o", str(file), "--refresh-interval", str(interval),
+                  "--duration", duration_text(seconds)], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+
+
+def counters_once(pid, file, tool, run=subprocess.run, seconds=COUNTERS_SECONDS):
+    """Read the runtime's counters for a few seconds into file; returns counter_events of it ([] when it wrote nothing)."""
+    file = Path(file)
+    file.parent.mkdir(parents=True, exist_ok=True)
+    _completed([tool, "collect", "-p", pid, "--format", "json", "-o", file, "--refresh-interval", "1",
+                "--duration", duration_text(seconds)], run, seconds + STACK_SECONDS, "dotnet-counters")
+    return counter_events(file)
+
+
+def _epoch(stamp):
+    """Seconds since 1970 from dotnet-counters' timestamp, e.g. 2026-11-18T08:14:51.6919974+11:00 (seven decimals)."""
+    from datetime import datetime
+    head, dot, rest = stamp.partition(".")
+    if dot:
+        digits = len(rest) - len(rest.lstrip("0123456789"))
+        stamp = head + "." + rest[:min(digits, 6)].ljust(6, "0") + rest[digits:]
+    return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+
+
+def counter_events(path):
+    """[(seconds since 1970, name without its unit, tags, value)] from dotnet-counters' JSON file, in file order.
+
+    The file is read even when it was cut off mid-write (the tool stopped hard or the program closed): every whole event before
+    the cut counts. A missing or empty file gives [].
+    """
+    import json
+    path = Path(path)
+    if not path.is_file():
+        return []
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
+    start = text.find("[", text.find('"Events"'))
+    if start < 0:
+        return []
+    decoder, at, found = json.JSONDecoder(), start + 1, []
+    while True:
+        while at < len(text) and text[at] in " \t\r\n,":
+            at += 1
+        if at >= len(text) or text[at] != "{":
+            break
+        try:
+            event, at = decoder.raw_decode(text, at)
+        except ValueError:
+            break
+        try:
+            found.append((_epoch(event["timestamp"]), str(event["name"]).split(" (", 1)[0], event.get("tags") or "",
+                          float(event["value"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return found
+
+
 def record(pid, seconds, folder, trace_tool, counters_tool, popen=subprocess.Popen):
     """Record a program for `seconds`: a sampled trace (converted to speedscope) and its counters, side by side.
 
