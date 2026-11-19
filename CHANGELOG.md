@@ -4,6 +4,23 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.55.0] - 2026-11-20
+
+For D'thorga Companion's automatic records backup (the owner, 20 November 2026: "every few hours when it's open, and if the
+schedule is missed, the soonest next opportunity should then arise"). The owner had found backups not working: no folder had
+ever been saved, and nothing ran by itself.
+
+### Added
+
+- records status --every-hours N adds due (a folder is chosen, and there is no copy yet or the newest is N hours old or more)
+  and everyHours; every status adds ageHours. records backup --automatic marks the copy as made by the Companion's own timer, in
+  its backup.json and in each copy status lists.
+
+### Fixed
+
+- A backup folder that cannot be reached or written to (a drive not there, a NAS asleep) is refused in words, copying nothing and
+  leaving no partial folder, instead of stopping with Python's own error.
+
 ## [1.54.0] - 2026-11-20
 
 The owner asked (20 November 2026) why D'thorga Vehicles held 2.0 GB of textures in Graphics Settings' memory profiler, more than

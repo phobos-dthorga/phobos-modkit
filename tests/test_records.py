@@ -75,6 +75,28 @@ class RecordsTests(unittest.TestCase):
         self.assertFalse(found["stale"])
         self.assertEqual(len(found["copies"]), 2)
 
+    def test_a_copy_is_due_when_none_is_made_or_the_newest_is_old_enough(self):
+        # The owner's choice (20 Nov 2026): every few hours while the Companion is open, a missed one made at the next chance.
+        self.assertFalse(records.status(None, self.environ, NOW, every_hours=6)["due"])          # no folder: nothing to do
+        self.assertTrue(records.status(str(self.target), self.environ, NOW, every_hours=6)["due"])
+        records.backup(str(self.target), self.environ, NOW - timedelta(hours=5), automatic=True)
+        found = records.status(str(self.target), self.environ, NOW, every_hours=6)
+        self.assertEqual((found["ageHours"], found["due"]), (5.0, False))
+        self.assertTrue(found["newest"]["automatic"])
+        self.assertTrue(records.status(str(self.target), self.environ, NOW + timedelta(hours=1), every_hours=6)["due"])
+        self.assertNotIn("due", records.status(str(self.target), self.environ, NOW))
+
+    def test_a_folder_that_cannot_be_reached_is_refused_in_words(self):
+        blocker = Path(self.temp.name) / "a-file"
+        blocker.write_text("not a folder", encoding="utf-8")
+        with self.assertRaises(records.RecordsError) as refused:
+            records.backup(str(blocker / "copies"), self.environ, NOW)
+        self.assertIn("cannot be reached", str(refused.exception))
+        out = io.StringIO()
+        self.assertEqual(records.main(["backup", "--to", str(blocker / "copies"), "--json"], out, self.environ),
+                         records.EXIT_REFUSED)
+        self.assertFalse(json.loads(out.getvalue())["data"]["ok"])
+
     def test_a_folder_inside_the_records_is_refused(self):
         with self.assertRaises(records.RecordsError):
             records.backup(str(self.data / "backups"), self.environ, NOW)

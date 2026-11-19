@@ -1,7 +1,7 @@
 """records: a copy of D'thorga Companion's own records in a folder of the owner's choosing, and how old the newest copy is (1.43.0).
 
-    records status                 what would be copied, where to, and the copies already there
-    records backup [--to FOLDER]   copies the records into a new dated folder there
+    records status [--every-hours N]              what would be copied, where to, the copies made, and whether one is due
+    records backup [--to FOLDER] [--automatic]   copies the records into a new dated folder there
 
 The records are what the owner's own clicks and the tools' history wrote, and nothing else can rebuild: test verdicts and their
 word on notes, the history log, the "looked at" marks, screen notes, keyboard shortcuts and the central settings file. They live in
@@ -12,6 +12,11 @@ elsewhere by a setting (historyPath, the verdict files, PHOBOS_SETTINGS) is copi
 The folder is the setting recordsBackupPath (PHOBOS_RECORDS_BACKUP), set on the Companion's Settings page. Each copy is a folder
 named for the owner's local time, written beside its place and then renamed, with a backup.json saying what it holds. **Nothing is
 ever deleted**: the owner prunes old copies by hand.
+
+**The Companion copies by itself** (1.55.0; owner, 20 Nov 2026: "every few hours when it's open, and if the schedule is missed, the
+soonest next opportunity"): it asks `status --every-hours N` whether a copy is due (none yet, or the newest is N hours old or more)
+and runs `backup --automatic`, whose backup.json says so. A folder that cannot be reached (a drive not there, a NAS asleep) is
+refused in words, so the next attempt simply tries again.
 """
 from __future__ import annotations
 
@@ -108,7 +113,7 @@ def copies(folder):
             except (OSError, ValueError):
                 continue
             found.append({"name": child.name, "time": made.get("time", ""), "files": made.get("files", 0),
-                          "bytes": made.get("bytes", 0)})
+                          "bytes": made.get("bytes", 0), "automatic": bool(made.get("automatic"))})
     return sorted(found, key=lambda c: (c["time"], c["name"]), reverse=True)
 
 
@@ -123,7 +128,20 @@ def age_days(time_text, now=None):
     return max(0, ((now or datetime.now(timezone.utc)) - then).days)
 
 
-def status(explicit=None, environ=None, now=None):
+def age_hours(time_text, now=None):
+    """Hours since an ISO time, to a tenth; None when it cannot be read."""
+    try:
+        then = datetime.fromisoformat(time_text)
+    except (TypeError, ValueError):
+        return None
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=timezone.utc)
+    return round(max(0.0, ((now or datetime.now(timezone.utc)) - then).total_seconds() / 3600), 1)
+
+
+def status(explicit=None, environ=None, now=None, every_hours=None):
+    """What would be copied and the copies made. With every_hours, `due` says whether a copy should be made now: a folder is chosen,
+    and there is no copy yet or the newest is that many hours old or more."""
     folder = backup_folder(explicit, environ)
     items = []
     for name, path in sources(environ):
@@ -132,18 +150,28 @@ def status(explicit=None, environ=None, now=None):
     made = copies(folder)
     newest = made[0] if made else None
     age = age_days(newest["time"], now) if newest else None
-    return {"folder": str(folder) if folder else None, "folderExists": bool(folder and Path(folder).is_dir()),
-            "records": items, "copies": made, "newest": newest, "ageDays": age, "staleDays": STALE_DAYS,
-            "stale": age is None or age >= STALE_DAYS}
+    hours = age_hours(newest["time"], now) if newest else None
+    found = {"folder": str(folder) if folder else None, "folderExists": bool(folder and Path(folder).is_dir()),
+             "records": items, "copies": made, "newest": newest, "ageDays": age, "ageHours": hours, "staleDays": STALE_DAYS,
+             "stale": age is None or age >= STALE_DAYS}
+    if every_hours is not None:
+        found["everyHours"] = every_hours
+        found["due"] = bool(folder) and (hours is None or hours >= every_hours)
+    return found
 
 
 def _local_stamp(now=None):
     return (now or datetime.now(timezone.utc)).astimezone().strftime("%Y%m%d-%H%M%S")
 
 
-def backup(explicit=None, environ=None, now=None):
-    """Copies every record into a new dated folder; returns what it wrote. Refuses with no folder chosen, or one inside the
-    records themselves."""
+def _unreachable(folder, error):
+    return RecordsError(f"the backup folder {folder} cannot be reached or written to ({error.strerror or error}): check the drive "
+                        "or the NAS is connected and awake; nothing was copied")
+
+
+def backup(explicit=None, environ=None, now=None, automatic=False):
+    """Copies every record into a new dated folder; returns what it wrote. Refuses with no folder chosen, one inside the records
+    themselves, or one that cannot be reached or written to."""
     environ = os.environ if environ is None else environ
     folder = backup_folder(explicit, environ)
     if folder is None:
@@ -156,13 +184,16 @@ def backup(explicit=None, environ=None, now=None):
     for _, path in found:
         if _inside(folder, path) or _inside(folder, companion_data(environ)):
             raise RecordsError("the backup folder cannot be inside the records it copies")
-    folder.mkdir(parents=True, exist_ok=True)
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        raise _unreachable(folder, error) from None
     stamp = _local_stamp(now)
     name = next(n for n in [stamp, *(f"{stamp}-{i}" for i in range(2, 1000))]
                 if not (folder / n).exists() and not (folder / (n + PARTIAL)).exists())
     partial = folder / (name + PARTIAL)
-    partial.mkdir()
     try:
+        partial.mkdir()
         files = size = 0
         for item_name, path in found:
             target = partial / item_name
@@ -175,14 +206,15 @@ def backup(explicit=None, environ=None, now=None):
             size += counted[1]
         when = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).isoformat(timespec="seconds")
         (partial / MANIFEST_FILE).write_text(json.dumps({
-            "format": BACKUP_FORMAT, "time": when, "kit": __version__, "files": files, "bytes": size,
+            "format": BACKUP_FORMAT, "time": when, "kit": __version__, "files": files, "bytes": size, "automatic": automatic,
             "records": [{"name": n, "from": str(p)} for n, p in found]}, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8", newline="\n")
         os.replace(partial, folder / name)
-    except OSError:
+    except OSError as error:
         shutil.rmtree(partial, ignore_errors=True)
-        raise
-    return {"folder": str(folder), "name": name, "path": str(folder / name), "files": files, "bytes": size, "time": when}
+        raise _unreachable(folder, error) from None
+    return {"folder": str(folder), "name": name, "path": str(folder / name), "files": files, "bytes": size, "time": when,
+            "automatic": automatic}
 
 
 def _parser():
@@ -193,6 +225,10 @@ def _parser():
                            ("backup", "copies the records into a new dated folder")):
         s = sub.add_parser(name, help=helptext)
         s.add_argument("--to", help="the backup folder (default: recordsBackupPath)")
+        if name == "status":
+            s.add_argument("--every-hours", type=float, help="also say whether a copy is due: none yet, or the newest this old")
+        else:
+            s.add_argument("--automatic", action="store_true", help="mark the copy as made by the Companion's own timer")
         s.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
         s.add_argument("--no-redact", action="store_true", help="show the home folder instead of ~")
     return p
@@ -211,7 +247,7 @@ def main(argv=None, out=None, environ=None):
     redact = keep if args.no_redact else home_redactor()
     if args.report == "backup":
         try:
-            made = backup(args.to, environ)
+            made = backup(args.to, environ, automatic=args.automatic)
         except RecordsError as refused:
             out.write((envelope_text("records", Report("Refused"), redact, {"ok": False, "refusal": str(refused)})
                        if args.json else f"Refused: {refused}") + "\n")
@@ -221,7 +257,10 @@ def main(argv=None, out=None, environ=None):
         out.write((envelope_text("records", report, redact, {"copy": made}) if args.json
                    else render_markdown(report, redact)) + "\n")
         return EXIT_OK
-    found = status(args.to, environ)
+    if args.every_hours is not None and args.every_hours <= 0:
+        out.write("Refused: --every-hours must be more than 0\n")
+        return EXIT_USAGE
+    found = status(args.to, environ, every_hours=args.every_hours)
     if found["newest"] is None:
         title = "Records: never copied"
     else:
@@ -231,6 +270,8 @@ def main(argv=None, out=None, environ=None):
                                            [[r["name"], r["files"], _kb(r["bytes"]), r["path"]] for r in found["records"]]))
     report.section("Where the copies go", Bullets([found["folder"] or "No folder chosen yet: set recordsBackupPath (the "
                                                    "Companion's Settings page), then records backup."]))
+    if "due" in found:
+        report.lines.append(f"A copy is {'due now' if found['due'] else 'not due yet'} (every {found['everyHours']:g} hours).")
     if found["copies"]:
         report.section("Copies", Table(["Copy", "When", "Files", "Size"],
                                        [[c["name"], c["time"], c["files"], _kb(c["bytes"])] for c in found["copies"][:10]]))
