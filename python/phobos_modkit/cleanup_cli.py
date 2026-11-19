@@ -29,11 +29,27 @@ def _parser():
     p.add_argument("--settings", help="a JSON settings file with modkitCachePath and the games' paths")
     p.add_argument("--older-than", type=float, default=14, help="days a cache entry may sit unchanged (default 14)")
     p.add_argument("--keep-build", action="store_true", help="leave the kit's development build alone")
+    p.add_argument("--group", action="append", default=[], metavar="NAME",
+                   help="only this group, as the listing names it; repeatable (1.50.0, so a program can let its user choose)")
     p.add_argument("--apply", action="store_true", help="delete; without it, only list what would go")
     p.add_argument("--top", type=int, default=15, help="rows per detail table (default 15)")
     p.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
     p.add_argument("--no-redact", action="store_true", help="show the home folder instead of ~")
     return p
+
+
+DAEMONS = "Git file-watcher daemons"
+
+
+def chosen(found, groups):
+    """Only the groups named, when any are (1.50.0): a program lets its user keep some, such as install backups. The git
+    file-watcher daemons are a group of their own then, stopped only when named."""
+    if not groups:
+        return found
+    found.items = [item for item in found.items if item.group in groups]
+    if DAEMONS not in groups:
+        found.daemons = []
+    return found
 
 
 def megabytes(count):
@@ -96,10 +112,13 @@ def main(argv=None, environ=None, out=None):
     except CleanupError as error:
         print(redact(str(error)), file=sys.stderr)
         return EXIT_USAGE
+    found = chosen(found, args.group)
     applied = apply(found) if args.apply else None
     report = build_report(found, applied, args.top)
     data = {"items": [{"group": i.group, "path": str(i.path), "bytes": i.size, "why": i.why} for i in found.items],
-            "applied": bool(args.apply)}
+            "groups": [{"group": name, "items": count, "bytes": size, "why": why}
+                       for name, (count, size, why) in sorted(_groups(found.items).items(), key=lambda g: -g[1][1])],
+            "daemons": len(found.daemons), "applied": bool(args.apply)}
     out.write((envelope_text("cleanup", report, redact, data) if args.json else render_markdown(report, redact)) + "\n")
     return EXIT_FAILED if applied and applied[1] else EXIT_OK
 

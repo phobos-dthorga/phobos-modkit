@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.50.0] - 2026-11-20
+
+The owner asked (20 November 2026) for an ongoing cleanup in D'thorga Companion, with their yes before anything goes; the listing found 33.7 GB, 29 GB of it the kit's development build, beside install backups they may want to keep.
+
+### Added
+
+- cleanup --group, repeatable: only the groups named are listed or deleted, so a program can let its user keep some, such as install backups. The git file-watcher daemons are a group of their own then, stopped only when named.
+- cleanup's JSON gives each group's items, bytes and reason (data.groups) and how many git file-watcher daemons run (data.daemons).
+
 ## [1.49.0] - 2026-11-19
 
 The owner chose (19 November 2026) that D'thorga Companion should read and compare other authors' code on their press: follow one of our patches into the method it patches, and see what an update changed. The tools could already do both from a console, but only phobos-rimworld's own script knew where the source clones and decompiles were kept.

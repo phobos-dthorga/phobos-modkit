@@ -7,6 +7,7 @@ each may go. **It deletes nothing unless you add `--apply`.**
 python -m phobos_modkit cleanup --root REPO              list what would go (a preview)
 python -m phobos_modkit cleanup --root REPO --apply      delete it, and stop git's file-watcher daemons
 python -m phobos_modkit cleanup --root REPO --keep-build leave the kit's development build alone
+python -m phobos_modkit cleanup --root REPO --group "Cache: rimworld-saves" --apply   only the groups named (1.50.0)
 ```
 
 ## What it clears
@@ -64,5 +65,8 @@ A folder with no policy follows the age rule alone.
 ## Output
 
 The Markdown summary groups what would go, with counts, sizes and reasons, then the largest items. `--json` prints the
-report envelope with every item's group, path, bytes and reason under `data.items`. The exit code is 1 when something
+report envelope with every item's group, path, bytes and reason under `data.items`, each group's items, bytes and reason under
+`data.groups`, and how many git file-watcher daemons are running under `data.daemons` (1.50.0). `--group` (repeatable) keeps
+only the groups named, so a program can let its user keep some, such as install backups; the daemons are then a group of
+their own, "Git file-watcher daemons", stopped only when named. The exit code is 1 when something
 could not be deleted (usually a file another program holds open: run it again later).

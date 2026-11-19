@@ -224,3 +224,33 @@ class Command(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Chosen(unittest.TestCase):
+    """Choosing groups (1.50.0): a program lets its user keep some, such as install backups."""
+
+    def found(self):
+        return cleanup.Found(items=[cleanup.Item("Install backups", Path("b"), 5, "older backups"),
+                                    cleanup.Item("Cache: x", Path("c"), 7, "stale index"),
+                                    cleanup.Item("Cache: x", Path("d"), 1, "stale index")], daemons=[3, 4])
+
+    def test_only_the_named_groups_and_daemons_only_when_named(self):
+        from phobos_modkit.cleanup_cli import DAEMONS, chosen
+        found = chosen(self.found(), ["Cache: x"])
+        self.assertEqual([i.path for i in found.items], [Path("c"), Path("d")])
+        self.assertEqual(found.daemons, [])
+        self.assertEqual(chosen(self.found(), [DAEMONS]).daemons, [3, 4])
+        self.assertEqual(len(chosen(self.found(), []).items), 3)
+
+    def test_json_sums_each_group(self):
+        from phobos_modkit import cleanup_cli
+        original = cleanup_cli.survey
+        cleanup_cli.survey = lambda *a, **k: self.found()
+        try:
+            out = io.StringIO()
+            cleanup_cli.main(["--json", "--group", "Cache: x"], environ={}, out=out)
+        finally:
+            cleanup_cli.survey = original
+        data = json.loads(out.getvalue())["data"]
+        self.assertEqual(data["groups"], [{"group": "Cache: x", "items": 2, "bytes": 8, "why": "stale index"}])
+        self.assertEqual(data["daemons"], 0)
