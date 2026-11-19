@@ -13,6 +13,8 @@ use rusqlite::{Connection, params_from_iter};
 use std::collections::HashMap;
 use std::io::BufRead;
 
+const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Kind {
     Text,
@@ -30,6 +32,8 @@ enum Source {
     Index,
     /// The matched element's own tag (false) or its parent's (true).
     Tag(bool),
+    /// Byte offset in the input where the matched element starts (false) or one past where it ends (true).
+    Offset(bool),
 }
 
 #[derive(Debug)]
@@ -165,6 +169,8 @@ fn compile(schema: &Schema) -> Result<Vec<Table>, String> {
                 Source::Index
             } else if let Some(tag) = &c.tag {
                 Source::Tag(tag == "parent")
+            } else if let Some(offset) = &c.offset {
+                Source::Offset(offset == "end")
             } else {
                 let path = c.path.as_deref().unwrap_or("").trim_matches('/').to_string();
                 deepest = deepest.max(if path.is_empty() { 0 } else { path.split('/').count() });
@@ -174,7 +180,8 @@ fn compile(schema: &Schema) -> Result<Vec<Table>, String> {
                     None => Source::Text,
                 }
             };
-            let kind = if matches!(source, Source::Parent(_) | Source::Index) { Kind::Int } else { kind };
+            let kind =
+                if matches!(source, Source::Parent(_) | Source::Index | Source::Offset(_)) { Kind::Int } else { kind };
             columns.push(Column { name: c.name.clone(), kind, source });
         }
         let require =
@@ -275,7 +282,7 @@ fn attribute(element: &BytesStart, name: &str) -> Option<String> {
 /// which should be an empty database.
 pub fn build<R: BufRead>(
     schema: &Schema,
-    input: R,
+    mut input: R,
     conn: &mut Connection,
     meta: &[(String, String)],
 ) -> Result<Summary, String> {
@@ -289,6 +296,13 @@ pub fn build<R: BufRead>(
     {
         let mut statements =
             tables.iter().map(|t| tx.prepare(&insert_sql(t))).collect::<Result<Vec<_>, _>>().map_err(db)?;
+        // A UTF-8 byte-order mark is skipped here rather than by the reader, which would leave it out of its positions:
+        // offset columns are bytes from the start of the file, as a later reader seeks them (RimWorld saves begin with one).
+        let mut skipped = 0u64;
+        if input.fill_buf().map_err(|e| format!("cannot read the input: {e}"))?.starts_with(UTF8_BOM) {
+            input.consume(UTF8_BOM.len());
+            skipped = UTF8_BOM.len() as u64;
+        }
         let mut reader = Reader::from_reader(input);
         let mut buffer = Vec::with_capacity(64 * 1024);
         let mut stack: Vec<Frame> = Vec::new();
@@ -297,6 +311,8 @@ pub fn build<R: BufRead>(
         let mut values: Vec<Value> = Vec::new();
 
         loop {
+            // Where this event starts in the input: an element's first byte, for offset = "start" columns.
+            let before = skipped + reader.buffer_position();
             let event = reader
                 .read_event_into(&mut buffer)
                 .map_err(|e| format!("the XML is not well formed near byte {}: {e}", reader.buffer_position()))?;
@@ -385,6 +401,7 @@ pub fn build<R: BufRead>(
                             Source::Parent(p) => opens.iter().rev().find(|o| o.table == *p).map(|o| o.id.to_string()),
                             Source::Tag(false) => Some(paths.names[name as usize].clone()),
                             Source::Tag(true) => stack.last().map(|f| paths.names[f.name as usize].clone()),
+                            Source::Offset(false) => Some(before.to_string()),
                             _ => None,
                         };
                     }
@@ -414,8 +431,13 @@ pub fn build<R: BufRead>(
                     }
                 }
                 for _ in 0..frame.opened {
-                    let open = opens.pop().expect("opened at this frame");
+                    let mut open = opens.pop().expect("opened at this frame");
                     let table = &tables[open.table];
+                    for (c, column) in table.columns.iter().enumerate() {
+                        if matches!(column.source, Source::Offset(true)) {
+                            open.values[c] = Some((skipped + reader.buffer_position()).to_string());
+                        }
+                    }
                     if table.require.iter().any(|&c| open.values[c].is_none()) {
                         continue;
                     }
@@ -531,6 +553,12 @@ mod tests {
         name = "name_class"
         path = "name"
         attr = "Class"
+        [[table.column]]
+        name = "start"
+        offset = "start"
+        [[table.column]]
+        name = "end"
+        offset = "end"
 
         [[table]]
         name = "mod"
@@ -631,6 +659,46 @@ mod tests {
         let (conn, _) = build_test(XML);
         let held = rows(&conn, "SELECT h.def, p.def FROM held h JOIN thing p ON p.id = h.holder");
         assert_eq!(held, vec![vec![text("MealSimple"), text("Human")]]);
+    }
+
+    #[test]
+    fn offsets_cut_each_row_element_out_of_the_input() {
+        let (conn, _) = build_test(XML);
+        let cut = rows(&conn, "SELECT def, start, \"end\" FROM thing ORDER BY id");
+        let cut: Vec<(String, String)> = cut
+            .iter()
+            .map(|r| match (&r[0], &r[1], &r[2]) {
+                (Value::Text(def), Value::Integer(start), Value::Integer(end)) => {
+                    (def.clone(), XML[*start as usize..*end as usize].to_string())
+                }
+                other => panic!("offsets are not whole numbers: {other:?}"),
+            })
+            .collect();
+        assert_eq!(cut.len(), 4);
+        assert!(cut[0].1.starts_with("<thing Class=\"Pawn\">") && cut[0].1.ends_with("</thing>"));
+        assert!(cut[0].1.contains("<first>Ann</first>"));
+        assert_eq!(
+            cut[1],
+            (
+                "MealSimple".to_string(),
+                "<li Class=\"ThingWithComps\"><def>MealSimple</def><stackCount>3</stackCount><forbidden>True</forbidden></li>"
+                    .to_string()
+            )
+        );
+        assert!(cut[3].1.starts_with("<thing Class=\"Filth\">") && cut[3].1.ends_with("<questTags /></thing>"));
+    }
+
+    #[test]
+    fn offsets_count_a_byte_order_mark() {
+        let with_mark = format!("\u{FEFF}{XML}");
+        let schema = Schema::parse(SCHEMA).unwrap();
+        let mut conn = Connection::open_in_memory().unwrap();
+        build(&schema, with_mark.as_bytes(), &mut conn, &[]).unwrap();
+        let wall = rows(&conn, "SELECT start, \"end\" FROM thing WHERE def = 'Wall'");
+        let (Value::Integer(start), Value::Integer(end)) = (&wall[0][0], &wall[0][1]) else { panic!("not numbers") };
+        let bytes = with_mark.as_bytes();
+        assert!(bytes[*start as usize..*end as usize].starts_with(b"<thing Class=\"Building\"><def>Wall"));
+        assert!(bytes[..*end as usize].ends_with(b"</thing>"));
     }
 
     #[test]

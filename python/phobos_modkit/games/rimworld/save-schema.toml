@@ -172,6 +172,14 @@ type = "int"
 [[table.column]]
 name = "holder"
 parent = "thing"
+# Where the thing's element starts in the save, and one byte past where it ends, so a report can read one thing's saved
+# data in full (rimworld-save thing) without indexing every value of every thing.
+[[table.column]]
+name = "start"
+offset = "start"
+[[table.column]]
+name = "end"
+offset = "end"
 
 # A pawn is a thing with a kind; its row shares the thing's id.
 [[table]]

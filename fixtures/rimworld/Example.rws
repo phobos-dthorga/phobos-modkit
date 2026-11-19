@@ -401,6 +401,26 @@
                 <thing>Thing_Steel101</thing>
               </curJob>
             </jobs>
+            <ExampleSystems_Values>
+              <keys>
+                <li>Cooling/coolantLevel</li>
+                <li>Electrical/charge</li>
+              </keys>
+              <values>
+                <li>0</li>
+                <li>0.993</li>
+              </values>
+            </ExampleSystems_Values>
+            <ExampleSystems_History>
+              <li Class="Example.FaultEvent">
+                <tick>100</tick>
+                <stage>burning</stage>
+              </li>
+              <li Class="Example.FaultEvent">
+                <tick>200</tick>
+                <stage>boiling</stage>
+              </li>
+            </ExampleSystems_History>
           </thing>
           <thing Class="Corpse">
             <def>Corpse_Human</def>

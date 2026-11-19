@@ -24,6 +24,10 @@
 //! [[table.column]]
 //! name = "kind"
 //! tag = "parent"                                     # the element's own tag ("self") or its parent's ("parent")
+//! [[table.column]]
+//! name = "start"
+//! offset = "start"                                   # the element's first byte in the file ("start"), or one
+//!                                                    # past its last ("end"), to read it again later
 //!
 //! [[view]]
 //! name = "big_things"
@@ -80,6 +84,8 @@ pub struct ColumnSpec {
     pub index: bool,
     #[serde(default)]
     pub tag: Option<String>,
+    #[serde(default)]
+    pub offset: Option<String>,
     #[serde(default, rename = "type")]
     pub kind: Option<String>,
 }
@@ -148,9 +154,13 @@ impl Schema {
                 let sources = usize::from(column.path.is_some() || column.attr.is_some())
                     + usize::from(column.parent.is_some())
                     + usize::from(column.index)
-                    + usize::from(column.tag.is_some());
+                    + usize::from(column.tag.is_some())
+                    + usize::from(column.offset.is_some());
                 if sources != 1 {
-                    return Err(format!("{label} needs exactly one of path/attr, parent, index or tag"));
+                    return Err(format!("{label} needs exactly one of path/attr, parent, index, tag or offset"));
+                }
+                if !matches!(column.offset.as_deref(), None | Some("start" | "end")) {
+                    return Err(format!("{label}: offset is \"start\" or \"end\""));
                 }
                 if !matches!(column.tag.as_deref(), None | Some("self" | "parent")) {
                     return Err(format!("{label}: tag is \"self\" or \"parent\""));
@@ -167,7 +177,7 @@ impl Schema {
                     Some(other) => return Err(format!("{label} has an unknown type \"{other}\"")),
                 }
                 if column.kind.as_deref() == Some("ivec3")
-                    && (column.parent.is_some() || column.index || column.tag.is_some())
+                    && (column.parent.is_some() || column.index || column.tag.is_some() || column.offset.is_some())
                 {
                     return Err(format!("{label}: ivec3 reads text, so it needs path or attr"));
                 }
@@ -230,6 +240,23 @@ mod tests {
     fn a_column_needs_exactly_one_source() {
         let text = GOOD.replace("parent = \"thing\"", "parent = \"thing\"\n        index = true");
         assert!(Schema::parse(&text).unwrap_err().contains("exactly one"));
+    }
+
+    #[test]
+    fn offsets_are_start_or_end_and_a_source_of_their_own() {
+        let column = "[[table.column]]
+        name = \"at\"
+        offset = \"start\"
+        [[view]]";
+        assert!(Schema::parse(&GOOD.replace("[[view]]", column)).is_ok());
+        let middle = column.replace("\"start\"", "\"middle\"");
+        assert!(Schema::parse(&GOOD.replace("[[view]]", &middle)).unwrap_err().contains("\"start\" or \"end\""));
+        let both = column.replace(
+            "offset = \"start\"",
+            "offset = \"start\"
+        index = true",
+        );
+        assert!(Schema::parse(&GOOD.replace("[[view]]", &both)).unwrap_err().contains("exactly one"));
     }
 
     #[test]

@@ -4,6 +4,22 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.52.0] - 2026-11-20
+
+The owner asked (20 November 2026) for one command to read what a vehicle has saved, after a fault on a dirt bike could be
+traced only by reading the save by hand: the index held each thing's def, place and health, but none of what its comps
+wrote.
+
+### Added
+
+- rimworld-save thing ID: one thing's saved data in full, every value its comps and mods wrote with its path inside the
+  thing, dictionaries paired as name[key], list items numbered. The things it holds are listed and left out unless --held;
+  --path and --value narrow it. It reads only that thing's bytes from the save (a 200 KB vehicle in a 340 MB save in a
+  moment), and refuses once the save has been saved again since it was indexed.
+- xml-index: a column may hold an element's byte offsets in the input (offset = "start" or "end"); a UTF-8 byte-order
+  mark is counted, as RimWorld's saves begin with one. The save schema records them for every thing, so older indexes
+  are rebuilt on their next use.
+
 ## [1.51.0] - 2026-11-20
 
 For D'thorga Companion's "Since you last played" line on the Mods page (the owner's go-ahead, 20 November 2026): what updated since the session before, and whether those updates changed a method our mods patch.

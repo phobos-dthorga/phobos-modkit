@@ -5,6 +5,7 @@
     python -m phobos_modkit rimworld-save things --def "Chunk*" --list
     python -m phobos_modkit rimworld-save hediffs --pawn Abbeson
     python -m phobos_modkit rimworld-save find ChunkA8061017       one thing and what holds it
+    python -m phobos_modkit rimworld-save thing VVE_Dirtbike30494987 --path "*Phobos*"   everything one thing saved
     python -m phobos_modkit rimworld-save schema --under savegame/game/maps/li --depth 1
     python -m phobos_modkit rimworld-save grid --map 0                every grid layer of a map, counted
     python -m phobos_modkit rimworld-save grid --kind gas --render    one layer, with a text picture
@@ -52,10 +53,11 @@ from . import save as saves
 from . import save_diff
 from . import save_maps
 from . import save_reports as reports
+from . import save_thing
 from ...manifest import READS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
-REPORTS = ("summary", "index", "schema", "things", "pawns", "hediffs", "find", "world", "components", "grid", "planet", "terrain",
+REPORTS = ("summary", "index", "schema", "things", "pawns", "hediffs", "find", "thing", "world", "components", "grid", "planet", "terrain",
            "atlas", "mood", "diff", "sql")
 
 
@@ -102,6 +104,12 @@ def _parser():
     h.add_argument("--def", dest="def_", help="hediff def; * and ? are wildcards")
     f = sub.add_parser("find", parents=[common], help="a thing by its ID, with what holds it")
     f.add_argument("thing_id", help="e.g. ChunkA8061017; * and ? are wildcards")
+    th = sub.add_parser("thing", parents=[common], help="one thing's saved data in full: every value its comps and mods "
+                                                        "wrote, read from the save")
+    th.add_argument("thing_id", help="its ID, e.g. VVE_Dirtbike30494987 (find gives IDs)")
+    th.add_argument("--path", help="only values whose path matches, e.g. *Phobos* or *coolant*")
+    th.add_argument("--value", help="only values that match, e.g. Faction_12")
+    th.add_argument("--held", action="store_true", help="include the things it holds (crew, inventory, apparel)")
     o = sub.add_parser("world", parents=[common], help="world objects: settlements, sites, caravans, by faction")
     o.add_argument("--def", dest="def_", help="world object def or class, e.g. Settlement; * and ? are wildcards")
     o.add_argument("--faction", help="a faction's name or def")
@@ -291,8 +299,13 @@ def _planet(conn, args, environ, settings_file, cache, top):
         raise saves.SaveError(str(problem)) from None
 
 
-def _report(conn, args, environ=None, settings_file=None, other=None):
+def _report(conn, args, environ=None, settings_file=None, other=None, save=None, meta=None):
     top = args.top
+    if args.report == "thing":
+        try:
+            return save_thing.thing(conn, save, meta or {}, args.thing_id, args.path, args.value, args.held, top)
+        except save_thing.ThingError as problem:
+            raise saves.SaveError(str(problem)) from None
     if args.report == "grid":
         names, note = _names(args, environ, settings_file)
         try:
@@ -358,11 +371,14 @@ def main(argv=None, settings_file=None, environ=None, out=None):
         if args.build_indexer:
             build_tools()
         built = None
+        save = None
         if args.index:
             index = Path(args.index)
             if not index.is_file():
                 raise saves.SaveError(f"No index at {index}.")
             source = saves.read_meta(index).get("source", index.name)
+            if args.save:
+                save = saves.find_save(paths.saves_path(args.saves, environ, settings_file), args.save)
         else:
             progress("Finding the save", 1, 3)
             folder = paths.saves_path(args.saves, environ, settings_file)
@@ -380,7 +396,7 @@ def main(argv=None, settings_file=None, environ=None, out=None):
             other = (other_index, other_save.name, source)
         progress("Working out the answer", 3, 3)
         with closing(saves.open_read_only(index)) as conn:
-            report = _report(conn, args, environ, settings_file, other)
+            report = _report(conn, args, environ, settings_file, other, save, saves.read_meta(index))
     except (saves.SaveError, ToolMissing) as problem:
         print(redact(str(problem)), file=sys.stderr)
         return EXIT_USAGE
@@ -416,6 +432,7 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
     "things": {"question": "What things are in my save?"},
     "pawns": {"question": "Who is on my maps?"},
     "hediffs": {"question": "What injuries and conditions does everyone have?"},
+    "thing": {"question": "What has one thing saved: its comps' and mods' values?"},
     "world": {"question": "What is on the world map?"},
     "components": {"question": "What have mods stored in my save?"},
     "grid": {"question": "What map grids can I look at?"},

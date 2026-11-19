@@ -24,8 +24,10 @@ about a second and a half; later questions take well under a second until the sa
   by component class, map and path; narrow the component sections with `--component`, as tick counters change in
   every save.
 - **A mod's saved state is readable** through `components`: every value with text inside the game's, the world's
-  and each map's components, with its path inside the component. A mod that keeps its state elsewhere (in a thing's
-  comp, a Def, its own file) is not covered.
+  and each map's components, with its path inside the component. **State a mod keeps on a thing** (a comp's values, a
+  vehicle's systems) is read with `thing ID`: the index records where each thing sits in the save, and the report reads
+  only those bytes, refusing once the save has been saved again since it was indexed. State kept in a Def or a file of
+  the mod's own is not covered.
 - Checked against RimWorld 1.7.5000 saves (November 2026).
 
 ## Run it
@@ -36,6 +38,7 @@ python -m phobos_modkit rimworld-save pawns --faction player   the colony's pawn
 python -m phobos_modkit rimworld-save things --def "Chunk*" --list
 python -m phobos_modkit rimworld-save hediffs --pawn Abbeson
 python -m phobos_modkit rimworld-save find ChunkA8061017       one thing and what holds it
+python -m phobos_modkit rimworld-save thing VVE_Dirtbike30494987 --path "*Phobos*"   everything one thing saved
 python -m phobos_modkit rimworld-save schema --under savegame/game/maps/li --depth 1
 python -m phobos_modkit rimworld-save grid --map 0                   every grid layer of a map, counted
 python -m phobos_modkit rimworld-save grid --kind gas --render       one layer, with a text picture
@@ -61,6 +64,7 @@ python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP
 | `pawns` | Name, ID, race, kind, faction, place, map and position, age, health state, how many hediffs | `--faction` (`player` or a name), `--name`, `--kind`, `--place` |
 | `hediffs` | Hediffs counted by def, or one pawn's in full with body part, severity, age and source | `--pawn`, `--def` |
 | `find ID` | A thing by its ID, with every thing holding it out to the map or world | |
+| `thing ID` | One thing's saved data in full, read from the save itself: every value its comps and mods wrote, with its path inside the thing. A dictionary shows as `name[key]`, list items as `li[0]`, `li[1]`, and `@Class` is the type a value was saved as. The things it holds (a vehicle's crew, a pawn's inventory and apparel) are listed and left out unless `--held`. Needs the save, so with `--index` name it with `--save` too | `--path`, `--value`, `--held` |
 | `world` | World objects counted by def and faction, listed with ID, name, faction and tile, or one object's values in full (an aircraft's flight path, a site's parts) | `--def`, `--faction`, `--name`, `--id` |
 | `planet` | Pollution on the world map from the save's planet layer: by band, patches of touching tiles with what stands on or nearest each, rings of tiles around a place, what changed against another save, every save of the world by in-game day. Tile positions come from a rebuilt model of the planet; a world with less than full coverage is reported as such and its tiles are not placed | `--near` (a name or tile number), `--hops`, `--compare SAVE`, `--history [PATTERN]` |
 | `terrain` | How high the land stands and how rough it is: land heights (tenths and median), hilliness by class with each class's median height, the player's places with their tile's height and hilliness, the height difference between neighbouring land tiles across the world (a step, not a slope: the tile's size is not in the save), and around a place its rings of tiles with their lowest, median and highest land and the steepest step within | `--near` (a name or tile number), `--hops` |

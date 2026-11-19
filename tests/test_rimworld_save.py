@@ -20,6 +20,7 @@ from support import FIXTURES
 from phobos_modkit import native
 from phobos_modkit.games.rimworld import save as saves
 from phobos_modkit.games.rimworld import save_reports as reports
+from phobos_modkit.games.rimworld import save_thing
 from phobos_modkit.games.rimworld.save_cli import EXIT_OK, EXIT_USAGE, main
 from phobos_modkit.report import render_markdown
 
@@ -156,8 +157,8 @@ class Indexing(Folders):
 class Reports(Folders):
     def setUp(self):
         super().setUp()
-        index, _ = saves.ensure(self.save, self.cache)
-        self.conn = saves.open_read_only(index)
+        self.index, _ = saves.ensure(self.save, self.cache)
+        self.conn = saves.open_read_only(self.index)
 
     def tearDown(self):
         self.conn.close()
@@ -199,6 +200,46 @@ class Reports(Folders):
         (section,) = reports.find(self.conn, "Apparel_Parka103").sections
         self.assertEqual([r[0] for r in section.table.rows], ["Apparel_Parka103", "Human200"])
         self.assertIn("No thing has that ID", render_markdown(reports.find(self.conn, "Nothing1")))
+
+    def thing(self, thing_id, **options):
+        return save_thing.thing(self.conn, self.save, saves.read_meta(self.index), thing_id, **options)
+
+    def test_one_things_saved_data_with_dictionaries_paired_and_held_things_left_out(self):
+        report = self.thing("human200")
+        self.assertIn("Human200: Human (Pawn), on map 0 at 20, 21.", report.lines[0])
+        values = dict(self.thing("Human200", top=500).sections[-1].table.rows)
+        self.assertEqual(values["ExampleSystems_Values[Cooling/coolantLevel]"], "0")
+        self.assertEqual(values["ExampleSystems_Values[Electrical/charge]"], "0.993")
+        self.assertEqual(values["ExampleSystems_History/li[1]/stage"], "boiling")
+        self.assertEqual(values["ExampleSystems_History/li[0]@Class"], "Example.FaultEvent")
+        self.assertEqual(values["name/nick"], "Annie")
+        self.assertEqual(values["inventory/innerContainer/innerList/li[0]"], "held thing MealSimple102 (MealSimple), left out")
+        self.assertNotIn("MealSimple", " ".join(k for k in values))
+        held = [s for s in report.sections if s.heading.startswith("Things it holds")][0]
+        self.assertEqual(held.table.rows, [("MealSimple102", "MealSimple"), ("Apparel_Parka103", "Apparel_Parka")])
+
+    def test_one_thing_narrowed_and_with_what_it_holds(self):
+        narrowed = self.thing("Human200", path="*charge*").sections[-1].table.rows
+        self.assertEqual(narrowed, [("ExampleSystems_Values[Electrical/charge]", "0.993")])
+        self.assertEqual(self.thing("Human200", value="burn*").sections[-1].table.rows,
+                         [("ExampleSystems_History/li[0]/stage", "burning")])
+        whole = dict(self.thing("Human200", include_held=True, top=500).sections[-1].table.rows)
+        self.assertEqual(whole["apparel/wornApparel/innerList/li[0]/quality"], "Good")
+        self.assertIn("No thing has that ID", self.thing("Nothing1").lines[0])
+
+    def test_one_thing_in_a_save_that_begins_with_a_byte_order_mark(self):
+        marked = self.saves / "Marked.rws"
+        marked.write_bytes(b"\xef\xbb\xbf" + FIXTURE.read_bytes())
+        index, _ = saves.ensure(marked, self.cache)
+        with closing(saves.open_read_only(index)) as conn:
+            report = save_thing.thing(conn, marked, saves.read_meta(index), "Human200", path="*charge*")
+        self.assertEqual(report.sections[-1].table.rows, [("ExampleSystems_Values[Electrical/charge]", "0.993")])
+
+    def test_one_thing_is_refused_once_the_save_has_changed(self):
+        later = time.time() + 60
+        os.utime(self.save, (later, later))
+        with self.assertRaises(save_thing.ThingError):
+            self.thing("Human200")
 
     def test_world_objects_counted_and_listed(self):
         counted = self.rows(reports.world(self.conn))
@@ -255,7 +296,8 @@ class Command(Folders):
     def test_each_report_runs(self):
         for args in (["schema"], ["things", "--list", "--held"], ["pawns", "--faction", "player"], ["world"],
                      ["world", "--name", "Raider*"], ["world", "--id", "3"], ["components"], ["components", "--class", "*Alarm"],
-                     ["hediffs", "--pawn", "Annie"], ["find", "ChunkA*"], ["sql", "SELECT 1"], ["index"]):
+                     ["hediffs", "--pawn", "Annie"], ["find", "ChunkA*"], ["thing", "Human200", "--path", "*Values*"],
+                     ["sql", "SELECT 1"], ["index"]):
             code, text = self.run_main(*args)
             self.assertEqual(code, EXIT_OK, args)
             self.assertIn("Save: Example.rws", text)
@@ -269,6 +311,16 @@ class Command(Folders):
         index = self.cache / saves.CACHE_FOLDER / "Example.sqlite"
         self.assertEqual(main(["things", "--index", str(index)], environ={}, out=out), EXIT_OK)
         self.assertIn("Read: from the index already built", out.getvalue())
+
+    def test_one_thing_needs_the_save_beside_an_index(self):
+        self.run_main()
+        index = self.cache / saves.CACHE_FOLDER / "Example.sqlite"
+        out = io.StringIO()
+        self.assertEqual(main(["thing", "Human200", "--index", str(index)], environ={}, out=out), EXIT_USAGE)
+        out = io.StringIO()
+        self.assertEqual(main(["thing", "Human200", "--path", "*Values*", "--index", str(index), "--save", "Example",
+                               "--saves", str(self.saves)], environ={}, out=out), EXIT_OK)
+        self.assertIn("ExampleSystems_Values[Electrical/charge] | 0.993", out.getvalue())
 
     def test_options_before_the_report_name_mean_summary(self):
         code, text = self.run_main("--top", "3")
