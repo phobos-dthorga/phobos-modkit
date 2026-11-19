@@ -2,6 +2,7 @@
 
     game-files report --name NAME [--app-id N] [--data DIR] [--saves DIR] [--screenshots DIR] [--since TIME]
     game-files steam-games                       every game Steam has installed on this PC
+    game-files screenshots --name NAME [--app-id N] [--data DIR] [--screenshots DIR]   only the screenshots, quickly (1.59.0)
 
 One report, in four parts, read only:
 
@@ -35,6 +36,7 @@ SAVE_FOLDERS = ("Saves", "saves", "save", "Save")
 SHOT_FOLDERS = ("Screenshots", "screenshots", "Screenshot")
 AUTOSAVE = re.compile(r"auto", re.IGNORECASE)
 LISTED = 200
+SHOTS_LISTED = 2000   # screenshots one `screenshots` answer lists (1.59.0); the counts cover every one
 # The launches kept per game (1.51.0): Steam records only the latest, so while a game runs "since you last played" would mean
 # since this launch. Each report remembers the launch it sees; --since previous then means the one before.
 LAUNCHES_KEPT = 30
@@ -408,6 +410,19 @@ def _since(text):
     return int((when if when.tzinfo else when.replace(tzinfo=timezone.utc)).timestamp())
 
 
+def shots_only(name, app_id=None, data=None, shots_folder=None, environ=None):
+    """Only the screenshots (1.59.0), for D'thorga Companion's gallery: the same folders the report reads, without sizing the
+    data folder (gigabytes on the owner's RimWorld) or the saves. Up to SHOTS_LISTED, newest first."""
+    steam = steam_root(environ)
+    game = find_game(steam, name, app_id)
+    data = Path(data) if data else guess_data(name, environ)
+    own_shots = Path(shots_folder) if shots_folder else _first_child(data, SHOT_FOLDERS)
+    folders = [own_shots, *steam_screenshots(steam, game["appId"] if game else app_id)]
+    found = screenshots(folders)
+    return {"name": name, "folders": [str(f) for f in folders if f is not None and Path(f).is_dir()],
+            "list": found[:SHOTS_LISTED], "count": len(found), "bytes": sum(s["bytes"] for s in found)}
+
+
 def report(name, app_id=None, data=None, saves_folder=None, shots_folder=None, since=None, environ=None):
     """Everything the four parts show, as one dict."""
     steam = steam_root(environ)
@@ -472,7 +487,12 @@ def _parser():
     r.add_argument("--since", help="list Workshop items updated since this time (default: the last launch); 'previous' for the "
                                    "launch before the last, as far as the kit has seen (1.51.0: while the game runs)")
     s = sub.add_parser("steam-games", help="every game Steam has installed on this PC")
-    for parser in (r, s):
+    g = sub.add_parser("screenshots", help="only one game's screenshots, quickly: the same folders as the report")
+    g.add_argument("--name", required=True, help="the game's name, as Steam shows it")
+    g.add_argument("--app-id", type=int, help="its Steam app ID, when its name is not enough")
+    g.add_argument("--data", help="its data folder (default: guessed from its name)")
+    g.add_argument("--screenshots", help="its own screenshots folder (default: inside the data folder)")
+    for parser in (r, s, g):
         parser.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
         parser.add_argument("--no-redact", action="store_true", help="show the home folder instead of ~")
     return p
@@ -500,6 +520,13 @@ def main(argv=None, out=None, environ=None):
                                        g["dataGuesses"][0]["path"] if g["dataGuesses"] else "none found"] for g in games]))
         out.write((envelope_text("game-files", found, redact, {"games": games}) if args.json
                    else render_markdown(found, redact)) + "\n")
+        return EXIT_OK
+    if args.report == "screenshots":
+        shots = shots_only(args.name, args.app_id, args.data, args.screenshots, environ)
+        found = Report(f"{args.name}: {shots['count']} screenshots, {_size_words(shots['bytes'])}")
+        found.section("Newest", Bullets([f"{_when(s['taken'])[:16]}  {s['name']}" for s in shots["list"][:20]]
+                                        if shots["folders"] else ["No screenshots folder found: give --data or --screenshots."]))
+        out.write((envelope_text("game-files", found, redact, shots) if args.json else render_markdown(found, redact)) + "\n")
         return EXIT_OK
     data = report(args.name, args.app_id, args.data, args.saves, args.screenshots, since, environ)
     game = data["game"]
@@ -533,4 +560,5 @@ def main(argv=None, out=None, environ=None):
 
 MANIFEST = {"game": None, "parser": _parser, "effect": READS,
             "reports": {"report": {"note": "what changed since you last played, saves, screenshots and space, for one game"},
-                        "steam-games": {"note": "every game Steam has installed on this PC"}}}
+                        "steam-games": {"note": "every game Steam has installed on this PC"},
+                        "screenshots": {"note": "only one game's screenshots, quickly, for a gallery"}}}

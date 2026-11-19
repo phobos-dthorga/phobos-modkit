@@ -109,6 +109,18 @@ class GameFilesTests(unittest.TestCase):
                          self.home / "AppData" / "Local" / "AutomationGame")
         self.assertEqual(game_files.guess_candidates("Wallpaper Engine", environ), [])
 
+    def test_screenshots_alone_are_listed_quickly_from_the_same_folders(self):
+        out = io.StringIO()
+        self.assertEqual(game_files.main(["screenshots", "--name", "Sample Colony", "--json"], out, self.environ), 0)
+        found = json.loads(out.getvalue())["data"]
+        self.assertEqual(found["count"], 2)
+        self.assertEqual(sorted(s["name"] for s in found["list"]), ["own.png", "steam-shot.jpg"])
+        self.assertEqual(len(found["folders"]), 2)
+        self.assertNotIn("space", found)
+        out = io.StringIO()
+        game_files.main(["screenshots", "--name", "Nowhere Game"], out, self.environ)
+        self.assertIn("No screenshots folder found", out.getvalue())
+
     def test_steam_games_carry_their_guesses(self):
         out = io.StringIO()
         game_files.main(["steam-games", "--json"], out, self.environ)

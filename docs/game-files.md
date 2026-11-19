@@ -40,7 +40,12 @@ python -m phobos_modkit game-files report --name RimWorld
 python -m phobos_modkit game-files report --name "Project Zomboid" --data "%USERPROFILE%\Zomboid"
 python -m phobos_modkit game-files report --name RimWorld --since 2026-11-18
 python -m phobos_modkit game-files steam-games
+python -m phobos_modkit game-files screenshots --name RimWorld
 ```
+
+**`screenshots` lists only the pictures** (1.59.0), from the same folders the report reads, without sizing the data folder or the
+saves: 0.3 s for the owner's 330 RimWorld screenshots, where the report walks gigabytes. `data` holds `folders`, `list` (up to 2,000,
+newest first: `path`, `name`, `bytes`, `taken`, `source`), `count` and `bytes`. D'thorga Companion's screenshot gallery reads it.
 
 ## What the report holds
 

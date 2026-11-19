@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.59.0] - 2026-11-20
+
+For D'thorga Companion's screenshot gallery on the Timeline (docs/later.md, item 5, agreed by the owner on 19 November 2026).
+
+### Added
+
+- game-files screenshots: only one game's screenshots, from the same folders the report reads (its own and Steam's), up to 2,000
+  newest first with the counts covering all. It does not size the data folder or the saves, so it answers at once (0.3 s for the
+  owner's 330 RimWorld screenshots).
+
 ## [1.58.0] - 2026-11-20
 
 For D'thorga Companion's Add a game from Steam (docs/later.md, item 5, agreed by the owner on 19 November 2026; built overnight on
