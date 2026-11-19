@@ -209,7 +209,7 @@ class CommandTests(unittest.TestCase):
             code, text = self.run_cli("heap", "--label", "day 40", *self.common, run=FakeTools([]))
             self.assertEqual(perf_cli.EXIT_OK, code, text)
             self.assertIn("**21.7 MB in 44,028 objects**", text)
-            self.assertIn("**This snapshot holds only part of the heap: 21.7 MB of the 50.0 MB the runtime itself counted (43%).**", text)
+            self.assertIn("**This snapshot holds only part of the heap: 21.7 MB of the 50.0 MB the runtime itself counted on its heap (43%).**", text)
             self.assertIn("Taking it took 0 s", text)
             self.assertIn("can drop events on a large heap", text)
             self.assertIn("| Example Medical | mod |", text)

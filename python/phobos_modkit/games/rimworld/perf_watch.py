@@ -6,8 +6,9 @@ each jump (a save loaded, a burst of errors). Every few seconds it takes:
 
 - **from Windows** (`process_memory`): what the game has claimed (private bytes, the figure Task Manager's "commit size" shows)
   and what of it sits in RAM;
-- **from the runtime** (Microsoft's dotnet-counters, attached once for the whole watch): the .NET heap after its last
-  collection, what the collector holds from Windows, and the gaps inside the heap;
+- **from the runtime** (Microsoft's dotnet-counters, attached once for the whole watch): what the collector holds from
+  Windows, the .NET heap after its last collection, and the gaps inside it (the heap's size counts its gaps, so live objects
+  are the heap less the gaps: Microsoft's runtime metrics reference, learn.microsoft.com/dotnet/core/diagnostics/built-in-metrics-runtime);
 - and, every minute or so, **the memory map**: private memory by block and block size, loaded code files and mapped files.
   A block that keeps growing shows itself between two maps; the one whose size matches the collector's own figure is .NET's.
 
@@ -67,7 +68,8 @@ CAVEAT_ALONE = ("A watch measures memory while the game runs; it is not an in-ga
 LIMITS = ["**Outside .NET** is what the game claimed less what .NET's collector holds: the engine (textures, meshes, sound), "
           "graphics drivers, native code and .NET's own bookkeeping (compiled code, type data) together. Windows cannot say "
           "which mod asked for native memory.",
-          "The .NET heap is as the runtime counted it after its last collection, so it lags the moment by up to one collection.",
+          "The .NET heap is as the runtime counted it after its last collection, so it lags the moment by up to one collection. "
+          "Its size counts the gaps between objects; live objects are that size less the gaps.",
           "Blocks are named by their address only. The block taken to be .NET's heap is the one whose size matches the "
           "collector's own figure; the rest are not named.",
           "Events come from Player.log as it stood when the watch ended. After about 4,000 messages the game stops writing its "
@@ -369,22 +371,27 @@ def watch_report(watch, owner_map, top=15):
     heap = [watch.counter_at(dd.HEAP_SIZE, t) for t in times]
     committed = [watch.counter_at(dd.HEAP_COMMITTED, t) for t in times]
     gaps = [watch.counter_at(dd.HEAP_FRAGMENTATION, t) for t in times]
+    # The runtime's heap size counts the gaps between objects too (Microsoft's metrics reference), so live objects are the rest.
+    live = [h - g if h is not None and g is not None else None for h, g in zip(heap, gaps)]
     outside = [p - c if c is not None else None for p, c in zip(private, committed)]
 
     jumps = _jumps(samples)
     report.lines.append(_verdict(private, jumps))
     if counters and committed[-1] is not None:
         report.lines.append(f"At the end, .NET's collector held **{size(committed[-1])}** of the {size(private[-1])} the game "
-                            f"had claimed, and everything outside .NET came to **{size(outside[-1])}**.")
+                            f"had claimed, and everything outside .NET came to **{size(outside[-1])}**."
+                            + (f" Of .NET's share, {size(live[-1])} was live objects and {size(gaps[-1])} gaps between them."
+                               if live[-1] is not None else ""))
     elif not counters:
         report.lines.append("No .NET figures were recorded, so memory cannot be split into .NET's and the rest.")
 
     rows = [_row("Claimed by the game (private bytes)", private, times),
             _row("In RAM (working set)", [s[2] for s in samples], times)]
     if counters:
-        rows += [_row(".NET heap, live after the last collection", heap, times),
-                 _row(".NET's collector holds from Windows", committed, times),
-                 _row("Gaps inside the .NET heap", gaps, times),
+        rows += [_row(".NET's collector holds from Windows", committed, times),
+                 _row(".NET heap after the last collection, gaps included", heap, times),
+                 _row("Of it, live objects", live, times),
+                 _row("Of it, gaps between objects", gaps, times),
                  _row("Outside .NET (claimed less the collector's)", outside, times)]
     rows.append(_row("Free RAM on the machine", [s[3] for s in samples], times))
     report.section("Average or bursts", Table(["Measure", "Start", "End", "Lowest", "Average", "Highest"], rows))

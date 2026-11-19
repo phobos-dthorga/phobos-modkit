@@ -220,7 +220,11 @@ def stack_report(folder, meta, snapshots, owner_map, notes, frames_shown=DEFAULT
 # ---- Heaps ----
 
 def runtime_figures(events):
-    """{"heap": bytes, "committed": bytes} from counter events: the latest value of each, the heap summed over its generations."""
+    """{"heap", "gaps", "live", "committed": bytes} from counter events: the latest value of each, summed over generations.
+
+    The runtime's heap size counts the gaps between objects (Microsoft's runtime metrics reference), so live objects, which a
+    heap snapshot lists, are the heap less its gaps.
+    """
     latest = {}
     for _, name, tags, value in events:
         latest[(name, tags)] = value
@@ -228,6 +232,10 @@ def runtime_figures(events):
     heap = [v for (name, _), v in latest.items() if name == dd.HEAP_SIZE]
     if heap:
         found["heap"] = int(sum(heap))
+        gaps = [v for (name, _), v in latest.items() if name == dd.HEAP_FRAGMENTATION]
+        if gaps:
+            found["gaps"] = int(sum(gaps))
+            found["live"] = found["heap"] - found["gaps"]
     committed = [v for (name, _), v in latest.items() if name == dd.HEAP_COMMITTED]
     if committed:
         found["committed"] = int(committed[-1])
@@ -261,14 +269,16 @@ def take_heap(pid, folder, tool, run, now=None, label="", counters_tool=None, cl
 
 def partial_note(meta, heap):
     """A bold line when the snapshot holds only part of the heap, else a plain line saying it is whole; "" when unknown."""
-    whole = (meta.get("runtime") or {}).get("heap")
+    runtime = meta.get("runtime") or {}
+    whole = runtime.get("live") or runtime.get("heap")
+    what = "in live objects" if runtime.get("live") else "on its heap"
     if whole:
         share = heap.total_bytes / whole
         if share < WHOLE_SHARE:
             return (f"**This snapshot holds only part of the heap: {size(heap.total_bytes)} of the {size(whole)} the runtime itself "
-                    f"counted ({100 * share:.0f}%).** dotnet-gcdump listed {heap.total_objects:,} objects. Shares below are of "
-                    "what it listed, not of the whole heap.")
-        return f"The runtime counted {size(whole)} on its heap, so this snapshot holds all of it."
+                    f"counted {what} ({100 * share:.0f}%).** dotnet-gcdump listed {heap.total_objects:,} objects. Shares below are "
+                    "of what it listed, not of the whole heap.")
+        return f"The runtime counted {size(whole)} {what}, so this snapshot holds all of it."
     if CEILING_LOW <= heap.total_objects < CEILING_HIGH:
         return (f"**dotnet-gcdump listed {heap.total_objects:,} objects, a round number it seems to stop at, so this snapshot "
                 "most likely holds only part of the heap.** Shares below are of what it listed. Snapshots taken with kit 1.42.0 "

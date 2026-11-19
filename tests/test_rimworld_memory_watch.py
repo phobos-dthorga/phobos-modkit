@@ -116,8 +116,10 @@ class CounterFileTests(unittest.TestCase):
 
     def test_runtime_figures_add_the_generations(self):
         events = [(1, dd.HEAP_SIZE, "gc.heap.generation=gen2", 1e9), (2, dd.HEAP_SIZE, "gc.heap.generation=gen2", 3e9),
-                  (2, dd.HEAP_SIZE, "gc.heap.generation=loh", 2e9), (2, dd.HEAP_COMMITTED, "", 6e9)]
-        self.assertEqual({"heap": 5 * 10 ** 9, "committed": 6 * 10 ** 9}, snap.runtime_figures(events))
+                  (2, dd.HEAP_SIZE, "gc.heap.generation=loh", 2e9), (2, dd.HEAP_COMMITTED, "", 6e9),
+                  (2, dd.HEAP_FRAGMENTATION, "gc.heap.generation=gen2", 1e9), (2, dd.HEAP_FRAGMENTATION, "gc.heap.generation=loh", 0.5e9)]
+        self.assertEqual({"heap": 5 * 10 ** 9, "gaps": 15 * 10 ** 8, "live": 35 * 10 ** 8, "committed": 6 * 10 ** 9},
+                         snap.runtime_figures(events))
 
 
 class PartialHeapTests(unittest.TestCase):
@@ -127,7 +129,11 @@ class PartialHeapTests(unittest.TestCase):
     def test_less_than_the_runtime_counted_is_partial(self):
         note = snap.partial_note({"runtime": {"heap": 6 * GB}}, self.heap(667 * 10 ** 6, 10_000_003))
         self.assertIn("**This snapshot holds only part of the heap", note)
-        self.assertIn("(11%)", note)
+        self.assertIn("counted on its heap (11%)", note)
+
+    def test_live_objects_are_compared_when_the_gaps_are_known(self):
+        note = snap.partial_note({"runtime": {"heap": 8 * GB, "gaps": 3 * GB, "live": 5 * GB}}, self.heap(667 * 10 ** 6, 10_000_003))
+        self.assertIn("of the 5.0 GB the runtime itself counted in live objects (13%)", note)
 
     def test_the_whole_heap_says_so(self):
         note = snap.partial_note({"runtime": {"heap": 100 * 10 ** 6}}, self.heap(98 * 10 ** 6, 5000))
@@ -218,7 +224,9 @@ class WatchTests(unittest.TestCase):
         self.assertIn("**It climbed 2.00 GB in all, mostly in jumps**: 1 jump", text)
         self.assertIn("it ended 2.00 GB higher than it began", text)
         self.assertIn("At the end, .NET's collector held **5.00 GB** of the 12.00 GB", text)
-        self.assertIn("| .NET heap, live after the last collection | 3.50 GB | 4.00 GB |", text)
+        self.assertIn("Of .NET's share, 3.80 GB was live objects and 200.0 MB gaps between them.", text)
+        self.assertIn("| .NET heap after the last collection, gaps included | 3.50 GB | 4.00 GB |", text)
+        self.assertIn("| Of it, live objects | 3.30 GB | 3.80 GB |", text)
         self.assertIn('| 20:00:20 to 20:00:25 | +2.00 GB | 0 | +2.00 GB | save "PG15" loaded at 20:00:22; 2 errors logged |', text)
         self.assertNotIn("PG14", text)
         self.assertIn("| 0x7f0000000000 | 5.00 GB | 4.00 GB | 5.00 GB | +1.00 GB | .NET's heap (its size matches the collector's figure) |", text)

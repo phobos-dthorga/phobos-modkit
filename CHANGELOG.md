@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.45.1] - 2026-11-19
+
+The first memory watch with the runtime's counters (19 November 2026) showed the .NET heap labelled wrongly: its size counts the gaps between objects.
+
+### Fixed
+
+- rimworld-perf watch called the runtime's whole heap "live". Its size counts the gaps between objects too (Microsoft's runtime metrics reference), so the report now shows the heap with its gaps, then live objects and gaps apart, and its closing line says how .NET's share splits.
+- rimworld-perf heap compares its snapshot with the runtime's live objects (the heap less its gaps), since a snapshot lists objects only; it had compared with the heap and gaps together, so a snapshot looked more partial than it was.
 ## [1.45.0] - 2026-11-19
 
 The owner said yes (19 November 2026) to a Decisions page in D'thorga Companion, gathering the choices agents made for them to revise.
