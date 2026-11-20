@@ -640,7 +640,10 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
         elif args.report in ("stack", "stack-report", "heap", "heap-report", "heap-compare"):
             report = _snapshots(args, environ, settings_file, run, now or datetime.now(), sleep)
         elif args.report == "look-serve":
-            pid = _pid(args, run, "RimWorld is not running. Load the save you want to look inside first.")
+            try:
+                pid = _pid(args, run, "RimWorld is not running. Load the save you want to look inside first.")
+            except PerfError as error:  # a program reads one JSON line first, refusals included
+                return look.refuse(str(error), out)
             _, heaps_root = snap.roots(args.cache, environ, settings_file)
             return look.serve(pid, look.runtime_folder(args.game, environ, settings_file), heaps_root,
                               lambda names: _owners(names, args, environ, settings_file), args.label or "", args.limit_seconds,

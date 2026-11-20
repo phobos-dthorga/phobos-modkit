@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.65.1] - 2026-11-21
+
+A program reading look-serve reads one JSON line first; with the game not running it got the error as Markdown instead.
+
+### Fixed
+
+- rimworld-perf look-serve says that the game is not running, or that no snapshot could be taken, in its first line's own shape
+  ({"ready": false, "error": ...}), as it already did for a refused snapshot.
+
 ## [1.65.0] - 2026-11-21
 
 The owner asked for debugging tools in D'thorga Companion that attach to a game and show "variables in memory" and the

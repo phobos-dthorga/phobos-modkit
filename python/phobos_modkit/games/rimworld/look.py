@@ -66,6 +66,14 @@ def owners_data(heap, owner_map, top):
     return {"owners": by_owner, "types": types, "typeCount": len(heap.types)}
 
 
+def refuse(message, stdout=None):
+    """look-serve's one line when no snapshot can be taken (the game is not running), in the shape its first line always has."""
+    stdout = stdout or sys.stdout
+    stdout.write(json.dumps({"ready": False, "error": message}) + "\n")
+    stdout.flush()
+    return 1
+
+
 def serve(pid, folder, heaps_root, owners_for, label="", limit_seconds=hr.LIMIT_SECONDS, top=200, stdin=None, stdout=None,
           session_class=hr.Session, now=None):
     """Hold a snapshot and answer one JSON request a line from stdin, one answer a line on stdout (the reader's requests). An
@@ -79,8 +87,7 @@ def serve(pid, folder, heaps_root, owners_for, label="", limit_seconds=hr.LIMIT_
     try:
         session = session_class(pid, folder, DESCRIBE, limit_seconds=limit_seconds)
     except (hr.LookError, hr.HeapReaderError, OSError) as error:
-        say({"ready": False, "error": str(error)})
-        return 1
+        return refuse(str(error), stdout)
     try:
         say(session.ready)
         for line in stdin:

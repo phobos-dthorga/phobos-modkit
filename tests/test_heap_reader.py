@@ -19,6 +19,7 @@ from phobos_modkit import heap_reader as hr
 from phobos_modkit import native
 from phobos_modkit.dotnet_snapshots import heap_owners
 from phobos_modkit.games.rimworld import look
+from phobos_modkit.games.rimworld import perf_cli
 from phobos_modkit.games.rimworld import perf_snapshots as snap
 from phobos_modkit.report import render_markdown
 from phobos_modkit.sampling import MOD, UNKNOWN, Owner
@@ -129,6 +130,14 @@ class Relay(unittest.TestCase):
         self.assertIn("garbage collector has not reclaimed yet", text)
         self.assertNotIn("forced a full garbage collection", text)
         self.assertNotIn("PerfView", text)
+
+    def test_a_game_not_running_is_one_json_line_too(self):
+        out = io.StringIO()
+        code = perf_cli.main(["look-serve"], environ={}, out=out,
+                             run=lambda *a, **k: subprocess.CompletedProcess(a, 0, "", ""))
+        answer = json.loads(out.getvalue())
+        self.assertEqual((code, answer["ready"]), (1, False))
+        self.assertIn("not running", answer["error"])
 
     def test_a_refused_snapshot_is_one_line_saying_why(self):
         class Refusing:
