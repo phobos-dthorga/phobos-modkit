@@ -10,6 +10,21 @@ rimworld-perf installs Microsoft's [dotnet-trace](https://www.nuget.org/packages
 [dotnet-counters](https://www.nuget.org/packages/dotnet-counters) (MIT, part of [dotnet/diagnostics](https://github.com/dotnet/diagnostics))
 with `dotnet tool install` into the kit's build folder on first use, and runs them. Nothing of theirs is in this repository.
 
+## The heap reader's package (dotnet/PhobosModKit.Heap)
+
+The kit's one C# package reference (owner's yes, 20 November 2026), restored from NuGet when the reader is built; nothing of it is
+in this repository, and an installer's bundle carries the built files.
+
+| Package | Licence | Why it is used |
+| --- | --- | --- |
+| [Microsoft.Diagnostics.Runtime](https://www.nuget.org/packages/Microsoft.Diagnostics.Runtime) 4.2.751201 (ClrMD, [microsoft/clrmd](https://github.com/microsoft/clrmd)) | MIT | Reads a running .NET program's memory from a snapshot, through the program's own memory-reading library |
+
+ClrMD brings Microsoft's own packages with it, for fetching symbols and logging: Azure.Core, Azure.Identity, Microsoft.Identity.Client
+and its extensions, Microsoft.IdentityModel.Abstractions, Microsoft.Diagnostics.NETCore.Client, Microsoft.Security.AntiSSRF,
+System.ClientModel, System.Memory.Data, System.Security.Cryptography.ProtectedData and the Microsoft.Extensions abstractions
+(`dotnet list package --include-transitive`, 20 November 2026). Their NuGet pages give the MIT licence; each was not checked
+one by one.
+
 ## Direct dependencies of xml-index
 
 | Crate | Licence | Why it is used |

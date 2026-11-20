@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 import support  # noqa: F401  (puts the package on the path)
-from phobos_modkit import assemblies, native, programs
+from phobos_modkit import assemblies, heap_reader, native, programs
 
 
 def touch(path, data=b"x"):
@@ -48,7 +48,7 @@ class ReadyBuiltTests(unittest.TestCase):
             raise AssertionError("nothing should be built when the reader came ready-built")
         self.assertEqual(assemblies.ensure_reader(self.environ, run=refuse), reader)
 
-    def test_bundle_builds_both_and_stamps_the_folder_last(self):
+    def test_bundle_builds_every_tool_and_stamps_the_folder_last(self):
         commands = []
 
         def run(command, **kwargs):
@@ -57,13 +57,14 @@ class ReadyBuiltTests(unittest.TestCase):
                 touch(self.build / "release" / native.program_name("xml-index"), b"indexer")
             if command[:2] == ["dotnet", "publish"]:
                 folder = Path(command[command.index("-o") + 1])
-                touch(folder / native.program_name(assemblies.READER_NAME), b"reader")
+                touch(folder / native.program_name(Path(command[2]).stem), b"reader")
             return subprocess.CompletedProcess(command, 0, "", "")
         out = Path(self.temp.name) / "out"
         made = programs.bundle(out, self.environ, run=run, which=lambda name: name)
-        self.assertEqual([c[:2] for c in commands], [["cargo", "build"], ["dotnet", "publish"]])
+        self.assertEqual([c[:2] for c in commands], [["cargo", "build"], ["dotnet", "publish"], ["dotnet", "publish"]])
         self.assertIn(native.program_name("xml-index"), made["files"])
         self.assertIn(f"assemblies/{native.program_name(assemblies.READER_NAME)}", made["files"])
+        self.assertIn(f"heap/{native.program_name(heap_reader.TOOL.project)}", made["files"])
         stamp = json.loads((out / programs.STAMP).read_text(encoding="utf-8"))
         self.assertEqual(stamp["files"], made["files"])
 

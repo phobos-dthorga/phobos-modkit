@@ -5,8 +5,8 @@ release audit's B7 asks that each tool say what it needs). It only looks: it fin
 where settings name them, and runs none of them. A game's own programs come from its adapter (`games/<game>/programs.py`, a
 `PROGRAMS` list), so the core names no game.
 
-`programs bundle --out FOLDER` builds the kit's own compiled tools (the Rust XML indexer and the .NET assembly reader) and copies
-them into one folder, for an installer to carry beside the kit (the release audit's A4): a PC that installs them needs neither Rust
+`programs bundle --out FOLDER` builds the kit's own compiled tools (the Rust XML indexer and the .NET assembly and heap readers) and
+copies them into one folder, for an installer to carry beside the kit (the release audit's A4): a PC that installs them needs neither Rust
 nor the .NET SDK to read a save, and only the .NET runtime to read assemblies. The kit looks in that folder before building
 anything (`native.bundled_dir`).
 """
@@ -24,7 +24,8 @@ import subprocess
 import sys
 from typing import Callable
 
-from . import __version__, assemblies, native
+from . import __version__, assemblies, heap_reader, native
+from .dotnet_tools import ToolBuildError
 from .manifest import READS, WRITES
 from .report import Report, Table, envelope_text, home_redactor, keep, render_markdown
 
@@ -69,14 +70,21 @@ def _xml_index(environ):
     return Found(True, str(path), "came with the installer" if bundled else "built on this PC")
 
 
-def _reader(environ):
-    bundled = assemblies.bundled_reader(environ)
-    if bundled is not None:
-        return Found(True, str(bundled), "came with the installer; runs with the .NET 10 runtime")
-    built = assemblies.reader_path(environ)
-    if built.is_file():
-        return Found(True, str(built), "built on this PC")
-    return Found(False, None, "not built: the first use builds it with the .NET SDK, when it is installed")
+def _dotnet_tool(tool):
+    """How one of the kit's C# tools is found: as an installer brought it, as built here, or not yet built."""
+    def find(environ):
+        bundled = tool.bundled_path(environ)
+        if bundled is not None:
+            return Found(True, str(bundled), "came with the installer; runs with the .NET 10 runtime")
+        built = tool.built_path(environ)
+        if built.is_file():
+            return Found(True, str(built), "built on this PC")
+        return Found(False, None, "not built: the first use builds it with the .NET SDK, when it is installed")
+    return find
+
+
+_reader = _dotnet_tool(assemblies.TOOL)
+DOTNET_TOOLS = (assemblies.TOOL, heap_reader.TOOL)     # what a bundle carries, each in its own folder
 
 
 def dotnet_versions(dotnet):
@@ -138,7 +146,11 @@ CORE = [
             "Reading .NET code without running it: the Code map's C# links, Harmony patches, what our code names",
             "Comes with D'thorga Companion's installer and needs the .NET 10 runtime; or the .NET 10 SDK, and the kit builds it",
             _reader),
-    Program("dotnet", ".NET 10", "Running the assembly reader; building it and the diagnostics tools needs the SDK",
+    Program("heap-reader", "The kit's heap reader",
+            "Looking inside a running game: what is in its memory, any object's values, and why something is still there",
+            "Comes with D'thorga Companion's installer and needs the .NET 10 runtime; or the .NET 10 SDK, and the kit builds it",
+            _dotnet_tool(heap_reader.TOOL)),
+    Program("dotnet", ".NET 10", "Running the assembly and heap readers; building them and the diagnostics tools needs the SDK",
             "Microsoft, https://dotnet.microsoft.com/download (the runtime, or the SDK to build)", _dotnet),
     Program("dotnet-diagnostics", "Microsoft's .NET diagnostics tools",
             "Watching a running game's memory, and where it spends its time",
@@ -182,7 +194,7 @@ def status(environ=None):
 
 
 def bundle(out, environ=None, run=subprocess.run, which=shutil.which):
-    """Builds the kit's compiled tools and copies them into `out`: `xml-index[.exe]` and `assemblies/`. Needs cargo and the .NET
+    """Builds the kit's compiled tools and copies them into `out`: `xml-index[.exe]`, `assemblies/` and `heap/`. Needs cargo and the .NET
     SDK on the PC that builds. Writes `bundle.json` (the kit's version, and each file) last, so a half-made folder has none."""
     environ = os.environ if environ is None else environ
     out = Path(out)
@@ -196,9 +208,10 @@ def bundle(out, environ=None, run=subprocess.run, which=shutil.which):
     out.mkdir(parents=True, exist_ok=True)
     if indexer.is_file():
         shutil.copy2(indexer, out / indexer.name)
-    reader = out / assemblies.BUNDLED_FOLDER
-    shutil.rmtree(reader, ignore_errors=True)
-    assemblies.publish_reader(reader, environ, run, which)
+    for tool in DOTNET_TOOLS:
+        folder = out / tool.folder
+        shutil.rmtree(folder, ignore_errors=True)
+        tool.publish(folder, environ, run, which)
     files = sorted(str(p.relative_to(out)).replace("\\", "/") for p in out.rglob("*") if p.is_file() and p.name != STAMP)
     (out / STAMP).write_text(json.dumps({"format": BUNDLE_FORMAT, "kit": __version__, "files": files}, indent=2) + "\n",
                              encoding="utf-8", newline="\n")
@@ -229,7 +242,7 @@ def main(argv=None, out=None, environ=None):
     if args.report == "bundle":
         try:
             made = bundle(args.out, environ)
-        except (native.ToolMissing, assemblies.ReaderError) as failed:
+        except (native.ToolMissing, ToolBuildError) as failed:
             out.write((envelope_text("programs", Report("Not bundled"), redact, {"ok": False, "refusal": str(failed)})
                        if args.json else f"Not bundled: {failed}") + "\n")
             return EXIT_FAILED

@@ -185,3 +185,9 @@ cannot be made again.
   matched only 66.7% until Harmony 3's names were read, then all but 2% once the alerts column, sound and the engine's frame
   drawing were named: the game's loop methods had Harmony patches that day and not the day before. The loading patterns saw
   little time there and are the least checked.
+
+## Looking inside (1.65.0)
+
+`look`, `look-kind`, `look-why` and `look-serve` read a Windows snapshot of the game with the kit's heap reader instead of
+dotnet-gcdump: every object with no limit on how many, any object's values, and why something is still in memory, without forcing a
+collection. See [the heap reader](heap-reader.md).

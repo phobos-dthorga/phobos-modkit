@@ -22,6 +22,9 @@ questions in a short summary instead of a long read. One shared home for code th
 - **rimworld-perf (1.13.0) records a running RimWorld 1.7 from outside** with Microsoft's dotnet-trace and dotnet-counters, which
   its first recording installs (needs the .NET SDK); save the game first, as attaching can hitch it for a moment. See
   [rimworld-perf](docs/rimworld-perf.md).
+- **The heap reader (1.65.0) looks inside a running game** from a Windows snapshot (a pause of about half a second): every
+  object by type and by mod, any object's values, what holds it and why it is still in memory. Ask before each snapshot and save
+  first. See [the heap reader](docs/heap-reader.md).
 - **The Harmony patch reader needs the .NET SDK** (10 or newer) for its first build, into the same folder outside the
   repository as the Rust tools.
 - **The save index needs one Rust build:** add `--build-indexer` to its first command, with Rust from
@@ -64,6 +67,7 @@ python -m phobos_modkit rimworld-startup                 load-time history and t
 python -m phobos_modkit rimworld-perf record             where the running game spends its time, by mod; also report, mod, compare
 python -m phobos_modkit rimworld-perf stack              a frozen game: where every thread is stuck; heap for memory by mod
 python -m phobos_modkit rimworld-perf watch              the game's memory over time, without pausing it: bursts or a climb, .NET's or not
+python -m phobos_modkit rimworld-perf look-why TYPE      inside the running game: why something is still in memory; look, look-kind too
 python -m phobos_modkit rimworld-readiness               which active mods are ready for a game version
 python -m phobos_modkit code --each-in DIR show Type.Member   a C# member's source by name; also find, outline, refs
 python -m phobos_modkit code compare OLD.dll NEW.dll   what changed between two builds, member by member
@@ -126,6 +130,7 @@ in order of expected saving.
 | 26 | [Screen notes](docs/screen-notes.md) | What the owner flagged as looking wrong in D'thorga Companion with one key: the page's picture, its address and their words, for agent sessions to read at the start; marked dealt with, never deleted | Python | Built: 1.41.0 |
 | 25 | [Make-up](docs/makeup.md) | What a repository is made of: every committed file by product, kind, lines and size; how that grew day by day; where the work goes; and what each product holds for players (Defs by type, pictures, sounds, text keys) | Python, with git | Built: 1.39.0 |
 | 24 | [Pins](docs/pins.md) | Which version of this kit each repository pins, and what moving its pin would bring, by the kit's changelog | Python, with git | Built: 1.38.0 |
+| 32 | [The heap reader](docs/heap-reader.md) (RimWorld 1.7 first) | Inside a running .NET game from a snapshot: every object by type and by mod, one kind's objects described, any object with every value it holds, what holds it, and paths from a root that say why it is still in memory; a held snapshot for a program's page | C# (Microsoft's ClrMD), Python | Built: 1.65.0 |
 | 31 | [Programs](docs/programs.md) | Which other programs the tools use (git, .NET, ilspycmd, Steam, a game's own), whether each is on this PC, what needs it and where to get it; builds the kit's compiled tools ready for an installer to carry | Python | Built: 1.62.0 |
 | 9 | [Workshop publishing](docs/workshop-publishing.md) | Release notes from changelogs, offline staging, the owner-run uploader, pulling Steam's state back | Python | Built: 0.10.0, from phobos-ostranauts |
 
@@ -179,6 +184,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/claims.md](docs/claims.md) | Claims: naming a thing, the board file and its lock |
 | [docs/records.md](docs/records.md) | Records: what is copied, where, and what each copy holds |
 | [docs/programs.md](docs/programs.md) | Programs: what status lists and how each is found, and what bundle makes |
+| [docs/heap-reader.md](docs/heap-reader.md) | The heap reader: looking inside a running game from a snapshot, what it answers, which memory-reading library it trusts, and its limits |
 | [docs/screen-notes.md](docs/screen-notes.md) | Screen notes: a note's folder, its files, and resolving one |
 | [docs/gate.md](docs/gate.md) | The gate: a repository's checks from config/gate.json, and what each output parser keeps |
 | `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `sampling.py` and `dotnet_diagnostics.py` (sampled call stacks and Microsoft's diagnostics tools), `query.py` (report filters), `steam/` (Workshop research; `publish/` for publishing), `release/` (changelogs, constants, history screen), `gate/` (the check runner and its output parsers), `code/` (the C# declaration scanner and index), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema), `games/ostranauts/` (publishing only) |

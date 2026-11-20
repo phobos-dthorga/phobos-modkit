@@ -17,11 +17,19 @@
     rimworld-perf watch-status               a running watch as it stands (for a program to read every few seconds)
     rimworld-perf watch-mark "reloading now"  your own words beside the running watch's figures
     rimworld-perf watch-stop                 end the running watch early, from another console
+    rimworld-perf look --label "day 40"      inside the running game from a snapshot: every object by type and by mod
+    rimworld-perf look-kind Verse.Pawn --open   one kind's objects, each described (--match TEXT, --largest)
+    rimworld-perf look-why System.Xml.XmlDocument   why a kind is still in memory: paths from a root to its largest
+    rimworld-perf look-serve                 hold a snapshot and answer JSON requests a line at a time (for a program's page)
 
 Recording attaches Microsoft's dotnet-trace and dotnet-counters to the game through its .NET diagnostics pipe; stack uses
 dotnet-stack and heap dotnet-gcdump the same way, and watch dotnet-counters with Windows' own figures. Nothing is installed in the
 game and nothing of it is changed, but heap forces a full garbage collection, which pauses the game until it is done. The first use of each tool installs it (a pinned version) into the
 kit's build folder, which needs the .NET SDK. Everything is kept in the kit's cache, outside every repository.
+
+look takes a Windows snapshot of the game instead (a pause of about half a second) and reads it with the kit's heap reader: every
+object, with no limit on how many, but garbage not yet collected included. It reads the game's own memory-reading library from its
+install folder, and nothing else; nothing is written to the game.
 """
 from __future__ import annotations
 
@@ -46,13 +54,15 @@ from ...manifest import READS, RUNS, WRITES
 from ...progress import Progress
 from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
 from ...sampling import CPU, MOD, UNKNOWN, Recording, SamplingError, index_speedscope, modules, read_counters, write_counters, write_owners
+from ... import heap_reader as hreader
+from . import look
 from . import perf
 from . import perf_snapshots as snap
 from . import perf_watch as pw
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 REPORTS = ("report", "record", "index", "mod", "compare", "list", "stack", "stack-report", "heap", "heap-report", "heap-compare",
-           "watch", "watch-report", "watch-status", "watch-stop", "watch-mark")
+           "watch", "watch-report", "watch-status", "watch-stop", "watch-mark", "look", "look-kind", "look-why", "look-serve")
 MEMORY_SURFACE = "memory-watch"     # D'thorga Companion's Memory page finds the watch's commands by this, never by the game's name
 CACHE_FOLDER = "rimworld-perf"
 INDEX_NAME = "index.sqlite"
@@ -140,6 +150,25 @@ def _parser():
     wm.add_argument("text", help='what you are doing or about to do, such as "reloading now" (at most 200 characters)')
     wm.add_argument("--watch", help="its ID or label; the one running, else the newest, when left out")
     wm.add_argument("--at", type=float, help="the moment it names, in seconds since 1970; now when left out")
+    lk = sub.add_parser("look", parents=[common], help="inside the running game from a snapshot: every object by type and by mod")
+    lk.add_argument("--label", help="a few words to find it by, such as the in-game day")
+    lk.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
+    lt = sub.add_parser("look-kind", parents=[common], help="one kind's objects in the running game, each described")
+    lt.add_argument("type", help="the type's full name, as look lists it (Verse.Pawn)")
+    lt.add_argument("--match", help="only objects whose description holds this text (a pawn's name, a defName)")
+    lt.add_argument("--largest", action="store_true", help="largest first")
+    lt.add_argument("--open", action="store_true", help="also show the first one with every value it holds")
+    lt.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
+    lw = sub.add_parser("look-why", parents=[common], help="why a kind is still in memory: paths from a root to its largest objects")
+    lw.add_argument("type", help="the type's full name, as look lists it (System.Xml.XmlDocument)")
+    lw.add_argument("--sample", type=int, default=hreader.WHY_SAMPLE,
+                    help=f"paths to show, each to a different object (default {hreader.WHY_SAMPLE})")
+    lw.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
+    lv = sub.add_parser("look-serve", parents=[common], help="hold a snapshot and answer JSON requests a line at a time, for a program")
+    lv.add_argument("--label", help="a few words to keep its overview by")
+    lv.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
+    lv.add_argument("--limit-seconds", type=int, default=hreader.LIMIT_SECONDS,
+                    help=f"let the snapshot go after this long (default {hreader.LIMIT_SECONDS}: it costs memory while held)")
     return p
 
 
@@ -499,6 +528,33 @@ def _snapshots(args, environ, settings_file, run, now, sleep):
     return snap.heap_compare((first.name, second.name), before, after, owners, args.top, (meta_a, meta_b))
 
 
+def _look(args, environ, settings_file, run, now):
+    """(report, data) for look, look-kind and look-why: one snapshot, one request, then let go."""
+    pid = _pid(args, run, "RimWorld is not running. Load the save you want to look inside first.")
+    folder = look.runtime_folder(args.game, environ, settings_file)
+    if args.report == "look":
+        _, heaps_root = snap.roots(args.cache, environ, settings_file)
+        ready, answers = hreader.run_requests(pid, folder, [{"op": "overview"}], look.DESCRIBE, environ)
+        kept, heap = look.save_overview(heaps_root, ready, hreader.answer_data(answers[0]), args.label, now)
+        meta = snap.meta_of(kept)
+        owners, notes = _owners(sorted({t.module for t in heap.types}), args, environ, settings_file)
+        return snap.heap_report(kept, meta, heap, owners, notes, args.top), None
+    if args.report == "look-kind":
+        request = {"op": "kind", "type": args.type, "take": max(1, args.top), "match": args.match or "",
+                   "sort": "size" if args.largest else "", "open": bool(args.open)}
+        _, answers = hreader.run_requests(pid, folder, [request], look.DESCRIBE, environ)
+        data = dict(hreader.answer_data(answers[0]), sorted=args.largest)
+        report = hreader.kind_report(f"rimworld-perf: look-kind {args.type}", data)
+        if data.get("opened"):
+            opened = hreader.object_report("", data["opened"])
+            report.section("The first one, in full", *[block for section in opened.sections for block in section.blocks])
+        return report, data
+    _, answers = hreader.run_requests(pid, folder, [{"op": "why", "type": args.type, "sample": max(1, args.sample)}],
+                                 look.DESCRIBE, environ)
+    data = hreader.answer_data(answers[0])
+    return hreader.why_report(f"rimworld-perf: look-why {args.type}", data), data
+
+
 def _watch(args, environ, settings_file, run, popen, now, sleep, clock):
     """The report for watch and watch-report."""
     where = pw.root(args.cache, environ, settings_file)
@@ -583,6 +639,14 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
                 report.section("Memory watches, newest first", Table(["Watch", "Started", "Samples", "Label"], watches))
         elif args.report in ("stack", "stack-report", "heap", "heap-report", "heap-compare"):
             report = _snapshots(args, environ, settings_file, run, now or datetime.now(), sleep)
+        elif args.report == "look-serve":
+            pid = _pid(args, run, "RimWorld is not running. Load the save you want to look inside first.")
+            _, heaps_root = snap.roots(args.cache, environ, settings_file)
+            return look.serve(pid, look.runtime_folder(args.game, environ, settings_file), heaps_root,
+                              lambda names: _owners(names, args, environ, settings_file), args.label or "", args.limit_seconds,
+                              stdout=out)
+        elif args.report in ("look", "look-kind", "look-why"):
+            report, data = _look(args, environ, settings_file, run, now or datetime.now())
         elif args.report in ("watch", "watch-report"):
             report, data = _watch(args, environ, settings_file, run, popen, now or datetime.now(), sleep, clock)
         elif args.report == "compare":
@@ -609,7 +673,8 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
             for note in notes:
                 if note not in report.lines:
                     report.lines.insert(1, note)
-    except (PerfError, SamplingError, SnapshotError, snap.SnapshotsError, dd.DiagnosticsError, pw.WatchError, pm.MemoryError_) as error:
+    except (PerfError, SamplingError, SnapshotError, snap.SnapshotsError, dd.DiagnosticsError, pw.WatchError, pm.MemoryError_,
+            hreader.LookError, hreader.HeapReaderError) as error:
         report, code = Report("rimworld-perf: error", [str(error)]), EXIT_FAILED
         data = {"ok": False, "refusal": str(error)}
     print(envelope_text("rimworld-perf", report, redact, data) if args.json else render_markdown(report, redact), file=out)
@@ -624,6 +689,9 @@ CACHE_POLICIES = [{"folder": CACHE_FOLDER,
                    "aged": "a heap snapshot of the game, {days} days old; it cannot be taken again, so compare against it first if memory matters"},
                   {"folder": pw.WATCH_FOLDER,
                    "aged": "a memory watch of the game, {days} days old; it cannot be taken again, so compare against it first if memory matters"}]
+
+LOOK_NOTE = ("Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own "
+             "memory-reading library from its install folder; nothing is written to the game.")
 
 MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
             "note": "Attaches Microsoft's dotnet-trace, dotnet-counters, dotnet-stack or dotnet-gcdump to the running game; it changes nothing in it.",
@@ -649,4 +717,13 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
                    "note": "Writes a stop file into the running watch's own folder in the kit's cache; the watch ends at its next look."},
     "watch-mark": {"effect": WRITES, "surface": MEMORY_SURFACE,
                    "note": "Adds the owner's words to the watch's own database in the kit's cache; nothing else."},
+    "look": {"effect": RUNS, "surface": look.SURFACE, "question": "What is in my running game's memory, by type and by mod?",
+             "note": LOOK_NOTE},
+    "look-kind": {"effect": RUNS, "surface": look.SURFACE, "question": "Which objects of one kind are in my running game?",
+                  "note": LOOK_NOTE},
+    "look-why": {"effect": RUNS, "surface": look.SURFACE, "question": "Why is something still in my running game's memory?",
+                 "note": LOOK_NOTE},
+    "look-serve": {"effect": RUNS, "surface": look.SURFACE,
+                   "note": LOOK_NOTE + " Holds the snapshot and answers one JSON request a line on standard input until it closes "
+                           "or the time limit passes; for a program's page, not a person's console."},
 }}

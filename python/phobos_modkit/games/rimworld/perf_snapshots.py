@@ -45,6 +45,12 @@ HEAP_LIMITS = ["Memory counts under the type that is it: the arrays and strings 
                ".NET collection names a mod's type (a list or dictionary of that mod's things), it is put down to that mod.",
                "What holds what is not in this report: open the .gcdump file kept beside it in PerfView or Visual Studio for "
                "the paths from the roots."]
+SNAPSHOT_CAVEAT = ("Read from a Windows snapshot of the game (rimworld-perf look): it paused only while the snapshot was taken, "
+                   "then ran on, and nothing was forced or written. It measures memory; it is not an in-game test.")
+SNAPSHOT_LIMITS = ["A snapshot does not sweep the heap first, so these counts include objects nothing uses any more that the "
+                   "garbage collector has not reclaimed yet. look-why says whether a kind is still held, and by what.",
+                   "Memory counts under the type that is it: the arrays and strings a mod's objects hold count as .NET's. Where a "
+                   ".NET collection names a mod's type (a list or dictionary of that mod's things), it is put down to that mod."]
 LOSSY_NOTE = ("dotnet-gcdump warned that this runtime can drop events on a large heap, so the counts can come out low and differ "
               "between two heaps for that reason alone. Trust a difference that repeats.")
 LEAK_NOTE = ("A heap that keeps growing across several snapshots of the same game, minutes apart and with the same thing on "
@@ -311,8 +317,14 @@ def heap_report(folder, meta, heap, owner_map, notes, top=15):
     partial = partial_note(meta, heap)
     if partial:
         report.lines.append(partial)
-    report.lines.append(HEAP_CAVEAT)
-    if meta.get("seconds") is not None:
+    snapshot = meta.get("method") == "snapshot"
+    report.lines.append(SNAPSHOT_CAVEAT if snapshot else HEAP_CAVEAT)
+    if snapshot and meta.get("snapshot_ms") is not None:
+        report.lines.append(f"The game paused for {int(meta['snapshot_ms']):,} ms while the snapshot was taken; reading it took "
+                            f"{float(meta.get('seconds') or 0):,.0f} s in all.")
+        if meta.get("free_bytes"):
+            report.lines.append(f"Free space between objects, not counted above: {size(int(meta['free_bytes']))}.")
+    elif meta.get("seconds") is not None:
         report.lines.append(f"Taking it took {float(meta['seconds']):,.0f} s; the game was paused for most of that.")
     if meta.get("runtime_failed"):
         report.lines.append(f"The runtime's own count could not be read: {meta['runtime_failed']}")
@@ -339,8 +351,9 @@ def heap_report(folder, meta, heap, owner_map, notes, top=15):
             biggest = max((t for t in heap.types if owners[(t.type, t.module)][0] == owner), key=lambda t: t.bytes)
             rows.append((owner.name, size(totals[owner][0]), biggest.type, size(biggest.bytes)))
         report.section("Each mod's largest type", Table(["Mod", "All its types", "Largest type", "Its bytes"], rows, len(mods)))
-    report.lines.append(f"The heap file is kept for PerfView or Visual Studio: {Path(folder) / HEAP_FILE}")
-    report.section("What a heap snapshot cannot say", Bullets(HEAP_LIMITS))
+    if (Path(folder) / HEAP_FILE).is_file():
+        report.lines.append(f"The heap file is kept for PerfView or Visual Studio: {Path(folder) / HEAP_FILE}")
+    report.section("What a heap snapshot cannot say", Bullets(SNAPSHOT_LIMITS if snapshot else HEAP_LIMITS))
     return report
 
 

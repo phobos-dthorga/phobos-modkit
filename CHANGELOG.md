@@ -4,6 +4,42 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.65.0] - 2026-11-21
+
+The owner asked for debugging tools in D'thorga Companion that attach to a game and show "variables in memory" and the
+relationships between things, and chose looking inside a snapshot of the running game first (20 Nov 2026).
+
+### Added
+
+- **The heap reader looks inside a running .NET game** (docs/heap-reader.md): a Windows snapshot, a pause of about half a second
+  (431 to 470 ms on the owner's colony), then every object by type, one kind's objects each described, any object with every value
+  it holds (enums by name, structs opened, lists and dictionaries as their items), what holds it, and paths from a root that say
+  why it is still in memory, or that nothing holds it. No limit on objects: 27.4 million read in 17.6 s. Read-only.
+- dotnet/PhobosModKit.Heap, the reader, on Microsoft's ClrMD 4.2.751201 (MIT): the kit's one C# package, by the owner's yes.
+  It loads only the memory-reading library beside the running program's own coreclr.dll in the install the caller names;
+  RimWorld 1.7's (Waylith) is not signed by Microsoft, so that folder check stands in for the signature check.
+- heap_reader: run_requests for a command line (one snapshot, then let go), Session for a program (held, at most ten minutes, the
+  owner's choice), and the reports.
+- rimworld-perf look (every object by type and by mod, kept beside the gcdump heaps so heap-report and heap-compare read it),
+  look-kind (with --open, --match, --largest), look-why, and look-serve, which holds a snapshot and answers one JSON request a
+  line for D'thorga Companion; manifest surface look-inside.
+- programs lists the heap reader, and bundle carries it ready-built in heap/.
+
+### Changed
+
+- dotnet_tools: how the kit's C# tools are built, published and found, once; the assembly reader uses it, with the same names
+  as before.
+- A heap report from a snapshot says what a snapshot is: no collection forced, garbage included, how long the game paused, the
+  free space; it no longer points to a gcdump file it does not have.
+- AGENTS.md: two written exceptions, the owner's of 20 Nov 2026: ClrMD as the one C# package, and loading a game's own
+  memory-reading library (never a mod's file); reading a game's memory is reading, asked for before every snapshot.
+
+### First real use
+
+- On the owner's colony, 453 MB of XML (9.8 million objects, 10,499 documents) was live: every mod's patch list, which the game
+  clears after loading, read again by Vanilla Expanded Framework's settings code, so the game loads every patch file again and
+  keeps it. Recorded in phobos-rimworld.
+
 ## [1.64.0] - 2026-11-20
 
 ### Changed

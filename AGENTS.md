@@ -55,10 +55,15 @@ session**; `CLAUDE.md` imports it. The rules below are this repository's own, an
   named, Workshop ones included, with RimSort's own todds preset, only on request and never while the game runs; it
   never deletes a file. **One more, for Windows' crash dump setting** (owner's go-ahead, 18 November 2026): `windows-dumps
   --apply` and `--off` write only the LocalDumps key of the program named, only on request and from an administrator
-  window; **agents never run them**, the owner does. Release and publishing tools write only inside the repository they are run on, and only
+  window; **agents never run them**, the owner does. **Reading a running game's memory is reading** (owner's yes, 20 November 2026,
+  for D'thorga Companion's look inside): the heap reader takes a Windows snapshot, which pauses the game for about half a second,
+  and never writes to it; **ask before every snapshot of the owner's game**, as for every tool that attaches to one. Release and publishing tools write only inside the repository they are run on, and only
   when asked (`--write`, `--apply`, an upload's records).
 - **Never execute other authors' code.** Assemblies are read through their metadata
-  (`System.Reflection.Metadata`), never loaded. Never run another mod's scripts.
+  (`System.Reflection.Metadata`), never loaded. Never run another mod's scripts. **One exception** (owner's yes, 20 November
+  2026): the heap reader loads a game's own memory-reading library (`mscordaccore.dll`), the part of the game's .NET runtime that
+  knows its memory layout, and only the one beside the running game's own `coreclr.dll` in the install its adapter names. Never a
+  mod's file (`docs/heap-reader.md`).
 - **Steam, read-only and slow, with one owner-run exception.** Tools read public, keyless pages and APIs only,
   with pacing and a cache, and never log in, handle credentials, subscribe, announce or change an item's
   visibility. The exception is the Workshop uploader (`steam-publish upload` and `update`; owner, 8 November
@@ -106,7 +111,9 @@ session**; `CLAUDE.md` imports it. The rules below are this repository's own, an
 - **Python** (`python/phobos_modkit/`): standard library only, Python 3.10 or newer, `unittest`. The default.
 - **Rust** (`crates/`): for large inputs where speed changes how the tool is used. Pinned toolchain, edition
   2024, as Phobos Scope does.
-- **C#** (`dotnet/`): for .NET assembly metadata. .NET 10, no assembly loading, no package references. `dotnet/Directory.Build.props`
+- **C#** (`dotnet/`): for .NET assembly metadata and the heap reader. .NET 10, no assembly loading, no package references, with
+  **one exception** (owner's yes, 20 November 2026): the heap reader's Microsoft ClrMD, pinned in its project and listed in
+  `THIRD_PARTY_NOTICES.md`. `dotnet/Directory.Build.props`
   sends `obj/` and `bin/` to the build folder outside the repository; a C# fixture under `fixtures/dotnet/` imports it.
 - A third-party dependency needs a stated reason and an entry in `THIRD_PARTY_NOTICES.md`.
 
