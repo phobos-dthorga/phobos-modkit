@@ -23,7 +23,7 @@ has been moved yet.
 | --- | --- | --- |
 | [every-session.md](every-session.md) | At the start of every session | Commits and changelog entries; claims when sharing the machine with other sessions; which file to read before which work |
 | [builds.md](builds.md) | Before setting up or changing how code is built | The same code builds to the same bytes |
-| [designs.md](designs.md) | Before designing or building a new behaviour | The four questions a new behaviour answers: what it lets, stops and changes, and what outside it notices |
+| [designs.md](designs.md) | Before designing or building a new behaviour | The four questions a new behaviour answers: what it lets, stops and changes, and what outside it notices; and a riskier behaviour's own setting, off by default when its risk is high |
 | [licences.md](licences.md) | Before writing or changing a `LICENSE`, starting a repository, or preparing a mod's first public page | Code MIT, our art and sound CC BY 4.0, our names kept out of both grants, and the paragraphs a `LICENSE` carries |
 | [first-class.md](first-class.md) | Before adding a new kind of thing to the tools or the Companion | A design to edit, not yet rules: the things every tool and page treats as real, and what makes them first-class |
 

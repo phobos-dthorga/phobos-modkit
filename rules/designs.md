@@ -1,7 +1,7 @@
 # Rules for designing a new behaviour, in every Phobos and D'thorga repository
 
 Read before designing or building a new behaviour for any game or mod: something a player can newly do, or that newly happens to
-them. The rules for every session are in [every-session.md](every-session.md); how this folder works is in [README.md](README.md).
+them. Two rules: the four questions it answers, and the setting a riskier one has. The rules for every session are in [every-session.md](every-session.md); how this folder works is in [README.md](README.md).
 
 ## A new behaviour answers for itself
 
@@ -14,6 +14,18 @@ them. The rules for every session are in [every-session.md](every-session.md); h
   reaching the rest of the game). The record names who or what else in the game takes notice: a person, another faction, the map
   or the world, the game's own records, a letter or an alert. **"Nothing" is allowed as a choice the record states, never by
   accident**: depth that nothing outside the thing can see makes no story.
+
+## A riskier behaviour has its own setting
+
+- **A behaviour that puts the player's things or people at risk has its own setting to switch it off** (owner, 20 Nov 2026, for
+  every mod and game, first said of the RimWorld depots' pressures: "Activities with a higher risk should get a proper setting to
+  disable them as such but otherwise, they are enabled by default UNLESS they are a HIGH or HIGHER risk"). **It starts on, unless
+  its risk is high or higher: then it starts off**, and the player chooses it.
+- **The design record grades the risk and says why**, in plain words: what the player can lose, how much at once, and whether they
+  can see it coming. A slow loss the player is warned of is low or moderate; losing a whole thing at once, or a person, is high. The
+  grade is the designer's proposal until the owner confirms it, and the setting's default follows the grade.
+- **Existing behaviours follow the rule when next touched**, not in a sweep. Telling the owner about a new setting, its default and
+  where it is stays each repository's own rule.
 
 ## Why
 

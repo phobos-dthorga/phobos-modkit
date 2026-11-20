@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.63.0] - 2026-11-20
+
+### Changed
+
+- rules/designs.md gains a second rule, the owner's for every mod and game (20 Nov 2026): a behaviour that puts the player's
+  things or people at risk has its own setting to switch it off, on by default unless its risk is high or higher, then off; the
+  design record grades the risk and says why. A new rule raises the middle number.
+
 ## [1.62.0] - 2026-11-20
 
 For D'thorga Companion's release audit (the owner, 20 November 2026: the Companion is to be released for others): A4, ship the
