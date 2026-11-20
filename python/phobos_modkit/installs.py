@@ -556,6 +556,25 @@ def dedupe(where, mods=None, kinds=(IDENTICAL, REBUILT), progress=None):
     return removed
 
 
+def tidy(where, mods, progress=None):
+    """The last step of an install or a go-back (owner, 20 Nov 2026: removing repeated backups "should be part of the normal
+    process"): removes the repeated backups of the mods just moved, both kinds, as dedupe does. The move itself has already
+    succeeded, so this never raises. Returns (removed, problem): what dedupe removed, and why it could not finish, or None."""
+    try:
+        return dedupe(where, mods, progress=progress), None
+    except Exception as error:  # noqa: BLE001 (the install or go-back has already succeeded; only the tidying goes without)
+        return [], str(error)
+
+
+def tidy_lines(removed, problem):
+    """A person's lines for what tidy did, for an install or a go-back to print after its own."""
+    lines = [f"Removed the backup {r['backup']}: it repeated {r['sameAs']}" + (" (only rebuilt)" if r["kind"] == REBUILT else "")
+             + ", which is kept." for r in removed]
+    if problem:
+        lines.append(f"Repeated backups were not removed ({problem}); Remove repeated backups can do it later.")
+    return lines
+
+
 @dataclass
 class Place:
     """Where one repository's mods come from, go to and are backed up."""

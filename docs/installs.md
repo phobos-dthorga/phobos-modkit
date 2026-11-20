@@ -9,8 +9,11 @@
   `CHANGELOG.md` it was installed with. An entry one copy has and the other lacks is a gain or a loss. A changelog says what
   changed, never that it works in game.
 - **restore and install refuse while the game runs.** backup only reads the install, so it works while the game runs.
-- **Nothing is ever deleted.** restore keeps the backup it put back, and the install it replaced becomes a new backup. Backups
-  grow; the cleanup tool lists old ones, and deletes them only when the owner runs it with `--apply`.
+- **Nothing is lost, but repeats go.** restore keeps the backup it put back, and the install it replaced becomes a new backup.
+  **Then the mod's repeated backups are removed** (1.64.0, the owner's call of 20 Nov 2026), as `dedupe` does: a backup the
+  same as the one before it, keeping the oldest of each run, so its contents are always still there. An install command does
+  the same through `installs.tidy` (phobos-rimworld's deploy.py does). Other backups grow; the cleanup tool lists old ones, and
+  deletes them only when the owner runs it with `--apply`.
 - **A repository opts in** with `config/installs.json`. Without it, every report refuses.
 
 ## Run it
@@ -93,6 +96,14 @@ Only a run counts: A, A, B, A keeps the last A, since it is the newest backup fr
 compared with the kept one again just before it goes, and the history log records `duplicates-removed`. Digests are kept in the
 kit's cache (`installs/backup-digests.json`) by folder and size, so only new backups are read: the first `status` after this
 reads every backup (about a minute for phobos-rimworld's 99, 5.5 GB).
+
+**Every install and go-back removes them too** (1.64.0; the owner, 20 Nov 2026: removing repeated backups "should be part
+of the normal process of install/updating mods"). `installs.tidy(where, mods)` runs `dedupe` with both kinds for the mods just
+moved, and never raises, since the move has already succeeded: it returns what it removed and, if it could not finish, why.
+`installs.tidy_lines` words both for a person. `restore` runs it and adds `removedRepeats` and `tidyProblem` to its data; the
+repository's install command runs it itself (deploy.py in phobos-rimworld), so `install` does not run it a second time.
+Removing a repeat keeps the oldest of its run, so the backup a go-back just made, or the one it put back, may be the one that
+goes when an older twin holds the same files; the report says which.
 
 ## The install record
 

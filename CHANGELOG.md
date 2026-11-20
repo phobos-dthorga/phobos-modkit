@@ -4,6 +4,20 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.64.0] - 2026-11-20
+
+### Changed
+
+- **Going back to a backup removes the mod's repeated backups** (the owner, 20 Nov 2026: removing them "should be part of the
+  normal process of install/updating mods"). installs restore runs the same removal as dedupe, both kinds, for the mod it moved,
+  keeping the oldest of each run, and says which it removed; its data adds removedRepeats and tidyProblem. A failure there is
+  reported and the go-back still stands.
+
+### Added
+
+- installs.tidy and installs.tidy_lines: the removal for a repository's own install command to run after an install, never
+  raising, with its lines for a person. phobos-rimworld's deploy.py runs it (docs/installs.md).
+
 ## [1.63.0] - 2026-11-20
 
 ### Changed

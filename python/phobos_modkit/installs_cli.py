@@ -5,7 +5,8 @@ would gain or lose by their changelogs; and the three ways to move.
     installs status --root REPO --mod NAME          one mod
     installs backup --root REPO --mod NAME          copy the installed mod into the backups folder (safe while the game runs)
     installs restore --root REPO --mod NAME --backup BACKUP
-                                                    put a backup back; the install it replaces becomes a backup first
+                                                    put a backup back; the install it replaces becomes a backup first,
+                                                    then the mod's repeated backups are removed, as dedupe does
     installs install --root REPO --mod NAME         run the repository's own install command (it builds, backs up, copies);
                                                     --mod again for more mods, installed in one run
     installs build --root REPO                      run the repository's own build command (writes only inside the repository)
@@ -279,10 +280,18 @@ def main(argv=None, environ=None, out=None, now=None, running=None, run=None):
         elif args.report == "restore":
             progress(f"Putting {args.backup} back; the install it replaces becomes a backup")
             replaced = installs.restore(where, args.mod, args.backup, now, running)
-            lines = [f"{args.backup} is now the installed copy of {args.mod}; the backup itself is kept."]
-            lines.append(f"The install it replaced was kept as the backup {replaced}." if replaced else "Nothing was installed before.")
+            progress(f"Removing repeated backups of {args.mod}")
+            removed, problem = installs.tidy(where, [args.mod], progress)
+            gone = {r["backup"] for r in removed}
+            lines = [f"{args.backup} is now the installed copy of {args.mod}" + ("." if args.backup in gone else "; the backup itself is kept.")]
+            if not replaced:
+                lines.append("Nothing was installed before.")
+            elif replaced not in gone:
+                lines.append(f"The install it replaced was kept as the backup {replaced}.")
+            lines += installs.tidy_lines(removed, problem)
             report, data = _done(f"Went back to {args.backup}", lines, {"ok": True, "mod": args.mod, "backup": args.backup,
-                                                                         "replacedBy": replaced})
+                                                                         "replacedBy": replaced, "removedRepeats": removed,
+                                                                         "tidyProblem": problem})
         elif args.report == "build":
             progress("Starting the build")
             exit_code, lines = installs.build(where, run, progress)
@@ -314,7 +323,8 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS,
             "reports": {"status": {"question": "What would updating or going back change in my installed mods?"},
                         "backup": {"effect": WRITES, "note": "copies an installed mod into the repository's backups folder"},
                         "restore": {"effect": WRITES,
-                                    "note": "replaces an installed mod with a backup; the replaced install is kept as a backup"},
+                                    "note": "replaces an installed mod with a backup; the replaced install is kept as a backup, "
+                                            "then the mod's backups that repeat the one before them are removed"},
                         "install": {"effect": RUNS, "note": "runs the repository's own install command, which builds and copies"},
                         "build": {"effect": RUNS, "note": "runs the repository's own build command, which writes only inside it"},
                         "settings": {"note": "the history of the mods' settings; for a program to list"},

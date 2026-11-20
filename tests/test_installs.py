@@ -257,6 +257,27 @@ class MovingTests(unittest.TestCase):
             self.assertEqual(f.where.game.identity(backups / "Thing-20261118-210000")[1], "0.2.0")
             self.assertEqual(sorted(p.name for p in f.game.iterdir()), ["Mods"])
 
+    def test_restore_removes_the_repeated_backup_it_makes_and_keeps_the_older_twin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Fixture(tmp)
+            backups = f.repo / ".local" / "backups"
+            shutil.copytree(f.game / "Mods" / "Thing", backups / "Thing-20261110-120000")
+            code, answer = f.run("restore", "--mod", "Thing", "--backup", "Thing-20261101-120000")
+            self.assertEqual(code, 0)
+            self.assertEqual([(r["backup"], r["sameAs"], r["kind"]) for r in answer["data"]["removedRepeats"]],
+                             [("Thing-20261118-210000", "Thing-20261110-120000", "identical")])
+            self.assertIsNone(answer["data"]["tidyProblem"])
+            self.assertEqual(sorted(p.name for p in backups.iterdir()), ["Thing-20261101-120000", "Thing-20261110-120000"])
+            self.assertEqual(f.where.game.identity(f.game / "Mods" / "Thing")[1], "0.1.0")
+
+    def test_tidy_reports_a_problem_instead_of_raising(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Fixture(tmp)
+            removed, problem = installs.tidy(f.where, ["NoSuchMod"])
+            self.assertEqual(removed, [])
+            self.assertIn("NoSuchMod", problem)
+            self.assertIn("can do it later", installs.tidy_lines(removed, problem)[0])
+
     def test_restore_refuses_while_the_game_runs_and_changes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
             f = Fixture(tmp)
