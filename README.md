@@ -126,6 +126,7 @@ in order of expected saving.
 | 26 | [Screen notes](docs/screen-notes.md) | What the owner flagged as looking wrong in D'thorga Companion with one key: the page's picture, its address and their words, for agent sessions to read at the start; marked dealt with, never deleted | Python | Built: 1.41.0 |
 | 25 | [Make-up](docs/makeup.md) | What a repository is made of: every committed file by product, kind, lines and size; how that grew day by day; where the work goes; and what each product holds for players (Defs by type, pictures, sounds, text keys) | Python, with git | Built: 1.39.0 |
 | 24 | [Pins](docs/pins.md) | Which version of this kit each repository pins, and what moving its pin would bring, by the kit's changelog | Python, with git | Built: 1.38.0 |
+| 31 | [Programs](docs/programs.md) | Which other programs the tools use (git, .NET, ilspycmd, Steam, a game's own), whether each is on this PC, what needs it and where to get it; builds the kit's compiled tools ready for an installer to carry | Python | Built: 1.62.0 |
 | 9 | [Workshop publishing](docs/workshop-publishing.md) | Release notes from changelogs, offline staging, the owner-run uploader, pulling Steam's state back | Python | Built: 0.10.0, from phobos-ostranauts |
 
 ## How a repository uses it
@@ -177,6 +178,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/decisions.md](docs/decisions.md) | Decisions: the config, the answers file, and acting on an answer |
 | [docs/claims.md](docs/claims.md) | Claims: naming a thing, the board file and its lock |
 | [docs/records.md](docs/records.md) | Records: what is copied, where, and what each copy holds |
+| [docs/programs.md](docs/programs.md) | Programs: what status lists and how each is found, and what bundle makes |
 | [docs/screen-notes.md](docs/screen-notes.md) | Screen notes: a note's folder, its files, and resolving one |
 | [docs/gate.md](docs/gate.md) | The gate: a repository's checks from config/gate.json, and what each output parser keeps |
 | `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `sampling.py` and `dotnet_diagnostics.py` (sampled call stacks and Microsoft's diagnostics tools), `query.py` (report filters), `steam/` (Workshop research; `publish/` for publishing), `release/` (changelogs, constants, history screen), `gate/` (the check runner and its output parsers), `code/` (the C# declaration scanner and index), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema), `games/ostranauts/` (publishing only) |

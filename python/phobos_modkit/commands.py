@@ -43,6 +43,7 @@ COMMANDS = {
     "claims": (".claims", "who is working on what: agent sessions take and release version numbers, test rows and files"),
     "decisions": (".decisions", "the questions waiting for the owner, with options and the agent's lean; records answers"),
     "game-files": (".game_files", "what a game writes and what Steam records: what changed since you last played, saves, screenshots, space"),
+    "programs": (".programs", "which other programs the tools use, whether each is on this PC, and where to get it"),
     "records": (".records", "a copy of D'thorga Companion's own records in a folder of your choosing, and how old the newest is"),
     "rules": (".rules_cli", "the rules every repository shares, and whether a repository reads them"),
     "settings": (".settings_cli", "the settings the tools read, where each value comes from, and the central settings file"),

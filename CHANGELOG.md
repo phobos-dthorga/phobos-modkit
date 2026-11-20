@@ -4,6 +4,24 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.62.0] - 2026-11-20
+
+For D'thorga Companion's release audit (the owner, 20 November 2026: the Companion is to be released for others): A4, ship the
+kit's compiled tools built, and B7, each tool says what it needs.
+
+### Added
+
+- programs status: every other program the tools use (git, the kit's XML indexer and assembly reader, .NET 10, Microsoft's
+  diagnostics tools, ilspycmd, Steam, and a game's own through its adapter: RimSort's todds for RimWorld), whether each is on this
+  PC and how it was found, what needs it, and where to get it. It only looks, and runs none of them (docs/programs.md).
+- programs bundle --out FOLDER: builds the XML indexer and the assembly reader (published to need only the .NET 10 runtime) and
+  copies them into one folder, stamped last with bundle.json, for an installer to carry.
+
+### Changed
+
+- The XML indexer and the assembly reader are found ready-built first, in PHOBOS_MODKIT_TOOLS or a tools folder beside the kit's
+  package folder, before any build: a PC that installs them needs neither Rust nor the .NET SDK.
+
 ## [1.61.1] - 2026-11-20
 
 ### Fixed
