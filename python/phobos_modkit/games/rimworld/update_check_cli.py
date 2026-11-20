@@ -35,7 +35,7 @@ import xml.etree.ElementTree as ET
 from ... import cache as derived
 from ...assembly_archive import Archive, ArchiveError, archive_root
 from ...code import compare as code_compare, index as code_index
-from ...manifest import READS
+from ...manifest import RUNS
 from ...progress import Progress
 from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
 from . import defs, patched_defs, paths
@@ -513,6 +513,7 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=None, now=No
     return code
 
 
-MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
-            "note": "Runs ilspycmd on archived assemblies and the kit's assembly reader, reading them, never loading them.",
-            "question": "The game or mods updated: what does it mean for ours?"}
+# It runs ilspycmd on archived builds it has not decompiled yet, so a program runs it on a person's press, as the archive's
+# compare; it needs a repository (--root), so it has no question of its own for a page of reports to offer.
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": RUNS, "surface": "update-check",
+            "note": "Runs ilspycmd on archived assemblies and the kit's assembly reader, reading them, never loading them."}

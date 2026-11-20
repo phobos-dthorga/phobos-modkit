@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.61.1] - 2026-11-20
+
+### Fixed
+
+- rimworld-update-check's manifest gives it the update-check surface, so D'thorga Companion finds it by role, and calls its effect
+  runs (it decompiles new builds with ilspycmd, as rimworld-archive compare does), so a program runs it on a person's press. It no
+  longer offers a question of its own: it needs a repository, which a page of reports does not give.
+
 ## [1.61.0] - 2026-11-20
 
 For D'thorga Companion's Since you last played: the checks an agent ran by hand after the updates of 18-20 November 2026 (the
