@@ -4,6 +4,24 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.61.0] - 2026-11-20
+
+For D'thorga Companion's Since you last played: the checks an agent ran by hand after the updates of 18-20 November 2026 (the
+owner's request, by question card: "All four").
+
+### Added
+
+- rimworld-update-check: the game or mods updated; what does it mean for ours? One run, four parts: whether every member our C#
+  names still exists (rimworld-targets' check), whether an update touched the members a temporary patch's fault lives in
+  (the repository's config/temporary-patches.json), how big each kept update was with the new types it brought, and whether our
+  XML patches still find their Defs and, for a simple xpath, the node inside, as written, then in the patched-Defs file. The
+  repository says what is ours in config/update-check.json. On the owner's game it found every one of 622 targets and 371 Def
+  names, and flagged VFE Factory's belt tick for row 12 (docs/rimworld-update-check.md).
+
+### Changed
+
+- rimworld-targets' check is a function (targets_cli.check) the new command shares; its report is unchanged.
+
 ## [1.60.0] - 2026-11-20
 
 A shared rule for licences (the owner's decisions of 20 November 2026, by question card).

@@ -71,6 +71,7 @@ python -m phobos_modkit rimworld-archive snapshot --root ..   keep every new ver
 python -m phobos_modkit rimworld-sources --root .. --write   where each tied mod's public source lives, checked
 python -m phobos_modkit rimworld-code show Type.Member --root REPO   another author's code, from a clone or a decompile
 python -m phobos_modkit rimworld-upstream --root REPO --clones DIR   updates and upstream commits that changed members we patch
+python -m phobos_modkit rimworld-update-check --root REPO   after an update: our targets, temporary patches, update sizes, our XML patches
 python -m phobos_modkit crash-dump               why a program crashed, from its Windows crash dump; names methods in a full one
 python -m phobos_modkit windows-dumps --program X   whether Windows keeps full crash dumps of a program; --apply asks it to
 python -m phobos_modkit cleanup --root REPO      what the tools, builds and tests left behind; --apply deletes it
@@ -164,6 +165,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/manifest.md](docs/manifest.md) | The JSON envelope every command prints, and the manifest of commands, options and effects |
 | [docs/rimworld-code.md](docs/rimworld-code.md) | Another author's code for a program: where it is looked for, which assembly holds a type, and decompiling on request |
 | [docs/rimworld-upstream.md](docs/rimworld-upstream.md) | Whether an update or another author's source changed a member our code patches or names |
+| [docs/rimworld-update-check.md](docs/rimworld-update-check.md) | The game or mods updated: whether our patches' targets and XML patches still find what they name, whether a temporary patch's fault was touched, and how big each update was |
 | [docs/crash-dump.md](docs/crash-dump.md) | Windows crash dumps: the exception, a call loop that ran away, the methods in a full dump, what a small dump cannot say, and windows-dumps |
 | [docs/cleanup.md](docs/cleanup.md) | Cleanup: the kit's cache, its development build and a repository's own leftovers, previewed before anything is deleted |
 | [docs/test-pass.md](docs/test-pass.md) | The test pass: the repository's evidence map, the seen-in-play notes and verdict files, and what apply writes |

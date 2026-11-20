@@ -21,6 +21,8 @@ COMMANDS = {
                          "keep every version of the game's assembly and of tied mods, and compare two of them"),
     "rimworld-upstream": (".games.rimworld.upstream_cli",
                           "whether an update or another author's source changed a method our code patches or names"),
+    "rimworld-update-check": (".games.rimworld.update_check_cli",
+                              "the game or mods updated: our patches' targets, temporary patches, update sizes, our XML patches"),
     "rimworld-code": (".games.rimworld.code_cli", "another author's code: its source from a public clone or a decompile, and which assembly holds it"),
     "rimworld-sources": (".games.rimworld.sources_cli",
                          "where each tied mod's public source lives, checked against its package ID"),

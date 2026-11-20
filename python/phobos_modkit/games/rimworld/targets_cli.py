@@ -77,6 +77,31 @@ def read_members(tool, wanted, files, run=subprocess.run):
     return [json.loads(line) for line in result.stdout.decode("utf-8").splitlines() if line.strip()]
 
 
+def check(root, sources, own_assemblies, type_lookups, game, workshop, config, environ, run=None):
+    """(scan, findings, files read, unreadable assemblies): every target our C# under root names, checked against our own
+    fresh build (own_assemblies, globs under root), the game's assemblies and the active mods'. Raises PatchesError."""
+    root = Path(root)
+    managed = game_assemblies(game)
+    if not managed:
+        raise PatchesError(f"No game assemblies under {game}. Name the folder with --game.")
+    mods_config = Path(config) / "ModsConfig.xml"
+    if not mods_config.is_file():
+        raise PatchesError(f"No ModsConfig.xml in {config}. Name the folder with --config.")
+    version, _, ids = loading.read_mods_config(mods_config)
+    index_mods = ModIndex.scan(default_roots(game, workshop))
+    active = loading.resolve_active(index_mods.mods, ids)
+    # Our own fresh build first, so a stale installed copy never answers for it.
+    files = [path for pattern in (own_assemblies or []) for path in sorted(root.glob(pattern))]
+    files += managed + [dll for _, dll in mod_assemblies(active, version)]
+    scan = scan_tree(root, tuple(sources or ["src/**/*.cs"]), type_lookups=TYPE_LOOKUPS + tuple(type_lookups or ()))
+    options = {"run": run} if run is not None else {}
+    tool = ensure_reader(environ, **options)
+    records = read_members(tool, scan.type_names(), files, **options)
+    # The game's folder holds native libraries as well; they have no metadata and no members to name.
+    errors = [r for r in records if "error" in r and "type" not in r and "no .NET metadata" not in r["error"]]
+    return scan, check_targets(scan, Listing(records)), files, errors
+
+
 def build_report(scan, findings, read_count, errors, top, show_all):
     failing = [f for f in findings if f.fails]
     unread = [f for f in findings if f.status == "type-missing"]
@@ -122,31 +147,14 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=None):
     code = EXIT_OK
     try:
         game = paths.game_path(args.game, environ, settings_file)
-        managed = game_assemblies(game)
-        if not managed:
-            if args.if_installed:
-                print("rimworld-targets: skipped, no RimWorld install on this machine.", file=out)
-                return EXIT_OK
-            raise PatchesError(f"No game assemblies under {game}. Name the folder with --game.")
+        if not game_assemblies(game) and args.if_installed:
+            print("rimworld-targets: skipped, no RimWorld install on this machine.", file=out)
+            return EXIT_OK
         workshop = paths.workshop_path(game, args.workshop, environ, settings_file)
         config = paths.config_path(args.config, environ, settings_file)
-        mods_config = Path(config) / "ModsConfig.xml"
-        if not mods_config.is_file():
-            raise PatchesError(f"No ModsConfig.xml in {config}. Name the folder with --config.")
-        version, _, ids = loading.read_mods_config(mods_config)
-        index_mods = ModIndex.scan(default_roots(game, workshop))
-        active = loading.resolve_active(index_mods.mods, ids)
-        # Our own fresh build first, so a stale installed copy never answers for it.
-        files = [path for pattern in args.assemblies for path in sorted(root.glob(pattern))]
-        files += managed + [dll for _, dll in mod_assemblies(active, version)]
-        scan = scan_tree(root, tuple(args.source or ["src/**/*.cs"]), type_lookups=TYPE_LOOKUPS + tuple(args.type_lookup))
-        options = {"run": run} if run is not None else {}
-        tool = ensure_reader(environ, **options)
-        records = read_members(tool, scan.type_names(), files, **options)
-        listing = Listing(records)
-        # The game's folder holds native libraries as well; they have no metadata and no members to name.
-        errors = [r for r in records if "error" in r and "type" not in r and "no .NET metadata" not in r["error"]]
-        report, failed = build_report(scan, check_targets(scan, listing), len(files), errors, args.top, args.all)
+        scan, findings, files, errors = check(root, args.source, args.assemblies, args.type_lookup, game, workshop, config,
+                                              environ, run)
+        report, failed = build_report(scan, findings, len(files), errors, args.top, args.all)
         code = EXIT_FAILED if failed else EXIT_OK
     except PatchesError as error:
         report, code = Report("rimworld-targets: error", [str(error)]), EXIT_FAILED
