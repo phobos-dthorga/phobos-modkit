@@ -4,6 +4,21 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.60.0] - 2026-11-20
+
+A shared rule for licences (the owner's decisions of 20 November 2026, by question card).
+
+### Added
+
+- rules/licences.md: code, data and documents stay MIT; our own art and sound are CC BY 4.0, credited to House D'thorga; the names
+  D'thorga and House D'thorga, the mods' and tools' names and their preview images are kept out of both grants, so a fork or
+  reupload uses its own name. It gives the two paragraphs every repository's LICENSE adds, read before writing a LICENSE, starting
+  a repository or preparing a mod's first public page.
+
+### Changed
+
+- This repository's LICENSE carries the two paragraphs. Nothing it granted before is withdrawn.
+
 ## [1.59.0] - 2026-11-20
 
 For D'thorga Companion's screenshot gallery on the Timeline (docs/later.md, item 5, agreed by the owner on 19 November 2026).
