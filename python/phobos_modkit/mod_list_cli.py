@@ -8,6 +8,12 @@
     mod-list rules --name GAME                                         your own rules, and every rule set the sorter reads
     mod-list rules --name GAME --mod ID --after OTHER [--apply]        keep a rule of your own (also --before, --top, --bottom)
     mod-list rules --name GAME --drop N [--apply]                      take your rule N away
+    mod-list lists --name GAME                                         every saved list: by name, at game starts, saves, RimSort
+    mod-list compare --name GAME --list KEY --from SOURCE:REF          what loading a list would change (or --file PATH)
+    mod-list load --name GAME --list KEY --from SOURCE:REF [--apply]   load it, leaving out mods not on this PC (1.75.0)
+    mod-list save --name GAME --list KEY --as NAME [--replace] [--apply]   keep the list as it stands, by name
+    mod-list forget --name GAME --saved NAME [--apply]                 take away a list saved by name
+    mod-list export --name GAME (--list KEY | --from SOURCE:REF) --to PATH [--apply]   write a list as the game's own file
     mod-list undo --name GAME --list KEY [--backup FILE] [--apply]     go back on the last change; again, the one before
     mod-list backups --name GAME                                       every backup kept of the game's lists
     mod-list games                                                     the games whose lists the check can read
@@ -27,6 +33,7 @@ import sys
 
 from . import history
 from . import mod_list as core
+from . import mod_lists
 from . import mod_sort
 from .games import MOD_LIST_GAMES, mod_list_adapter, mod_list_game
 from .installs import game_running
@@ -86,6 +93,32 @@ def _parser():
     where.add_argument("--bottom", action="store_true", help="it loads as near the bottom as its rules allow")
     where.add_argument("--drop", type=int, metavar="N", help="take your rule N away (as `rules` numbers them)")
     rules.add_argument("--apply", action="store_true", help="keep the change; without it, only say what it would be")
+    lists = sub.add_parser("lists", help="every saved list: by name, kept at game starts, each save's, and RimSort's history")
+    _common(lists, lists=False)
+    for name, words in (("compare", "what loading a list would change; only reads"),
+                        ("load", "load a list in place of the one the game reads, after a backup; only with --apply")):
+        each = sub.add_parser(name, help=words)
+        _common(each)
+        source = each.add_mutually_exclusive_group(required=True)
+        source.add_argument("--from", dest="from_list", metavar="SOURCE:REF",
+                            help="a list as `lists` names it: saved:NAME, kept:TIME, save:FILE, manager:FILE")
+        source.add_argument("--file", metavar="PATH", help="a list file (the game's .rml, a save, an exported RimSort list)")
+        if name == "load":
+            each.add_argument("--apply", action="store_true", help="write it; without it, only say what it would do")
+    save = sub.add_parser("save", help="keep the list as it stands, by name; only with --apply")
+    _common(save)
+    save.add_argument("--as", dest="as_name", required=True, metavar="NAME", help="the name to keep it by")
+    save.add_argument("--replace", action="store_true", help="replace a list kept by that name")
+    save.add_argument("--apply", action="store_true", help="keep it; without it, only say what it would do")
+    forget = sub.add_parser("forget", help="take away a list saved by name; only with --apply")
+    _common(forget, lists=False)
+    forget.add_argument("--saved", required=True, metavar="NAME", help="the saved list's name, as `lists` gives its ref")
+    forget.add_argument("--apply", action="store_true", help="take it away; without it, only say what it would do")
+    export = sub.add_parser("export", help="write a list as the game's own list file; only with --apply")
+    _common(export)
+    export.add_argument("--from", dest="from_list", metavar="SOURCE:REF", help="a saved list, instead of the game's list")
+    export.add_argument("--to", dest="to_file", required=True, metavar="PATH", help="the file to write")
+    export.add_argument("--apply", action="store_true", help="write it; without it, only say what it would do")
     mods = sub.add_parser("mods", help="every mod on this PC, and where each of the game's lists has it")
     _common(mods, lists=False)
     backups = sub.add_parser("backups", help="every backup kept of the game's lists, newest first")
@@ -111,6 +144,7 @@ def survey(adapter, environ=None, settings=None, online=False, list_key=None, po
     mods = adapter.installed()
     installed = core.Installed(adapter, mods)
     memory = core.remember(core.remembered_file(adapter.game, environ, settings), adapter, mods, now)
+    _keep_at_start(adapter, installed, environ, settings)
     lists = [m for m in adapter.lists() if list_key is None or m.key == list_key]
     notes = list(adapter.notes())
     progress("Asking Steam what it keeps", 2, 4)
@@ -153,6 +187,7 @@ def mods_data(adapter, environ=None, settings=None, now=None, progress=None):
     progress("Reading your mods", 1, 2)
     mods = adapter.installed()
     memory = core.remember(core.remembered_file(adapter.game, environ, settings), adapter, mods, now)
+    _keep_at_start(adapter, core.Installed(adapter, mods), environ, settings)
     seen = set()
     rows = []
     for mod in mods:
@@ -172,6 +207,13 @@ def mods_data(adapter, environ=None, settings=None, now=None, progress=None):
             "lists": lists, "running": game_running(list(adapter.processes) + list(adapter.managers)),
             "notes": list(adapter.notes()),
             "changes": {m["key"]: len(core.changes(adapter.game, m["key"], environ, settings)) for m in lists}}
+
+
+def _keep_at_start(adapter, installed, environ, settings):
+    """A copy of the list the game last started with, kept when it differs from the last copy (1.75.0): every read notices."""
+    found = adapter.lists()
+    if found and found[0].writable:
+        mod_lists.keep_at_start(adapter, found[0], installed, environ, settings)
 
 
 def _bullet(problem):
@@ -363,6 +405,96 @@ def _manager_rules(adapter):
     return found
 
 
+SOURCE_WORDS = {mod_lists.SAVED: "Saved by name", mod_lists.KEPT: "Kept at a game start", mod_lists.SAVE: "From a save",
+                mod_lists.MANAGER: "RimSort's history"}
+
+
+def lists_report(adapter, args, environ=None):
+    found = mod_lists.every_list(adapter, environ, args.settings)
+    data = {"sources": {source: [mod_lists.list_data(s) for s in items] for source, items in found.items()},
+            "files": bool(hasattr(adapter, "read_list_file")), "suffix": getattr(adapter, "list_suffix", "")}
+    report = Report(f"Mod list: {sum(len(v) for v in found.values())} saved lists for {adapter.name}")
+    for source, items in found.items():
+        if items:
+            report.section(SOURCE_WORDS[source], Table(["Name", "When", "Mods", "Ref"],
+                                                       [[s.label, s.when, str(len(s.ids)), f"{source}:{s.ref}"] for s in items]))
+    return report, data
+
+
+def _chosen(adapter, args, environ):
+    if getattr(args, "file", None):
+        return mod_lists.find_list(adapter, mod_lists.FILE, args.file, environ, args.settings)
+    source, sep, ref = (args.from_list or "").partition(":")
+    if not sep or not ref:
+        raise core.FixError("Name a list as SOURCE:REF, as `mod-list lists` gives it.")
+    return mod_lists.find_list(adapter, source, ref, environ, args.settings)
+
+
+def compare_report(adapter, args, environ=None, running=game_running, now=None):
+    mod_list = _the_list(adapter, args.list_key)
+    chosen = _chosen(adapter, args, environ)
+    installed = core.Installed(adapter, adapter.installed())
+    subscribed = adapter.subscribed()
+    applied = getattr(args, "apply", False)
+    if applied:
+        found, backup = mod_lists.load(adapter, mod_list, chosen, installed, running, environ, args.settings, now, subscribed)
+        history.record(adapter.game, "mod-list-change", environ, args.settings, now, list=mod_list.key,
+                       change=f"load {chosen.label}", backup=backup.name)
+        found.update(applied=True, backup=backup.name, change=f"load {chosen.label}")
+    else:
+        found = mod_lists.compare(adapter, mod_list, chosen, installed, subscribed, environ, args.settings)
+        found.update(applied=False, backup="", change=f"load {chosen.label}")
+    found.update(list=mod_list.key)
+    title = f"Mod list: {'loaded' if applied else 'loading'} {chosen.label}"
+    report = Report(title + ("" if applied else " (preview)"))
+    report.lines.append(f"Switched on: {len(found['on'])}. Switched off: {len(found['off'])}. Moved: {found['moved']}. "
+                        f"Not on this PC, left out: {len(found['missing'])}.")
+    if found["missing"]:
+        report.section("Not on this PC", Bullets([f"**{m['name']}** ({m['id']}). {m['why']}" for m in found["missing"]]))
+    report.lines.append(f"Kept a backup first: {found['backup']}." if applied else "**Preview only.**")
+    return report, found
+
+
+def save_report(adapter, args, environ=None, now=None):
+    mod_list = _the_list(adapter, args.list_key)
+    data = {"name": args.as_name.strip(), "applied": False, "ref": mod_lists.file_name_for(args.as_name)}
+    if args.apply:
+        installed = core.Installed(adapter, adapter.installed())
+        saved = mod_lists.save_named(adapter, mod_list, installed, args.as_name, args.replace, environ, args.settings, now)
+        data.update(applied=True, ref=saved.ref, count=len(saved.ids))
+    report = Report(f"Mod list: {'kept' if args.apply else 'keep'} {mod_list.label} as {data['name']!r}"
+                    + ("" if args.apply else " (preview)"))
+    return report, data
+
+
+def forget_report(adapter, args, environ=None):
+    data = {"ref": args.saved, "applied": False}
+    if args.apply:
+        mod_lists.forget_named(adapter.game, args.saved, environ, args.settings)
+        data["applied"] = True
+    return Report(f"Mod list: {'took away' if args.apply else 'take away'} the saved list {args.saved!r}"), data
+
+
+def export_report(adapter, args, environ=None):
+    if not hasattr(adapter, "render_list_file"):
+        raise core.FixError(f"The tools cannot write {adapter.name}'s list files yet.")
+    if args.from_list:
+        chosen = _chosen(adapter, args, environ)
+    else:
+        mod_list = _the_list(adapter, args.list_key)
+        chosen = mod_lists.snapshot(adapter, mod_list, core.Installed(adapter, adapter.installed()), mod_lists.FILE, "",
+                                    mod_list.label)
+    target = Path(args.to_file)
+    if target.suffix.lower() != adapter.list_suffix:
+        target = target.with_name(target.name + adapter.list_suffix)
+    data = {"file": str(target), "count": len(chosen.ids), "applied": False}
+    if args.apply:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(adapter.render_list_file(chosen).encode("utf-8"))
+        data["applied"] = True
+    return Report(f"Mod list: {'wrote' if args.apply else 'write'} {chosen.label} to {target.name}"), data
+
+
 def undo(adapter, args, environ=None, running=game_running, now=None):
     mod_list = _the_list(adapter, args.list_key)
     if not args.apply:
@@ -430,6 +562,16 @@ def main(argv=None, environ=None, out=None, post=None, running=None, now=None):
             report, data = sort(adapter, args, environ, running or game_running, now, Progress(environ))
         elif args.report == "rules":
             report, data = rules(adapter, args, environ, now)
+        elif args.report == "lists":
+            report, data = lists_report(adapter, args, environ)
+        elif args.report in ("compare", "load"):
+            report, data = compare_report(adapter, args, environ, running or game_running, now)
+        elif args.report == "save":
+            report, data = save_report(adapter, args, environ, now)
+        elif args.report == "forget":
+            report, data = forget_report(adapter, args, environ)
+        elif args.report == "export":
+            report, data = export_report(adapter, args, environ)
         elif args.report == "fix":
             report, data = fix(adapter, args, environ, running or game_running, now)
         else:
@@ -454,6 +596,12 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS, "surface": "mod-li
                         "sort": {"effect": WRITES, "when": "--apply",
                                  "question": "How would my mods be sorted from their rules, and why?"},
                         "rules": {"effect": WRITES, "when": "--apply", "question": "Which load-order rules does the sorter read?"},
+                        "lists": {"question": "Which saved mod lists can I load?"},
+                        "compare": {"question": "What would loading a saved mod list change?"},
+                        "load": {"effect": WRITES, "when": "--apply", "question": None},
+                        "save": {"effect": WRITES, "when": "--apply", "question": None},
+                        "forget": {"effect": WRITES, "when": "--apply", "question": None},
+                        "export": {"effect": WRITES, "when": "--apply", "question": None},
                         "backups": {"question": "Which backups of my mod lists are kept?"},
                         "mods": {"question": "Which mods are on this PC, and which are switched on?"},
                         "games": {"question": "Which games' mod lists can the tools read?"}}}

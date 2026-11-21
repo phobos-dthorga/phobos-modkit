@@ -4,6 +4,32 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.76.0] - 2026-11-22
+
+Saved lists, step 4 of the mod manager (the owner, 22 Nov 2026: "Start step 4, saved lists"). The owner's choices on question
+cards: lists from each save, RimSort's history and files as well as lists saved by name; loading shows the difference, then a yes;
+mods not on this PC are left out, named with why, and offered in Steam; a copy kept at each game start.
+
+### Added
+
+- **mod-list lists, compare and load** (`mod_lists.py`): every list on offer, by source: **saved** by name, **kept** at game
+  starts, each **save**'s own record of its mods (RimWorld: the `.rws` header, read no further than `</meta>`; saves are never
+  changed) and a mod manager's **history** (RimWorld: RimSort's, read where it keeps it), or a **file** (`--file`: the game's own
+  `.rml`, a save, an exported RimSort list or RimSort's JSON). `compare` says what loading one would switch on, switch off and
+  move, and which mods it names are not on this PC, each with why; `load --apply` writes the rest after a backup, refused while
+  the game or RimSort runs, and `undo` takes it back. 0.2 s for the owner's 46 saves and 100 RimSort lists.
+- **mod-list save, forget and export**: keep the list as it stands by name (`--as NAME`, `--replace`), take a saved list away,
+  and write any list as the game's own `.rml`, which the game's mod menu loads too.
+- **A copy kept at each game start**: every read of the list (`check`, `mods`) keeps a copy of the list the game last started
+  with when it differs from the last copy kept. RimWorld's start is its log's `Started:` line, else the time its Logs folder was
+  last written; a list changed more than two minutes after the game last wrote its log is not what it started with, so nothing is
+  kept. Kept copies are never deleted here. Project Zomboid has no start record yet, so it keeps none.
+
+### Changed
+
+- A save records a Steam number only for the game's expansions (Workshop mods get 0), so those are never taken for Workshop items;
+  a missing mod a list cannot place says to look for it on the Workshop by its name.
+- The RimWorld adapter's running check can be handed in (`adapter.running`), so tests never depend on the owner's game.
 ## [1.75.0] - 2026-11-22
 
 A rule for every session: ask the owner to install a tool

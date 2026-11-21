@@ -11,19 +11,24 @@ Summarised in our own words from the 1.7 game code (Verse.ModMetaData and Verse.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from html import unescape
 import json
 import os
 from pathlib import Path
 import re
 import sys
+from xml.etree import ElementTree
 
 from ...game_files import libraries, parse_vdf, steam_root
 from ...mod_list import Mod, ModList, Need
+from ...installs import game_running
+from ...mod_lists import FILE, MANAGER, SAVE, SavedList
 from ...mod_sort import COMMUNITY, YOURS, RuleSet
 from .installs import PROCESSES
 from .loading import STEAM_SUFFIX, bare_id, read_mods_config
 from .mods import _about_root, _child, _text
-from .paths import config_path, game_path, workshop_path
+from .paths import LOG_NAME, config_path, game_path, logs_path, saves_path, workshop_path
 
 APP_ID = 294100
 MANAGERS = ("RimSort.exe", "RimPy.exe")
@@ -36,6 +41,15 @@ CLUE_TOTAL_BYTES = 64 * 1024 * 1024     # and the look stops after this much of 
 # "loadTop": {"value": true}, "loadBottom": {"value": true}}}}; seen in RimSort 1.17.4 on 22 Nov 2026.
 RIMSORT_COMMUNITY = ("dbs/Community-Rules-Database/communityRules.json", "communityRules.json")
 RIMSORT_USER = ("dbs/userRules.json", "userRules.json")
+# Lists the game and RimSort keep (1.75.0). A save (.rws) starts with <meta>: gameVersion, then modIds, modSteamIds and modNames
+# in load order (Verse.ScribeMetaHeaderUtility.WriteMetaHeader); the game's own saved list (.rml, ModLists folder) is that header
+# and a <modList> of <ids> and <names> (Verse.GameDataSaveLoader.SaveModList). RimSort keeps a history of lists as JSON
+# ({"version", "activeMods"}) under modlists/history/<instance>/. Read from the 1.7 game code and RimSort 1.17.4, 22 Nov 2026.
+LIST_SUFFIX = ".rml"
+SAVE_SUFFIX = ".rws"
+META_BYTES = 8 * 1024 * 1024          # a save's header is read up to its </meta>, never further than this (agent default)
+LIST_FILE_BYTES = 64 * 1024 * 1024    # a list file larger than this is not read (agent default)
+STARTED = re.compile(r"^Started:\s+(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(?:\.\d+)?)(?: ([+-]\d\d:\d\d))?", re.M)
 ACTIVE = re.compile(r"(?P<open><activeMods>)(?P<body>.*?)(?P<close>[ \t]*</activeMods>)|<activeMods\s*/>", re.S)
 
 
@@ -113,6 +127,111 @@ def read_rimsort_rules(path):
     return rules
 
 
+def _items_of(block, tag):
+    match = re.search(rf"<{tag}>(.*?)</{tag}>", block, re.S)
+    return [unescape(i.strip()) for i in re.findall(r"<li>(.*?)</li>", match.group(1), re.S)] if match else []
+
+
+def read_save_meta(path):
+    """(version, ids, steam numbers, names) from a save's header, reading no further than its </meta>; None when it has none."""
+    try:
+        with open(path, "rb") as handle:
+            head = b""
+            while b"</meta>" not in head and len(head) < META_BYTES:
+                chunk = handle.read(256 * 1024)
+                if not chunk:
+                    break
+                head += chunk
+    except OSError:
+        return None
+    text = head.decode("utf-8-sig", errors="replace")
+    end = text.find("</meta>")
+    if end < 0:
+        return None
+    meta = text[:end]
+    version = re.search(r"<gameVersion>(.*?)</gameVersion>", meta, re.S)
+    ids = _items_of(meta, "modIds")
+    return (version.group(1).strip() if version else ""), ids, _items_of(meta, "modSteamIds"), _items_of(meta, "modNames")
+
+
+def _when(path):
+    try:
+        return datetime.fromtimestamp(Path(path).stat().st_mtime, timezone.utc).isoformat(timespec="seconds")
+    except OSError:
+        return ""
+
+
+def _known(ids, names, steam_ids):
+    named = {bare_id(i): n for i, n in zip(ids, names) if n}
+    # The game records a Steam number only for its expansions (their app ids); Workshop mods get 0, so none is a Workshop item.
+    workshop = {bare_id(i): s for i, s in zip(ids, steam_ids) if s and s != "0" and not bare_id(i).startswith("ludeon.")}
+    return named, workshop
+
+
+def read_list_file(path):
+    """A list from a file: the game's .rml, a save, an exported RimSort list (ModsConfig.xml's form) or RimSort's JSON."""
+    path = Path(path)
+    try:
+        if path.stat().st_size > LIST_FILE_BYTES and path.suffix.lower() != SAVE_SUFFIX:
+            return None
+    except OSError:
+        return None
+    if path.suffix.lower() == SAVE_SUFFIX:
+        meta = read_save_meta(path)
+        if not meta or not meta[1]:
+            return None
+        names, workshop = _known(meta[1], meta[3], meta[2])
+        return SavedList(FILE, str(path), path.stem, _when(path), meta[1], names, workshop, meta[0])
+    try:
+        text = path.read_bytes().decode("utf-8-sig", errors="replace")
+    except OSError:
+        return None
+    if text.lstrip().startswith("{"):
+        try:
+            data = json.loads(text)
+        except ValueError:
+            return None
+        ids = data.get("activeMods") if isinstance(data, dict) else None
+        if not isinstance(ids, list) or not ids:
+            return None
+        return SavedList(FILE, str(path), path.stem, _when(path), [str(i) for i in ids], version=str(data.get("version", "")))
+    try:
+        root = ElementTree.fromstring(text)
+    except ElementTree.ParseError:
+        return None
+    if root.tag == "savedModList":
+        ids = _items(root.find("modList/ids"))
+        names = _items(root.find("modList/names"))
+        version = (root.findtext("meta/gameVersion") or "").strip()
+        named, _ = _known(ids, names, [])
+        return SavedList(FILE, str(path), path.stem, _when(path), ids, named, {}, version) if ids else None
+    if root.tag == "ModsConfigData":
+        ids = _items(root.find("activeMods"))
+        return SavedList(FILE, str(path), path.stem, _when(path), ids, version=(root.findtext("version") or "").strip()) \
+            if ids else None
+    return None
+
+
+def _escaped(text):
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def render_list_file(saved, newline="\r\n"):
+    """A list as the game's own saved list (.rml), which the game's mod menu can load too."""
+    names = [saved.names.get(bare_id(i), i) for i in saved.ids]
+    steam = [saved.workshop.get(bare_id(i), "0") for i in saved.ids]
+
+    def block(tag, values, indent):
+        inner = "".join(f"{newline}{indent}\t<li>{_escaped(v)}</li>" for v in values)
+        return f"{newline}{indent}<{tag}>{inner}{newline}{indent}</{tag}>"
+
+    return ("<?xml version=\"1.0\" encoding=\"utf-8\"?>" + newline + "<savedModList>" + newline + "\t<meta>"
+            + f"{newline}\t\t<gameVersion>{_escaped(saved.version)}</gameVersion>"
+            + block("modIds", saved.ids, "\t\t") + block("modSteamIds", steam, "\t\t") + block("modNames", names, "\t\t")
+            + newline + "\t</meta>" + newline + "\t<modList>" + block("ids", saved.ids, "\t\t")
+            + block("names", names, "\t\t") + newline + "\t</modList>" + newline + "</savedModList>" + newline)
+
+
 def read_about(folder, source, workshop_id, version):
     root = _about_root(Path(folder))
     if root is None:
@@ -144,6 +263,8 @@ class RimWorld:
 
     def __init__(self, environ=None, settings=None, steam=None):
         self.environ = os.environ if environ is None else environ
+        self.settings = settings
+        self.running = game_running   # which of the named programs run; tests hand in their own
         self.game_folder = Path(game_path(None, self.environ, settings))
         self.workshop = Path(workshop_path(self.game_folder, None, self.environ, settings))
         self.config = Path(config_path(None, self.environ, settings)) / "ModsConfig.xml"
@@ -247,6 +368,63 @@ class RimWorld:
                     found.append(RuleSet(source, label, str(base / name), rules))
                     break
         return found
+
+    # -------------------------------------------------- lists kept elsewhere (1.75.0)
+
+    list_suffix = LIST_SUFFIX
+
+    def save_lists(self):
+        """Each save's own record of its mods, newest first. Saves are only read, and only up to their header."""
+        saves = Path(saves_path(None, self.environ, self.settings))
+        found = []
+        files = sorted(saves.glob(f"*{SAVE_SUFFIX}"), key=lambda p: p.stat().st_mtime, reverse=True) if saves.is_dir() else []
+        for path in files:
+            meta = read_save_meta(path)
+            if not meta or not meta[1]:
+                continue
+            names, workshop = _known(meta[1], meta[3], meta[2])
+            found.append(SavedList(SAVE, path.name, path.stem, _when(path), meta[1], names, workshop, meta[0]))
+        return found
+
+    def manager_lists(self):
+        """RimSort's history of lists, newest first, read where RimSort keeps them."""
+        base = rimsort_folder(self.environ) / "modlists" / "history"
+        found = []
+        files = sorted(base.glob("*/*.json"), key=lambda p: p.stat().st_mtime, reverse=True) if base.is_dir() else []
+        for path in files:
+            saved = read_list_file(path)
+            if saved is None:
+                continue
+            stamp = datetime.fromisoformat(_when(path)).astimezone() if _when(path) else None
+            label = f"RimSort, {stamp.strftime('%d %b %Y %H:%M')}" if stamp else f"RimSort, {path.stem}"
+            found.append(SavedList(MANAGER, f"{path.parent.name}/{path.name}", label, saved.when, saved.ids,
+                                   version=saved.version))
+        return found
+
+    def read_list_file(self, path):
+        return read_list_file(path)
+
+    def render_list_file(self, saved):
+        return render_list_file(saved)
+
+    def last_start(self):
+        """When the game last started (its log's Started line, else the time the log was begun), when it last wrote its log,
+        and whether it runs now; None when it has no log."""
+        log = Path(logs_path(None, self.environ, self.settings)) / LOG_NAME
+        try:
+            with open(log, "rb") as handle:
+                head = handle.read(4096).decode("utf-8", errors="replace")
+            ended = datetime.fromtimestamp(log.stat().st_mtime, timezone.utc)
+            begun = datetime.fromtimestamp(log.parent.stat().st_mtime, timezone.utc)
+        except OSError:
+            return None
+        found = STARTED.search(head)
+        started = begun
+        if found:
+            stamp = found.group(1) + (found.group(2) or "")
+            parsed = datetime.fromisoformat(stamp)
+            started = (parsed if parsed.tzinfo else parsed.astimezone()).astimezone(timezone.utc)
+        return {"started": started, "ended": ended, "running": bool(self.running(list(self.processes)))}
 
     def mentions(self, mod, words):
         """Whether any of a mod's text files or assemblies name one of the words (any case)."""

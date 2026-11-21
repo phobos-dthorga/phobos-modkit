@@ -1,6 +1,6 @@
 # Mod list: what is wrong with a game's active mods, and why
 
-**Status (22 Nov 2026):** built in 1.72.0 for RimWorld and Project Zomboid; 1.73.0 adds the list editor's side (`mods`, moving, switching on at a place, and an undo that walks back one change at a time); 1.74.0 the sorter (`sort`), the owner's own rules (`rules`) and changes to several mods at once. It is the first step of D'thorga Companion's own mod
+**Status (22 Nov 2026):** built in 1.72.0 for RimWorld and Project Zomboid; 1.73.0 adds the list editor's side (`mods`, moving, switching on at a place, and an undo that walks back one change at a time); 1.74.0 the sorter (`sort`), the owner's own rules (`rules`) and changes to several mods at once; 1.76.0 saved lists (`lists`, `compare`, `load`, `save`, `forget`, `export`) and a copy kept at each game start. It is the first step of D'thorga Companion's own mod
 manager (the owner, 22 Nov 2026: "We actually should have our own, third-party, mod managing", after RimSort said only "1 missing
 mod" for a patch whose author had taken it off the Workshop). The Companion's Mod list page shows it from 0.45.0.
 
@@ -30,6 +30,11 @@ mod" for a patch whose author had taken it off the Workshop). The Companion's Mo
 | `mod-list fix --name GAME --list KEY --move ID --to PLACE [--apply]` | Moves a mod to a place (1 is first); `--enable ID --to PLACE` switches one on there (1.73.0) | writes with `--apply` |
 | `mod-list sort --name GAME --list KEY [--full] [--apply]` | The list sorted from every rule, each move explained; `--full` rebuilds the whole order (1.74.0) | writes with `--apply` |
 | `mod-list rules --name GAME [--mod ID --after OTHER \| --before OTHER \| --top \| --bottom \| --drop N] [--apply]` | Your own rules, your RimSort rules (read only), and every rule set the sorter reads; adds or takes away one of yours (1.74.0) | writes with `--apply` |
+| `mod-list lists --name GAME` | Every saved list: by name, kept at game starts, each save's, RimSort's history (1.76.0) | reads |
+| `mod-list compare --name GAME --list KEY (--from SOURCE:REF \| --file PATH)` | What loading a list would switch on, off and move, and which of its mods are not on this PC, with why | reads |
+| `mod-list load --name GAME --list KEY (--from SOURCE:REF \| --file PATH) [--apply]` | Loads it, leaving out mods not on this PC, after a backup | writes with `--apply` |
+| `mod-list save --name GAME --list KEY --as NAME [--replace] [--apply]` / `forget --saved NAME` | Keeps the list by name; takes a saved list away | writes with `--apply` |
+| `mod-list export --name GAME (--list KEY \| --from SOURCE:REF) --to PATH [--apply]` | Writes a list as the game's own file (RimWorld `.rml`) | writes with `--apply` |
 | `mod-list undo --name GAME --list KEY [--backup FILE] [--apply]` | Goes back on the latest change made here not yet gone back on; again, on the one before | writes with `--apply` |
 | `mod-list mods --name GAME` | Every mod on this PC (key, name, source, Workshop number, authors, versions, needs) and each list's entries in order, joined by key, with how many changes each list can still go back on (1.73.0) | reads |
 | `mod-list backups --name GAME` | Every backup kept, newest first | reads |
@@ -90,6 +95,18 @@ rule puts it there, as Harmony's does) or **at the bottom**.
 
 Not confirmed, and said so: how RimSort itself reads "load at the top" (it left two such mods where this sorter lifts them), and
 whether Project Zomboid has any shared community rules (none are read for it).
+
+## Saved lists (1.76.0)
+
+A list's **source** and **ref** name it (`--from saved:Quiet`, `save:PG18.rws`, `manager:Default/<file>.json`, `kept:<time>`).
+Lists saved by name live in `mod-list/<game>/lists/`, copies kept at game starts in `mod-list/<game>/kept/`; each holds the ids
+in order with the names and Workshop numbers known when it was kept, so a mod gone since can still be named. Loading leaves out
+mods not on this PC and names each with why (as the check does; a list from a save knows names but no Workshop numbers, so those
+say to look on the Workshop by name). **A copy kept at a game start** is made by the next read of the list after the start, when
+the list then is the one the game started with (unchanged more than two minutes after the game last wrote its log) and differs
+from the last copy; nothing is kept while the tools are not run, so a start followed by a change before the next read is missed.
+
+Not confirmed, and said so: RimSort's history times are read from its files' times; Project Zomboid has no start record yet.
 
 ## Backups
 
