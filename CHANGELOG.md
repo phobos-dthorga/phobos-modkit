@@ -4,6 +4,18 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.78.0] - 2026-11-22
+
+Pictures and sounds in the code behind an entry (the owner, 22 Nov 2026: "We should support the ability to display multimedia in
+parts like this", of D'thorga Companion's code viewer, which could only say a changed picture "isn't text").
+
+### Added
+
+- **changes entry names what each file that isn't text is, and its size before and after**: `media` (picture, texture, sound,
+  video, model, font, document, archive, program or other, by extension; null for text) and `sizeBefore` and `sizeAfter` in bytes,
+  read from git's trees in one call a hundred files (`docs/changes.md`). A program can then draw a picture, play a sound or name a
+  model and its sizes, where before it had only `binary`. Checked on two games' repositories: phobos-rimworld's truck armour kits
+  (30 pictures) and phobos-ostranauts' washer pump (4 sounds, removed).
 ## [1.77.0] - 2026-11-22
 
 Subscribing through Steam, step 5 of the mod manager (the owner, 22 Nov 2026: "Start step 5, subscribing through Steam"). The

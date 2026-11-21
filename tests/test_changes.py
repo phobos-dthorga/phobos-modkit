@@ -210,6 +210,43 @@ class EntryTests(unittest.TestCase):
             self.assertEqual(files["src/Empty.cs"].change, "added")
             self.assertTrue(files["src/oar.png"].binary)
 
+    def test_a_file_that_is_not_text_says_what_it_is_and_its_sizes(self):
+        # The owner's "display multimedia in parts like this" (22 Nov 2026): the code viewer draws pictures and plays sounds, so the
+        # kit names what each is and how large it was before and after.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = repository(tmp)
+            found = changes.entry_code(root, "mods/Thing/CHANGELOG.md", "Boats float.")
+            picture = {f.path: f for f in found.files}["mods/Thing/Boat.png"]
+            self.assertEqual((picture.media, picture.size_before, picture.size_after), ("picture", None, 12))
+            self.assertIsNone({f.path: f for f in found.files}["src/Boat.cs"].media)
+            # A picture changed in a commit, a sound removed, and a picture changed again but not yet committed.
+            (root / "mods" / "Thing" / "Boat.png").write_bytes(b"\x89PNG\r\n\x1a\n\0\0\0\0bigger")
+            (root / "mods" / "Thing" / "horn.ogg").write_bytes(b"OggS\0\0\0")
+            git(root, "add", "-f", "mods")
+            git(root, "commit", "-q", "-m", "boat redrawn, horn")
+            git(root, "rm", "-q", "mods/Thing/horn.ogg")
+            git(root, "commit", "-q", "-m", "horn gone")
+            hashes = changes.git(root, "log", "--format=%H").split()
+            redrawn = {f.path: f for f in changes.commit_code(root, "mods/Thing/CHANGELOG.md", hashes[1]).files}
+            self.assertEqual((redrawn["mods/Thing/Boat.png"].size_before, redrawn["mods/Thing/Boat.png"].size_after), (12, 18))
+            self.assertEqual((redrawn["mods/Thing/horn.ogg"].media, redrawn["mods/Thing/horn.ogg"].size_before), ("sound", None))
+            gone = changes.commit_code(root, "mods/Thing/CHANGELOG.md", hashes[0]).files[0]
+            self.assertEqual((gone.change, gone.size_before, gone.size_after), ("removed", 7, None))
+            write(root / "mods" / "Thing" / "CHANGELOG.md", HEAD.rstrip("\n") + "\n\n- **Oars.** Boats row.\n\n" + V2 + V1)
+            (root / "mods" / "Thing" / "Boat.png").write_bytes(b"\x89PNG\r\n\x1a\n\0small")
+            uncommitted = {f.path: f for f in changes.entry_code(root, "mods/Thing/CHANGELOG.md", "Oars.").files}
+            self.assertEqual((uncommitted["mods/Thing/Boat.png"].size_before, uncommitted["mods/Thing/Boat.png"].size_after), (18, 14))
+
+    def test_the_entry_answer_carries_each_files_media_and_sizes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = io.StringIO()
+            changes_cli.main(["entry", "--root", str(repository(tmp)), "--changelog", "mods/Thing/CHANGELOG.md", "--text", "Sails.",
+                              "--json"], environ={}, out=out)
+            files = {f["path"]: f for f in json.loads(out.getvalue())["data"]["files"]}
+            self.assertEqual({k: files["mods/Thing/Boat.png"][k] for k in ("media", "sizeBefore", "sizeAfter")},
+                             {"media": "picture", "sizeBefore": None, "sizeAfter": 12})
+            self.assertIsNone(files["src/Wheel.cs"]["media"])
+
     def test_what_is_not_an_entry_or_not_a_changelog_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = repository(tmp)

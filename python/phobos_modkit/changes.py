@@ -42,6 +42,21 @@ CODE = {"csharp", "lua", "python", "rust", "typescript", "javascript", "svelte",
 DATA = {"xml", "json", "toml", "yaml", "ini"}
 KINDS = ("code", "data", "words", "other")
 
+# What a file that isn't text is, so a program can choose how to show it (1.78.0): a picture or a sound drawn and played, a
+# texture decoded, the rest named in words with their sizes. Never how to draw it; extensions any game's mods use.
+MEDIA = {
+    **dict.fromkeys((".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".tga", ".tif", ".tiff", ".ico", ".psd", ".xcf",
+                     ".kra"), "picture"),
+    **dict.fromkeys((".dds", ".ktx", ".ktx2", ".basis"), "texture"),
+    **dict.fromkeys((".ogg", ".wav", ".mp3", ".flac", ".opus", ".m4a", ".aac", ".aif", ".aiff"), "sound"),
+    **dict.fromkeys((".mp4", ".webm", ".mkv", ".mov", ".avi", ".ogv", ".bik"), "video"),
+    **dict.fromkeys((".blend", ".fbx", ".obj", ".gltf", ".glb", ".i3d", ".shapes", ".3ds", ".dae", ".mesh"), "model"),
+    **dict.fromkeys((".ttf", ".otf", ".woff", ".woff2", ".fnt"), "font"),
+    **dict.fromkeys((".pdf", ".docx", ".odt", ".xlsx", ".ods", ".pptx", ".rtf"), "document"),
+    **dict.fromkeys((".zip", ".7z", ".rar", ".gz", ".tar", ".bundle", ".unity3d", ".pak"), "archive"),
+    **dict.fromkeys((".dll", ".exe", ".so", ".dylib", ".pdb", ".jar", ".class", ".msi"), "program"),
+}
+
 _DIFF_HEAD = re.compile(r"^diff --git a/(.*?) b/(.*)$")
 _HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$")
 
@@ -249,6 +264,13 @@ class FileChange:
     deletions: int = 0
     hunks: list = field(default_factory=list)     # {"header", "lines": [{"kind", "old", "new", "text"}]}
     truncated: bool = False
+    size_before: int | None = None    # a binary file's bytes before and after the change (1.78.0); None where it did not exist
+    size_after: int | None = None
+
+    @property
+    def media(self):
+        """What a binary file is ("picture", "sound", "texture"...), "other" when the kit does not know; None for a text file."""
+        return MEDIA.get(Path(self.path).suffix.lower(), "other") if self.binary else None
 
     @property
     def language(self):
@@ -320,6 +342,48 @@ def parse_diff(text, max_file_lines=MAX_FILE_LINES, max_total_lines=MAX_TOTAL_LI
     return files
 
 
+SIZE_BATCH = 100                 # paths given to one git ls-tree, to stay under Windows' command-line length
+
+
+def tree_sizes(root, revision, paths):
+    """{path: bytes} for the files of paths that revision holds; one git call a hundred paths. Empty when revision is not there
+    (the first commit's parent, or HEAD before any commit)."""
+    found = {}
+    paths = sorted(set(paths))
+    if not paths or not git(root, "rev-parse", "--verify", "-q", f"{revision}^{{tree}}", check=False).strip():
+        return found
+    for start in range(0, len(paths), SIZE_BATCH):
+        out = git(root, "ls-tree", "-r", "-l", "-z", revision, "--", *paths[start:start + SIZE_BATCH], check=False)
+        for record in out.split("\0"):
+            info, _, path = record.partition("\t")
+            parts = info.split()
+            if path and len(parts) == 4 and parts[1] == "blob" and parts[3].isdigit():
+                found[path] = int(parts[3])
+    return found
+
+
+def add_sizes(root, commit, files):
+    """Gives each binary file its size before and after: the commit's parent and the commit, or for changes in no commit yet, the
+    last commit and the file on disk. A program shows them for files it cannot draw, and they say how large the bytes it asks for
+    will be."""
+    binary = [f for f in files if f.binary]
+    if not binary:
+        return
+    before_revision = f"{commit.hash}^" if commit else "HEAD"
+    before = tree_sizes(root, before_revision, [f.old_path or f.path for f in binary if f.change != "added"])
+    after = tree_sizes(root, commit.hash, [f.path for f in binary if f.change != "removed"]) if commit else {}
+    for found in binary:
+        if found.change != "added":
+            found.size_before = before.get(found.old_path or found.path)
+        if found.change == "removed":
+            continue
+        if commit:
+            found.size_after = after.get(found.path)
+        else:
+            on_disk = Path(root) / found.path
+            found.size_after = on_disk.stat().st_size if on_disk.is_file() else None
+
+
 def ordered(files, changelog):
     """Code first, then data, then words, then the rest; within each, by path. The changelog itself is left out."""
     rank = {kind: position for position, kind in enumerate(KINDS)}
@@ -349,6 +413,7 @@ def commit_code(root, changelog, commit_hash):
     written = entries_written(git(root, "show", commit.hash, "--format=", "--unified=0", "--no-color", "--no-ext-diff", "--",
                                   changelog))
     files = ordered(parse_diff(diff), changelog)
+    add_sizes(root, commit, files[:MAX_FILES])
     return EntryCode(commit, files[:MAX_FILES], written, max(0, len(files) - MAX_FILES))
 
 
@@ -400,6 +465,7 @@ def entry_code(root, changelog, text):
         written = entries_written(git(root, "show", commit.hash, "--format=", "--unified=0", "--no-color", "--no-ext-diff", "--",
                                       changelog))
     files = ordered(parse_diff(diff), changelog)
+    add_sizes(root, commit, files[:MAX_FILES])
     opening = (needles(text) or [flat])[-1]
     others = [w for w in written if not w.startswith(opening)]     # both as written, bold marks and all
     return EntryCode(commit, files[:MAX_FILES], others, max(0, len(files) - MAX_FILES))

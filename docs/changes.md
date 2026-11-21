@@ -52,12 +52,18 @@ entries may since have been reworded or removed (docs/history.md); the changelog
 | --- | --- |
 | `commit` | `hash`, `time`, `author`, `subject`; null when the entry is in no commit yet. In `changes list`, each entry's `commit` is its hash's first 12 characters, or null |
 | `writtenWith` | The other entries the same commit wrote into this changelog, as written |
-| `files` | Each file but the changelog itself: `path`, `oldPath` (a rename), `change` (added, changed, removed, renamed), `kind` (code, data, words, other), `language`, `binary`, `additions`, `deletions`, `hunks`, `truncated` |
+| `files` | Each file but the changelog itself: `path`, `oldPath` (a rename), `change` (added, changed, removed, renamed), `kind` (code, data, words, other), `language`, `binary`, `additions`, `deletions`, `hunks`, `truncated`, and for a binary file `media`, `sizeBefore` and `sizeAfter` (1.78.0) |
 | `hunks` | `header` (the function or section git names) and `lines`: `kind` (`+`, `-` or a space), `old` and `new` line numbers, `text` |
 
 Files come code first, then data (XML, JSON), then words (Markdown, text), then the rest, each by path. `language` names what a
 file is (csharp, lua, xml, python, rust...) so a program can colour it; it is never a colour. At most 600 diff lines are kept for
 a file and 8,000 for an answer; a file cut short says `truncated`, and its `additions` and `deletions` still count every line.
+
+A file that isn't text has no lines to show, so it says what it is instead (1.78.0): `media` is `picture`, `texture`, `sound`,
+`video`, `model`, `font`, `document`, `archive`, `program` or `other`, by its extension, and null for a text file. `sizeBefore` and
+`sizeAfter` are its bytes in the commit's parent and the commit (for changes in no commit yet, the last commit and the file on
+disk), null on the side where it did not exist. A program draws the pictures and plays the sounds itself, from bytes it reads with
+git; the kit never decodes them.
 
 ## Limits
 

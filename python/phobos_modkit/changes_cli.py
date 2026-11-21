@@ -118,7 +118,8 @@ def entry_report(root, changelog, text, top, progress, commit=None):
     commit = found.commit
     files = [{"path": f.path, "oldPath": f.old_path if f.change == "renamed" else None, "change": f.change, "kind": f.kind,
               "language": f.language, "binary": f.binary, "additions": f.additions, "deletions": f.deletions, "hunks": f.hunks,
-              "truncated": f.truncated} for f in found.files]
+              "truncated": f.truncated, "media": f.media, "sizeBefore": f.size_before, "sizeAfter": f.size_after}
+             for f in found.files]
     if commit:
         title = f"Changes: this entry was written by {commit.hash[:8]}, which changed {len(files):,} other files"
     else:
