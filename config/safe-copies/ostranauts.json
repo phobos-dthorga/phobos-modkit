@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "description": "Ostranauts' own files, the owner's (docs/safe-copies.md; 1.71.0). Agent defaults of 22 Nov 2026, following the owner's RimWorld choices, for the owner to change: each save is a folder (pg23, pg24), so the newest two save folders, autosave folders left out, five earlier copies of each file kept on K:; and the game's settings files. Personal, so K: only. The art needs no list here: its masters are committed and pushed in phobos-ostranauts.",
+  "game": "ostranauts",
+  "sets": [
+    {
+      "name": "saves",
+      "root": "ostranautsDataPath",
+      "folder": "Saves",
+      "units": true,
+      "unitExclude": ["autosave*"],
+      "newest": 2,
+      "keepEarlier": 5,
+      "kind": "personal"
+    },
+    {
+      "name": "game-settings",
+      "root": "ostranautsDataPath",
+      "include": ["settings.json", "controls.json", "console_params.json"],
+      "kind": "personal"
+    }
+  ]
+}

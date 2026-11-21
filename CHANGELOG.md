@@ -9,6 +9,22 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 Safe copies for every game (the owner, 22 Nov 2026: "we should be trying to genericize as much as possible too so whatever is
 achievable can work across as many individual games and their mods from the get go, or with lesser follow-up at the very least").
 
+### Added
+
+- **safe-copies: a game's own list, kept by any repository** (`config/safe-copies/<game>.json`, read with `--game`). A game's
+  saves and settings are the game's, not one mod repository's, so a new game needs one file. This kit keeps the owner's:
+  **RimWorld's** saves, Config folder and RimSort lists, moved here from phobos-rimworld with the same set names so their copies
+  stay as they are, and, new, **Ostranauts'** saves and settings, **Kenshi's** saves and **Project Zomboid's** saves and settings.
+  Their numbers follow the owner's RimWorld choices (the newest two saves, autosaves left out, five earlier copies, K: only), an
+  agent default each list says it is.
+- **safe-copies: a save that is a folder** is copied, kept and let go whole: `units` with `newest` takes the newest folders, each
+  dated by its newest file, `unitExclude` leaves autosave folders out by name, and `status` offers a save that left the rotation
+  as one copy with its file count, never thousands of rows.
+- **safe-copies: fresh files wait for the next run** when a run asks (`settle`, for the daily run in this version): a file written
+  in the last two minutes is left, and a save that is a folder waits whole, so a game saving mid-run is never half copied.
+- **Settings for where games keep the player's own files** (`game_folders.py`, one row per folder, each with its Windows
+  default): `rimsortPath` (declared by phobos-rimworld until now), `ostranautsDataPath`, `kenshiDataPath`, `zomboidDataPath`.
+
 ### Fixed
 
 - **safe-copies: a list speaks only for its own sets.** A run marked gone, and `status` offered to let go, every copy of its game

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "description": "RimWorld's own files, the owner's (docs/safe-copies.md). Moved here from phobos-rimworld's list in 1.71.0 with the same set names, so their copies stay as they are. The owner's choices of 22 Nov 2026: RimWorld's Config folder and RimSort's own settings, rules and mod notes, personal, so K: only; and the saves, the newest pair of the owner's rotation (autosaves left out), five earlier copies of each kept on K:, older ones let go.",
+  "game": "rimworld",
+  "sets": [
+    {
+      "name": "game-settings",
+      "root": "rimworldConfigPath",
+      "include": ["**"],
+      "kind": "personal"
+    },
+    {
+      "name": "saves",
+      "root": "rimworldSavesPath",
+      "include": ["*.rws"],
+      "exclude": ["Autosave-*"],
+      "newest": 2,
+      "keepEarlier": 5,
+      "kind": "personal"
+    },
+    {
+      "name": "rimsort",
+      "root": "rimsortPath",
+      "include": ["settings.json", "dbs/userRules.json", "dbs/ignore.json", "instances/*/aux_metadata.db"],
+      "kind": "personal"
+    }
+  ]
+}

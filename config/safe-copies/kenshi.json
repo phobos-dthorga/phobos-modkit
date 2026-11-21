@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "description": "Kenshi's own files, the owner's (docs/safe-copies.md; 1.71.0). Agent defaults of 22 Nov 2026, following the owner's RimWorld choices, for the owner to change: each save is a folder (PG10, PG11), so the newest two save folders, the autosave, quicksave and working folders left out, five earlier copies of each file kept on K:. Personal, so K: only. Kenshi keeps its settings in the game's own folder, so they are not listed yet.",
+  "game": "kenshi",
+  "sets": [
+    {
+      "name": "saves",
+      "root": "kenshiDataPath",
+      "folder": "save",
+      "units": true,
+      "unitExclude": ["autosave*", "quicksave*", "_current*"],
+      "newest": 2,
+      "keepEarlier": 5,
+      "kind": "personal"
+    }
+  ]
+}

@@ -62,6 +62,8 @@ DESTINATIONS = (("local", LOCAL), ("repository", REPOSITORY))
 # Where Claude Code keeps its notes about the owner (1.67.0): CLAUDE_CONFIG_DIR is Claude Code's own way to move it.
 CLAUDE_HOME = ("claudeHomePath", "CLAUDE_CONFIG_DIR")
 CONFIG = Path("config") / "safe-copies.json"
+LISTS = Path("config") / "safe-copies"        # 1.71.0: <game>.json, a game's own saves and settings
+SETTLE_S = 120                                 # 1.71.0: the daily run leaves files written this recently for the next run
 MARK = ".safe-copies.json"
 BOOK = "_safe-copies"
 PARTIAL = ".safe-copies-partial"
@@ -155,8 +157,10 @@ class SetSpec:
     kind: object = OWN                # "own", "game-derived", "proven" or {"unitOf": set, "pattern": "...{unit}..."}
     units: bool = False               # each folder directly under the set's folder is a unit of its own
     proof: dict = None
-    newest: int = None                # 1.68.0: only the newest N files it takes, by when each was last written (a save rotation)
+    newest: int = None                # 1.68.0: only the newest N files it takes, by when each was last written (a save rotation);
+    #                                   1.71.0: with units, the newest N units, each dated by its newest file (a save that is a folder)
     keep_earlier: int = None          # 1.68.0: earlier copies kept of each file; older ones go (the owner's word, 22 Nov 2026)
+    unit_exclude: list = field(default_factory=list)   # 1.71.0: units left out by name, such as a game's autosave folders
 
 
 @dataclass
@@ -166,25 +170,39 @@ class Config:
     provenance: list
 
 
-def load_config(root):
-    """The repository's config/safe-copies.json, checked."""
-    path = Path(root) / CONFIG
+def list_path(root, game=None):
+    """A repository's own list (config/safe-copies.json), or the list it keeps for one game's saves and settings
+    (config/safe-copies/<game>.json, 1.71.0): a game's own files are the game's, not one mod repository's, so any repository may
+    keep a game's list, and a new game needs only that one file."""
+    return Path(root) / (LISTS / f"{game}.json" if game else CONFIG)
+
+
+def load_config(root, game=None):
+    """A list, checked: the repository's own, or with `game` the one it keeps for that game."""
+    if game is not None and not NAME.match(str(game)):
+        raise SafeCopiesError(f"{game!r} is not a game's name")
+    path = list_path(root, game)
+    shown = path.relative_to(Path(root)).as_posix()
     if not path.is_file():
-        raise SafeCopiesError(f"{CONFIG.as_posix()} is missing in {Path(root).resolve().name}: it lists what to copy")
+        raise SafeCopiesError(f"{shown} is missing in {Path(root).resolve().name}: it lists what to copy")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except ValueError as error:
-        raise SafeCopiesError(f"{CONFIG.as_posix()} could not be read: {error}") from None
-    game = data.get("game")
-    if not isinstance(game, str) or not NAME.match(game):
-        raise SafeCopiesError(f"{CONFIG.as_posix()} must name its game (\"game\": \"rimworld\")")
+        raise SafeCopiesError(f"{shown} could not be read: {error}") from None
+    named = data.get("game", game)
+    if not isinstance(named, str) or not NAME.match(named):
+        raise SafeCopiesError(f"{shown} must name its game (\"game\": \"rimworld\")")
+    if game is not None and named != game:
+        raise SafeCopiesError(f"{shown} names the game {named}, not {game}")
+    game = named
     sets, seen = [], set()
     for item in data.get("sets", []):
         spec = SetSpec(name=item.get("name", ""), root=item.get("root", ""), env=item.get("env", ""),
                        folder=item.get("folder", ""), include=list(item.get("include", ["**"])),
                        exclude=list(item.get("exclude", [])), local_only=list(item.get("localOnly", [])),
                        kind=item.get("kind", OWN), units=bool(item.get("units", False)), proof=item.get("proof"),
-                       newest=item.get("newest"), keep_earlier=item.get("keepEarlier"))
+                       newest=item.get("newest"), keep_earlier=item.get("keepEarlier"),
+                       unit_exclude=list(item.get("unitExclude", [])))
         for field_name, value in (("newest", spec.newest), ("keepEarlier", spec.keep_earlier)):
             if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value < 1 or value > 1000):
                 raise SafeCopiesError(f"set {spec.name}: {field_name} must be a whole number from 1 to 1000")
@@ -208,8 +226,10 @@ def load_config(root):
             followed = next((s for s in sets if s.name == spec.kind["unitOf"]), None)
             if followed is None or followed.kind != PROVEN or not followed.units:
                 raise SafeCopiesError(f"set {spec.name} follows {spec.kind['unitOf']}, which is not a proven set of units")
+        if spec.unit_exclude and not spec.units:
+            raise SafeCopiesError(f"set {spec.name}: unitExclude needs units")
     if not sets:
-        raise SafeCopiesError(f"{CONFIG.as_posix()} lists no sets")
+        raise SafeCopiesError(f"{shown} lists no sets")
     return Config(game, sets, list(data.get("provenance", [])))
 
 
@@ -255,6 +275,7 @@ class Collection:
     # copies gone or offer them to let go.
     sets: frozenset = frozenset()
     source: str = ""
+    rotating_units: dict = field(default_factory=dict)   # 1.71.0: sets rotating whole units, with the units taken now
 
 
 def _settings_file(root):
@@ -366,11 +387,45 @@ def prove(files, unit_path, proof):
     return True, f"all {len(covered)} pictures in {proof['manifest']} by hash"
 
 
-def collect(root, environ=None, only=None):
-    """Every file the repository's sets take, with its kind. `only` limits the items to those sets; proofs are still read for
-    the sets others follow."""
-    config = load_config(root)
-    items, units, notes, walked, kinds, rotating = [], [], [], set(), {}, {}
+def _units_of(base, spec, notes):
+    """(unit, folder, files) for each unit of a set of units, or the set as one; with `newest`, only the newest units, each dated
+    by its newest file (1.71.0: a game whose save is a folder)."""
+    if not spec.units:
+        return [(None, base, _walk(base, spec, notes, spec.name))]
+    found = [(child.name, child, _walk(child, spec, notes, f"{spec.name}/{child.name}"))
+             for child in sorted(base.iterdir(), key=lambda p: p.name.lower())
+             if child.is_dir() and not is_link(child) and child.name != BOOK and NAME.match(child.name)
+             and not any(fnmatch.fnmatch(child.name.casefold(), pattern.casefold()) for pattern in spec.unit_exclude)]
+    if spec.newest:
+        newest = sorted(found, key=lambda unit: (max((info.st_mtime_ns for _, _, info in unit[2]), default=0), unit[0]),
+                        reverse=True)[:spec.newest]
+        found = sorted(newest, key=lambda unit: unit[0].lower())
+    return found
+
+
+def _settled(unit, files, cutoff_ns, notes, label):
+    """The files written before the cutoff (1.71.0): the daily run leaves a file still being written for the next run, and a unit
+    (a save that is a folder) whole, so it never keeps half of one save and half of the next."""
+    if cutoff_ns is None:
+        return files
+    fresh = [relative for relative, _, info in files if info.st_mtime_ns > cutoff_ns]
+    if not fresh:
+        return files
+    if unit is not None:
+        notes.append(f"{label}: written in the last {SETTLE_S // 60} minutes, left for the next run")
+        return None
+    notes.append(f"{label}: {len(fresh)} files written in the last {SETTLE_S // 60} minutes, left for the next run")
+    return [found for found in files if found[2].st_mtime_ns <= cutoff_ns]
+
+
+def collect(root, environ=None, only=None, game=None, settle=False, now=None):
+    """Every file a list's sets take, with its kind: the repository's own list, or with `game` the one it keeps for that game.
+    `only` limits the items to those sets; proofs are still read for the sets others follow. With `settle`, files written in the
+    last two minutes wait for the next run (the daily run, which may start while a game is saving)."""
+    config = load_config(root, game)
+    source = Path(root).resolve().name + (f":{config.game}" if game else "")
+    cutoff_ns = int((_now(now).timestamp() - SETTLE_S) * 1e9) if settle else None
+    items, units, notes, walked, kinds, rotating, rotating_units = [], [], [], set(), {}, {}, {}
     ordered = sorted(config.sets, key=lambda s: isinstance(s.kind, dict))
     for spec in ordered:
         wanted = not only or spec.name in only
@@ -384,13 +439,16 @@ def collect(root, environ=None, only=None):
         if is_link(base):
             notes.append(f"{spec.name}: {base} is a link, not followed")
             continue
-        if spec.units:
-            parts = [(child.name, child) for child in sorted(base.iterdir(), key=lambda p: p.name.lower())
-                     if child.is_dir() and not is_link(child) and child.name != BOOK and NAME.match(child.name)]
-        else:
-            parts = [(None, base)]
-        for unit, folder in parts:
-            files = _walk(folder, spec, notes, f"{spec.name}/{unit}" if unit else spec.name)
+        found_units = _units_of(base, spec, notes)
+        if spec.units and spec.newest:
+            rotating[spec.name] = spec.newest
+            rotating_units[spec.name] = {unit for unit, _, _ in found_units}
+        for unit, folder, files in found_units:
+            label = f"{spec.name}/{unit}" if unit else spec.name
+            settled = _settled(unit, files, cutoff_ns, notes, label)
+            if settled is None:
+                continue                          # still one of the newest: waiting, not dropped
+            held_back, files = len(settled) != len(files), settled
             if spec.kind == PROVEN:
                 if not wanted and not spec.units:
                     continue
@@ -405,15 +463,16 @@ def collect(root, environ=None, only=None):
             if not wanted:
                 continue
             if spec.newest:
-                # Only the newest few, by when each was last written. A file that falls out of them still exists at its source,
-                # so this set never says a file is gone: its copies simply stay.
-                files = sorted(files, key=lambda found: (found[2].st_mtime_ns, found[0]), reverse=True)[:spec.newest]
-                files = sorted(files, key=lambda found: found[0])
-                rotating[spec.name] = spec.newest
+                # Only the newest few, by when each was last written (or the newest units, chosen above). A file that falls out of
+                # them still exists at its source, so this set never says a file is gone: its copies simply stay.
+                if not spec.units:
+                    files = sorted(files, key=lambda found: (found[2].st_mtime_ns, found[0]), reverse=True)[:spec.newest]
+                    files = sorted(files, key=lambda found: found[0])
+                    rotating[spec.name] = spec.newest
                 if why:
                     why = f"{why}; the newest {spec.newest}"
-            else:
-                walked.add((spec.name, unit))
+            elif not held_back:
+                walked.add((spec.name, unit))     # a set that left a fresh file for later cannot say this run what is gone
             follows = isinstance(spec.kind, dict)
             shown = {}
             for relative, path, info in files:
@@ -429,7 +488,7 @@ def collect(root, environ=None, only=None):
                 units.append(Unit(spec.name, unit, kind or GAME_DERIVED, "nothing to copy"))
             units.extend(shown.values())
     return Collection(config.game, items, units, notes, walked, config.provenance, rotating,
-                      frozenset(spec.name for spec in config.sets), Path(root).resolve().name)
+                      frozenset(spec.name for spec in config.sets), source, rotating_units)
 
 
 def _owns(collection, key, record):
@@ -659,9 +718,9 @@ def _same(record, item, target):
             and target.is_file() and target.stat().st_size == item.size)
 
 
-def plan(root, environ=None, only=None):
+def plan(root, environ=None, only=None, game=None):
     """What a run would copy to each destination, what it would leave as it is, and what each refuses and why."""
-    collection = collect(root, environ, only)
+    collection = collect(root, environ, only, game)
     found = []
     for destination in destinations(environ, _settings_file(root)):
         entry = {"destination": destination, "copy": [], "same": 0, "refused": {}}
@@ -679,11 +738,11 @@ def plan(root, environ=None, only=None):
     return collection, found
 
 
-def run(root, environ=None, only=None, push=True, now=None, progress=None, runner=None):
+def run(root, environ=None, only=None, push=True, now=None, progress=None, runner=None, game=None, settle=False):
     """Copies what changed to every destination that is ready, and commits and pushes the repository's copy. Returns one result
     per destination; refuses when none is ready."""
     progress = progress or silent()
-    collection = collect(root, environ, only)
+    collection = collect(root, environ, only, game, settle, now)
     ready = [d for d in destinations(environ, _settings_file(root)) if not d.problem]
     if not ready:
         raise SafeCopiesError("no destination is ready: " + "; ".join(f"{d.name} {d.problem}"
@@ -784,7 +843,7 @@ def _run_one(destination, collection, stamp, when, made, push, progress, runner,
               "from": Path(root).resolve().name, "game": collection.game, "copied": copied, "same": same,
               "refused": {why: {"files": len(keys), "first": keys[:SHOWN]} for why, keys in refused.items()},
               "failed": failed, "gone": gone, "warnings": warnings, "letGo": let_go, "provenance": made, "git": None}
-    record_path = destination.path / BOOK / "runs" / f"{stamp}-{collection.game}.json"
+    record_path = destination.path / BOOK / "runs" / f"{stamp}-{_slug(collection)}.json"
     # The repository keeps a run's record only when the run changed something, so a quiet night makes no commit.
     if destination.name != "repository" or copied or gone or failed or let_go:
         _write_json(record_path, result)
@@ -795,6 +854,12 @@ def _run_one(destination, collection, stamp, when, made, push, progress, runner,
         if result["git"].get("error"):
             failed.append({"path": "(git)", "error": result["git"]["error"]})
     return result
+
+
+def _slug(collection):
+    """A run record's name after its time: the game and the list, so two lists of one game running in the same second (the daily
+    run) keep a record each."""
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", f"{collection.game}-{collection.source}").strip("-")
 
 
 def _record(item, digest, copied, source):
@@ -840,28 +905,43 @@ def kept_only(collection, destination):
     if destination.problem or destination.name != "local":
         return []
     present = {item.key for item in collection.items}
-    found = []
+    found = {}
     for key, record in sorted(read_state(destination.path).items()):
         parts = key.split("/")
         if not _owns(collection, key, record) or key in present:
             continue
+        whole = parts[1] in collection.rotating_units
+        if whole and parts[2] in collection.rotating_units[parts[1]]:
+            continue                          # a file no longer in one of the newest saves: that save's, still kept with it
         if record.get("gone"):
             why = "gone from its source"
         elif parts[1] in collection.rotating:
             why = f"no longer among the newest {collection.rotating[parts[1]]}"
         else:
             continue
+        # 1.71.0: a save that is a folder is offered whole, as one copy, never as its thousands of files.
+        name = "/".join(parts[:3]) if whole else key
+        entry = found.setdefault(name, {"key": name, "set": parts[1], "why": why, "bytes": 0, "files": 0, "earlier": 0,
+                                        "earlierBytes": 0, "keys": []})
         earlier = _earlier_of(destination.path, key)
-        found.append({"key": key, "set": parts[1], "why": why, "bytes": int(record.get("size") or 0),
-                      "earlier": len(earlier), "earlierBytes": sum(p.stat().st_size for p in earlier)})
-    return found
+        entry["bytes"] += int(record.get("size") or 0)
+        entry["files"] += 1
+        entry["earlier"] += len(earlier)
+        entry["earlierBytes"] += sum(p.stat().st_size for p in earlier)
+        entry["keys"].append(key)
+    return list(found.values())
 
 
-def let_go(root, keys, environ=None, apply=False, now=None):
+def _shown(entry):
+    """A kept copy as status shows it: without the list of every file in it."""
+    return {name: value for name, value in entry.items() if name != "keys"}
+
+
+def let_go(root, keys, environ=None, apply=False, now=None, game=None):
     """Lets go of copies the list no longer takes, by name, from the plain-folder destination (1.69.0; on the owner's word for each
     run): the copy, its earlier copies and its record. Only a name kept_only lists may go; nothing at a source, never a copy in use.
     Without apply it only says what would go."""
-    collection = collect(root, environ)
+    collection = collect(root, environ, game=game)
     destination = next(d for d in destinations(environ, _settings_file(root)) if d.name == "local")
     if destination.problem:
         raise SafeCopiesError(f"the local copy {destination.problem}")
@@ -870,28 +950,29 @@ def let_go(root, keys, environ=None, apply=False, now=None):
     if unknown:
         raise SafeCopiesError(f"{unknown[0]} is not a copy the list no longer takes; safe-copies status lists those")
     chosen = [listed[key] for key in keys]
+    size = sum(entry["bytes"] + entry["earlierBytes"] for entry in chosen)
     if not apply:
-        return {"applied": False, "chosen": chosen,
-                "bytes": sum(entry["bytes"] + entry["earlierBytes"] for entry in chosen)}
+        return {"applied": False, "chosen": [_shown(entry) for entry in chosen], "bytes": size}
     with _locked(destination.path):
         state = read_state(destination.path)
         gone = []
         for entry in chosen:
-            for path in [destination.path / entry["key"], *_earlier_of(destination.path, entry["key"])]:
-                if path.is_file() and path.resolve().is_relative_to(Path(destination.path).resolve()):
-                    path.unlink()
-                    gone.append(str(path.relative_to(destination.path)).replace("\\", "/"))
-            state.pop(entry["key"], None)
+            for key in entry["keys"]:
+                for path in [destination.path / key, *_earlier_of(destination.path, key)]:
+                    if path.is_file() and path.resolve().is_relative_to(Path(destination.path).resolve()):
+                        path.unlink()
+                        gone.append(str(path.relative_to(destination.path)).replace("\\", "/"))
+                state.pop(key, None)
         _write_json(destination.path / BOOK / "state.json", {"format": FORMAT, "files": state})
-        _write_json(destination.path / BOOK / "runs" / f"{_stamp(now)}-{collection.game}-let-go.json",
-                    {"time": _iso(now), "kit": __version__, "game": collection.game, "letGo": gone, "chosen": chosen})
-    return {"applied": True, "chosen": chosen, "letGo": gone,
-            "bytes": sum(entry["bytes"] + entry["earlierBytes"] for entry in chosen)}
+        shown = [_shown(entry) for entry in chosen]
+        _write_json(destination.path / BOOK / "runs" / f"{_stamp(now)}-{_slug(collection)}-let-go.json",
+                    {"time": _iso(now), "kit": __version__, "game": collection.game, "letGo": gone, "chosen": shown})
+    return {"applied": True, "chosen": shown, "letGo": gone, "bytes": size}
 
 
-def status(root, environ=None):
+def status(root, environ=None, game=None):
     """Each set and unit with its kind, and for each destination whether it is copied, refused, changed since, or never copied."""
-    collection = collect(root, environ)
+    collection = collect(root, environ, game=game)
     dests = destinations(environ, _settings_file(root))
     states = {d.name: read_state(d.path) if not d.problem else {} for d in dests}
     for name, state in states.items():
@@ -1022,6 +1103,9 @@ def _parser():
     }
     for name in ("plan", "run", "status", "verify", "restore", "let-go"):
         commands[name].add_argument("--root", default=".", help="the repository whose config/safe-copies.json to read")
+    for name in ("plan", "run", "status", "let-go"):
+        commands[name].add_argument("--game", help="read the list the repository keeps for this game's saves and settings, "
+                                                   "config/safe-copies/GAME.json, instead of its own")
     for name in ("plan", "run"):
         commands[name].add_argument("--set", action="append", default=[], help="only this set (repeatable)")
     commands["run"].add_argument("--no-push", action="store_true", help="commit the repository's copy but do not push it")
@@ -1182,22 +1266,22 @@ def main(argv=None, out=None, environ=None):
         root = Path(args.root)
         settings_file = _settings_file(root)
         if args.report == "plan":
-            collection, entries = plan(root, environ, set(args.set) or None)
+            collection, entries = plan(root, environ, set(args.set) or None, args.game)
             answer(_plan_report(collection, entries), _plan_data(collection, entries))
             return EXIT_OK
         if args.report == "run":
             collection, results = run(root, environ, set(args.set) or None, push=not args.no_push,
-                                      progress=Progress(environ))
+                                      progress=Progress(environ), game=args.game)
             answer(_run_report(results, collection.notes), {"ok": True, "game": collection.game, "results": results})
             record = next((r["record"] for r in results if r.get("record")), None)
             if record and not args.json:
                 out.write(f"report: {record}\n")
             return EXIT_PROBLEMS if any(r["failed"] or r["warnings"] for r in results) else EXIT_OK
         if args.report == "status":
-            collection, dests, rows = status(root, environ)
+            collection, dests, rows = status(root, environ, args.game)
             waiting = {d.name: unsent(d.path) for d in dests if d.name == "repository" and not d.problem}
-            kept = [entry for d in dests for entry in kept_only(collection, d)]
-            data = {"game": collection.game, "notes": collection.notes, "sets": rows, "keptOnly": kept,
+            kept = [_shown(entry) for d in dests for entry in kept_only(collection, d)]
+            data = {"game": collection.game, "list": collection.source, "notes": collection.notes, "sets": rows, "keptOnly": kept,
                     "destinations": [{"name": d.name, "folder": str(d.path or ""), "problem": d.problem,
                                       "privateLocal": d.private_local, "shared": d.shared,
                                       "lastRun": last_run(d.path) if not d.problem else None,
@@ -1218,9 +1302,9 @@ def main(argv=None, out=None, environ=None):
                 raise SafeCopiesError("name each copy with --file, or --all for every copy status lists as no longer taken")
             keys = args.file
             if args.all:
-                keys = [entry["key"] for entry in kept_only(collect(root, environ), next(
+                keys = [entry["key"] for entry in kept_only(collect(root, environ, game=args.game), next(
                     d for d in destinations(environ, settings_file) if d.name == "local"))]
-            done = let_go(root, keys, environ, apply=args.apply)
+            done = let_go(root, keys, environ, apply=args.apply, game=args.game)
             title = (f"Let go of {len(done['chosen'])} copies ({_size(done['bytes'])})" if done["applied"]
                      else f"Would let go of {len(done['chosen'])} copies ({_size(done['bytes'])}); add --apply")
             report = Report(title)

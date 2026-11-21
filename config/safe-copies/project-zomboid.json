@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "description": "Project Zomboid's own files, the owner's (docs/safe-copies.md; 1.71.0). Agent defaults of 22 Nov 2026, following the owner's RimWorld choices, for the owner to change: each save is a folder under its game mode, so the newest two Sandbox saves, five earlier copies of each file kept on K:; and the game's options, sandbox presets and server settings. Personal, so K: only. The mods folder is left out: it mixes other authors' mods with the owner's design notes.",
+  "game": "project-zomboid",
+  "sets": [
+    {
+      "name": "saves-sandbox",
+      "root": "zomboidDataPath",
+      "folder": "Saves/Sandbox",
+      "units": true,
+      "newest": 2,
+      "keepEarlier": 5,
+      "kind": "personal"
+    },
+    {
+      "name": "game-settings",
+      "root": "zomboidDataPath",
+      "include": ["options.ini", "Sandbox Presets/**", "Server/*.ini", "Server/*.lua", "Server/*.txt"],
+      "kind": "personal"
+    }
+  ]
+}

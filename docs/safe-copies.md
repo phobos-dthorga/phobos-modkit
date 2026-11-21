@@ -1,8 +1,9 @@
 # Safe copies: what cannot be made again, kept apart by kind
 
-**Status (22 Nov 2026):** built in 1.66.0; the personal kind, the notes about the owner and settings' own defaults in 1.67.0. In use:
-phobos-rimworld's training sets, style models and game settings, and this repository's own list (`config/safe-copies.json`: Claude
-Code's notes about the owner, shown under D'thorga Companion's Tools game). D'thorga Companion's Home shows each list (0.42.0).
+**Status (22 Nov 2026):** built in 1.66.0; the personal kind, the notes about the owner and settings' own defaults in 1.67.0; every
+game in 1.71.0. In use: phobos-rimworld's training sets and style models; this repository's own list (`config/safe-copies.json`:
+Claude Code's notes about the owner, shown under D'thorga Companion's Tools game); and the lists it keeps for each game's saves and
+settings (`config/safe-copies/`: RimWorld, Ostranauts, Kenshi, Project Zomboid). D'thorga Companion's Home shows each list (0.42.0).
 
 The owner asked on 21 Nov 2026: "Should we add backup functionality for our training sets, models, etc.?" The design, and the
 owner's answers, are in phobos-rimworld's `docs/development/art-backups-handoff.md`. It is called *safe copies*, never *backups*,
@@ -12,6 +13,14 @@ so it is not mixed up with the install backups of `installs` (the owner's choice
 
 - **Copy what cannot be made again, not what is big.** A repository lists its sets in `config/safe-copies.json`. Caches are left
   out by pattern, and base models stay with the tool that downloads and hash-checks them.
+- **A game's own files have a list of their own** (1.71.0): its saves and settings belong to the game, not to one of its mod
+  repositories, so any repository may keep that game's list as `config/safe-copies/<game>.json` (this kit keeps the owner's:
+  RimWorld, Ostranauts, Kenshi and Project Zomboid). **A new game needs that one file**, and a row in `game_folders.py` for
+  where it keeps them. Commands read it with `--game GAME`; D'thorga Companion and the daily run find every such list
+  through the repositories on the owner's games list.
+- **A save that is a folder is copied, kept and let go whole** (1.71.0): `units` with `newest` takes the newest few folders,
+  each dated by its newest file; `unitExclude` leaves autosave folders out by name; `status` offers a save that left the
+  rotation as one copy, and `let-go` removes all of it.
 - **Two rules for three kinds.** `own` may go anywhere the owner chose. **`game-derived` and `personal` go only to a folder
   marked private and local, never to a repository, and never to a folder that looks synced or shared**, even one marked private
   before a sync tool arrived. `personal` (1.67.0) is the owner's own but private: notes about them, a game's settings.
@@ -48,6 +57,7 @@ python -m phobos_modkit safe-copies plan --root REPO           what a run would 
 python -m phobos_modkit safe-copies run --root REPO            copy what changed; commit and push the repository's copy
 python -m phobos_modkit safe-copies run --root REPO --set trainings --no-push
 python -m phobos_modkit safe-copies status --root REPO         each set: copied, changed since, never copied
+python -m phobos_modkit safe-copies run --root KIT --game kenshi    a game's own list: its saves and settings
 python -m phobos_modkit safe-copies verify                     hash every copy again against its record
 python -m phobos_modkit safe-copies restore --root REPO --set trainings --unit house-v1 --to D:\restored\house-v1
 python -m phobos_modkit safe-copies let-go --root REPO --file rimworld/saves/PG15.rws           what would go (a preview)
@@ -69,6 +79,7 @@ refuse.
 | `safeCopiesPath` | `PHOBOS_SAFE_COPIES` | A plain folder. Marked `--local` it takes our own files; marked `--private-local` (refused when the folder looks synced) it takes game-derived files too |
 | `safeCopiesRepositoryPath` | `PHOBOS_SAFE_COPIES_REPOSITORY` | The top folder of a clone of a private git repository, marked `--repository`. Our own files only, and no file over 95 MB (GitHub's limit is 100 MB) |
 | `claudeHomePath` | `CLAUDE_CONFIG_DIR` | Not a destination: Claude Code's own folder, which this repository's list reads for the notes about the owner. Defaults to `~/.claude` (1.67.0) |
+| `rimsortPath`, `ostranautsDataPath`, `kenshiDataPath`, `zomboidDataPath` | `PHOBOS_RIMSORT`, `PHOBOS_OSTRANAUTS_DATA`, `PHOBOS_KENSHI_DATA`, `PHOBOS_ZOMBOID_DATA` | Not destinations: where each game (and RimSort) keeps the player's own files, read by the games' lists (1.71.0). Each defaults to where it is on Windows, so nothing needs setting |
 
 Set them on the Companion's Settings page or with `settings set`. A destination not chosen, not reachable or not marked is skipped,
 and `status` says why. **Looks synced** means one of `.SynologyWorkingDirectory`, `.git`, `.dropbox`, `.sync` or `.stfolder` is in
@@ -103,8 +114,9 @@ is kept only when the run changed something, so a quiet night makes no commit.
 | `name` | The set's folder in every copy: letters, digits, dots and dashes |
 | `root`, `env`, `folder` | Where the set is: a settings key (read in the usual order: argument, environment, the repository's settings file, the central file, then the default the kit knows for it, such as `claudeHomePath`'s `~/.claude` or RimWorld's Config folder), or `@repository`; then a folder under it. A root not set, with no default, is a note, not a failure |
 | `include`, `exclude` | Globs on the path under the set (or under each unit): `*` and `?` stay in one folder, `**` crosses folders. An excluded folder is not even walked |
-| `units` | Each folder directly under the set's folder is a unit of its own: a training, proven on its own |
-| `newest` | 1.68.0: only the newest this many files the set matches, by when each was last written. Its copies of a file that falls out stay, and it never marks a file gone |
+| `units` | Each folder directly under the set's folder is a unit of its own: a training, proven on its own; or a save that is a folder |
+| `unitExclude` | 1.71.0, with `units`: units left out by name (globs, any case), such as `autosave*` |
+| `newest` | 1.68.0: only the newest this many files the set matches, by when each was last written; with `units` (1.71.0), the newest this many units, each dated by its newest file. Its copies of what falls out stay, and it never marks a file gone |
 | `keepEarlier` | 1.68.0: how many earlier copies of each file the plain folder keeps; the oldest beyond them are let go, each named in the run's record. Without it, every earlier copy stays |
 | `kind` | `own`, `game-derived`, `personal`, `proven`, or `{"unitOf": SET, "pattern": "...{unit}..."}` |
 | `proof` | For `proven`: the marker file, the manifest (a list of entries, or `{"files": [...]}`), the field holding each hash, and the globs it covers |

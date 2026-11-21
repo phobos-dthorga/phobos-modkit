@@ -513,5 +513,86 @@ class OwnershipTests(Fixture):
         self.assertEqual({r.get("from") for r in self.state().values()}, {"repo"}, "an unchanged copy learns its list")
 
 
+class GameListTests(Fixture):
+    """1.71.0: a game's own list kept by any repository, saves that are folders, and the daily run's wait for fresh files."""
+
+    def setUp(self):
+        super().setUp()
+        self.saves = self.base / "game-data" / "Saves"
+        for number, name in enumerate(("pg1", "pg2", "pg3", "autosave_9_pg3")):
+            folder = self.saves / name
+            folder.mkdir(parents=True)
+            for part in ("ship.json", "crew.json"):
+                (folder / part).write_text(f"{name} {part}", encoding="utf-8")
+                moment = NOW.timestamp() - 3600 + number * 60
+                os.utime(folder / part, (moment, moment))
+        (self.repo / "config" / "safe-copies").mkdir()
+        self.write_list({"game": "spacegame", "sets": [
+            {"name": "saves", "root": "gameDataPath", "folder": "Saves", "units": True, "unitExclude": ["autosave*"], "newest": 2,
+             "keepEarlier": 2, "kind": "personal"}]})
+        self.environ["PHOBOS_TEST_GAME_DATA"] = str(self.base / "game-data")
+
+    def write_list(self, data):
+        (self.repo / "config" / "safe-copies" / "spacegame.json").write_text(json.dumps(data), encoding="utf-8")
+        settings = json.loads((self.repo / ".local" / "install-settings.json").read_text(encoding="utf-8"))
+        settings["gameDataPath"] = str(self.base / "game-data")
+        (self.repo / ".local" / "install-settings.json").write_text(json.dumps(settings), encoding="utf-8")
+
+    def plain_folder(self):
+        return next(d for d in sc.destinations(self.environ) if d.name == "local")
+
+    def test_a_games_list_is_its_own_list_beside_the_repositorys(self):
+        collection = sc.collect(self.repo, self.environ, game="spacegame")
+        self.assertEqual((collection.game, collection.source), ("spacegame", "repo:spacegame"))
+        self.assertEqual(sc.collect(self.repo, self.environ).game, "testgame", "the repository's own list is untouched")
+        with self.assertRaises(sc.SafeCopiesError):
+            sc.collect(self.repo, self.environ, game="othergame")
+        self.write_list({"game": "wrong", "sets": [{"name": "x", "root": "@repository"}]})
+        with self.assertRaises(sc.SafeCopiesError) as refused:
+            sc.collect(self.repo, self.environ, game="spacegame")
+        self.assertIn("names the game wrong", str(refused.exception))
+
+    def test_the_newest_saves_are_whole_folders_and_autosaves_are_left_out(self):
+        collection = sc.collect(self.repo, self.environ, game="spacegame")
+        self.assertEqual(sorted({i.unit for i in collection.items}), ["pg2", "pg3"])
+        self.assertEqual(len(collection.items), 4)
+
+    def test_a_save_that_leaves_the_newest_pair_is_offered_whole_and_let_go_whole(self):
+        sc.run(self.repo, self.environ, push=False, now=NOW, game="spacegame")
+        newer = self.saves / "pg4"
+        newer.mkdir()
+        (newer / "ship.json").write_text("pg4", encoding="utf-8")
+        sc.run(self.repo, self.environ, push=False, now=LATER, game="spacegame")
+        collection = sc.collect(self.repo, self.environ, game="spacegame")
+        kept = sc.kept_only(collection, self.plain_folder())
+        self.assertEqual([(e["key"], e["files"]) for e in kept], [("spacegame/saves/pg2", 2)])
+        self.assertIn("no longer among the newest 2", kept[0]["why"])
+        done = sc.let_go(self.repo, ["spacegame/saves/pg2"], self.environ, apply=True, game="spacegame")
+        self.assertEqual(len(done["letGo"]), 2)
+        self.assertNotIn("keys", done["chosen"][0], "the list of every file stays out of what is shown")
+        copies = self.local / "spacegame" / "saves" / "pg2"
+        self.assertFalse(copies.exists() and any(copies.rglob("*.json")))
+        self.assertTrue((self.saves / "pg2" / "ship.json").is_file(), "the save itself is never touched")
+
+    def test_the_daily_run_leaves_a_save_still_being_written_for_next_time(self):
+        os.utime(self.saves / "pg3" / "crew.json", (NOW.timestamp() - 30, NOW.timestamp() - 30))
+        collection = sc.collect(self.repo, self.environ, game="spacegame", settle=True, now=NOW)
+        self.assertEqual(sorted({i.unit for i in collection.items}), ["pg2"], "pg3 waits whole, never half copied")
+        self.assertTrue(any("pg3: written in the last 2 minutes" in note for note in collection.notes))
+        local = self.plain_folder()
+        sc.run(self.repo, self.environ, push=False, now=NOW, game="spacegame", settle=True)
+        self.assertEqual(sc.kept_only(sc.collect(self.repo, self.environ, game="spacegame"), local), [])
+        self.assertEqual(len(sc.collect(self.repo, self.environ, game="spacegame").items), 4, "a run without waiting takes it")
+
+    def test_a_fresh_loose_file_waits_and_nothing_is_called_gone_meanwhile(self):
+        sc.run(self.repo, self.environ, push=False, now=NOW)
+        fresh = self.repo / "plans" / "night-2.json"
+        fresh.write_text("[]", encoding="utf-8")
+        os.utime(fresh, (LATER.timestamp() - 10, LATER.timestamp() - 10))
+        collection = sc.collect(self.repo, self.environ, settle=True, now=LATER)
+        self.assertNotIn("testgame/plans/night-2.json", {i.key for i in collection.items})
+        self.assertNotIn(("plans", None), collection.walked)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -42,7 +42,7 @@ class Setting:
 
 def _known():
     """The settings the kit itself reads, each from the module that owns it."""
-    from . import assembly_archive, claims, decisions, game_files, history, records, safe_copies
+    from . import assembly_archive, claims, decisions, game_files, game_folders, history, records, safe_copies
     from .code import compare
     from .games.rimworld import paths as rimworld
     from .games.rimworld import textures
@@ -87,6 +87,7 @@ def _known():
         Setting(*rimworld.COLONY_MOOD, "The colony mood file D'thorga Framework writes at each save", "folder", "rimworld"),
         Setting(*rimworld.SEEN_IN_PLAY, "The seen-in-play notes D'thorga Framework writes", "file", "rimworld"),
         Setting(*textures.TODDS, "RimSort's texture encoder (todds.exe)", "file", "rimworld", lambda environ: textures.DEFAULT_TODDS),
+        *[Setting(key, env, description, "folder", game, default) for key, env, game, description, default in game_folders.FOLDERS],
     ]
 
 
