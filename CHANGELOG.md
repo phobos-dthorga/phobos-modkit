@@ -22,6 +22,14 @@ achievable can work across as many individual games and their mods from the get 
   as one copy with its file count, never thousands of rows.
 - **safe-copies: fresh files wait for the next run** when a run asks (`settle`, for the daily run in this version): a file written
   in the last two minutes is left, and a save that is a folder waits whole, so a game saving mid-run is never half copied.
+- **safe-copies run-all: every list on the games list, in one run** (`--settle`, `--verify`): each repository's own list and every
+  game's list it keeps, so a new game or repository joins by being on the owner's games list. A refused list or a missing
+  repository is a row with its reason, and the rest still run; what it did is kept for D'thorga Companion
+  (`safe-copies/last-run-all.json`). The games list is the new setting `companionGamesPath` (`PHOBOS_COMPANION_GAMES`, as the
+  Companion reads it).
+- **safe-copies schedule: the daily run** (the owner's word of 22 Nov 2026), one Windows scheduled task of the owner's own,
+  "D'thorga Safe Copies": `--at HH:MM` sets or moves it, `--off` removes it, and on its own it says how it stands and how the
+  last run went. Caught up at the next sign-in when the PC was off, never two at once, low priority, no window, no administrator.
 - **Settings for where games keep the player's own files** (`game_folders.py`, one row per folder, each with its Windows
   default): `rimsortPath` (declared by phobos-rimworld until now), `ostranautsDataPath`, `kenshiDataPath`, `zomboidDataPath`.
 

@@ -42,7 +42,7 @@ class Setting:
 
 def _known():
     """The settings the kit itself reads, each from the module that owns it."""
-    from . import assembly_archive, claims, decisions, game_files, game_folders, history, records, safe_copies
+    from . import assembly_archive, claims, decisions, game_files, game_folders, history, records, safe_copies, safe_copies_daily
     from .code import compare
     from .games.rimworld import paths as rimworld
     from .games.rimworld import textures
@@ -88,6 +88,9 @@ def _known():
         Setting(*rimworld.SEEN_IN_PLAY, "The seen-in-play notes D'thorga Framework writes", "file", "rimworld"),
         Setting(*textures.TODDS, "RimSort's texture encoder (todds.exe)", "file", "rimworld", lambda environ: textures.DEFAULT_TODDS),
         *[Setting(key, env, description, "folder", game, default) for key, env, game, description, default in game_folders.FOLDERS],
+        Setting(*safe_copies_daily.GAMES, "Your games list, as D'thorga Companion keeps it: the daily safe "
+                "copies run every list of every repository on it", "file",
+                default=lambda environ: paths.companion_data(environ) / "games.json"),
     ]
 
 

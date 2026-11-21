@@ -72,6 +72,28 @@ the envelope: `status` has `data.sets` (each with `kind`, `why` and, for each de
 copied, refused or not ready) and `data.destinations`; `plan` has `data.units` and, for each destination, what it would copy and
 refuse.
 
+## Every day, everything (1.71.0)
+
+```text
+python -m phobos_modkit safe-copies run-all --settle --verify      every list on the games list, then every copy checked
+python -m phobos_modkit safe-copies schedule                        whether the daily run is set, when, and how the last went
+python -m phobos_modkit safe-copies schedule --at 04:00             set or move it
+python -m phobos_modkit safe-copies schedule --off                  remove it (the copies stay)
+```
+
+- **`run-all` reads the owner's games list** (`companionGamesPath`, `PHOBOS_COMPANION_GAMES`, else D'thorga Companion's own
+  folder; `--games` names one) and runs, for every repository on it, its own list and every game's list it keeps. **A new game
+  or repository joins by being on the list.** A refused list, or a repository not on this PC, is a row with its reason; the rest
+  still run. What it did is kept for the Companion in its folder, `safe-copies/last-run-all.json`.
+- **`--settle` leaves files written in the last two minutes for the next run**, and a save that is a folder waits whole: the
+  daily run may start while a game is saving. A set that left a file waiting says nothing is gone that run.
+- **`schedule --at` sets one Windows scheduled task of the owner's own**, "D'thorga Safe Copies": no administrator and no
+  password; daily at that time, **caught up at the next sign-in when the PC was off**, never two at once, stopped after three
+  hours, at low priority and with no window (`pythonw.exe`). It runs `run-all --settle --verify` with the copy of the kit and
+  the Python that set it, so set it from D'thorga Companion, whose kit moves with its updates. Windows only; elsewhere, run
+  `run-all` from cron.
+- **No graphics card**: it reads and writes disks and pushes to GitHub, so it may run mid-game, as the owner's runs do.
+
 ## Destinations
 
 | Setting | Environment | What it is |

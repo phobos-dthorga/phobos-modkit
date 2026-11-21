@@ -63,7 +63,9 @@ session**; `CLAUDE.md` imports it. The rules below are this repository's own, an
   chose; they never write to a game's folders, and never delete anything but earlier copies beyond the number a set keeps
   (`keepEarlier`, the owner's word of 22 November 2026, for the saves), inside a destination's own `_safe-copies/earlier`, and, on
   request with `--apply`, `safe-copies let-go`'s copies of files the list no longer takes, each named (1.69.0). **Anything made from a game's files goes only to a folder marked
-  private and local**, never to a repository. Release and publishing tools write only inside the repository they are run on, and only
+  private and local**, never to a repository. `safe-copies run-all` is `run` for every list on the games list. **`safe-copies
+  schedule --at` or `--off` sets or removes one Windows scheduled task of the owner's own**, "D'thorga Safe Copies" (the owner's word
+  of 22 November 2026, for the daily run), and touches no other task; without them it only reads. Release and publishing tools write only inside the repository they are run on, and only
   when asked (`--write`, `--apply`, an upload's records).
 - **Never execute other authors' code.** Assemblies are read through their metadata
   (`System.Reflection.Metadata`), never loaded. Never run another mod's scripts. **One exception** (owner's yes, 20 November

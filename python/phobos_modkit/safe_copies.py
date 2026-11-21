@@ -1100,7 +1100,18 @@ def _parser():
         "restore": sub.add_parser("restore", help="copies a set back out into a folder you name"),
         "mark": sub.add_parser("mark", help="marks a folder as a destination, on the owner's word"),
         "let-go": sub.add_parser("let-go", help="removes copies the list no longer takes, on request; a preview without --apply"),
+        "run-all": sub.add_parser("run-all", help="runs every list of every repository on the games list (the daily run)"),
+        "schedule": sub.add_parser("schedule", help="the daily run: how it stands, or set it with --at, or remove it with --off"),
     }
+    for name in ("run-all", "schedule"):
+        commands[name].add_argument("--games", help="the games list (default: as D'thorga Companion finds it)")
+    run_all_parser = commands["run-all"]
+    run_all_parser.add_argument("--settle", action="store_true", help="leave files written in the last two minutes for next time")
+    run_all_parser.add_argument("--verify", action="store_true", help="then hash every copy again against its record")
+    run_all_parser.add_argument("--no-push", action="store_true", help="commit the repository's copy but do not push it")
+    when = commands["schedule"].add_mutually_exclusive_group()
+    when.add_argument("--at", help="set or move the daily run to this time of day, HH:MM")
+    when.add_argument("--off", action="store_true", help="remove the daily run; the copies stay")
     for name in ("plan", "run", "status", "verify", "restore", "let-go"):
         commands[name].add_argument("--root", default=".", help="the repository whose config/safe-copies.json to read")
     for name in ("plan", "run", "status", "let-go"):
@@ -1246,6 +1257,49 @@ def _status_report(collection, dests, rows):
     return report
 
 
+def _daily(args, environ, answer, run=subprocess.run):
+    """run-all and schedule (1.71.0), in safe_copies_daily."""
+    from . import safe_copies_daily as daily
+    if args.report == "run-all":
+        summary = daily.run_all(environ, args.games, args.settle, args.verify, not args.no_push, progress=Progress(environ))
+        rows = summary["lists"]
+        copied = sum(r.get("copied", 0) for r in rows)
+        report = Report(f"Safe copies of everything: {copied} files copied"
+                        + ("" if summary["ok"] else ", with problems"))
+        report.section("Lists", Table(["List", "Game", "Copied", "Size", "Problems"],
+                                      [[r["repository"], r.get("game") or "", r.get("copied", 0), _size(r.get("bytes", 0)),
+                                        r.get("problem") or (f"{r['failed']} failed" if r.get("failed") else "")]
+                                       for r in rows]))
+        if summary["checked"] is not None:
+            bad = sum(len(c["problems"]) for c in summary["checked"])
+            report.lines.append(f"Checked {sum(c['checked'] for c in summary['checked'])} copies: "
+                                + (f"{bad} problems." if bad else "all whole."))
+        answer(report, summary)
+        return EXIT_OK if summary["ok"] else EXIT_PROBLEMS
+    if args.at:
+        found = daily.schedule_set(args.at, daily.games_file(args.games, environ), run)
+    elif args.off:
+        found = daily.schedule_off(run)
+    else:
+        found = daily.schedule_read(run)
+    last = daily.last_run_all(environ)
+    data = {"ok": True, "schedule": found, "next": daily.next_run(found["at"]).isoformat(timespec="minutes")
+            if found.get("at") else None,
+            "last": {"time": last.get("time"), "ok": last.get("ok"),
+                     "copied": sum(r.get("copied", 0) for r in last.get("lists", [])),
+                     "problems": [f"{r['repository']}: {r.get('problem') or str(r.get('failed')) + ' failed'}"
+                                  for r in last.get("lists", []) if not r.get("ok")][:SHOWN]} if last else None}
+    title = (f"Daily safe copies: every day at {found['at']}" if found.get("set") and found.get("at")
+             else "Daily safe copies: set, at a time Task Scheduler did not say" if found.get("set")
+             else "Daily safe copies: not set" if found.get("supported", True) else "Daily safe copies: Windows only")
+    report = Report(title)
+    if data["last"]:
+        report.lines.append(f"Last run {_local_time(data['last']['time'])}: "
+                            + ("all fine." if data["last"]["ok"] else "with problems."))
+    answer(report, data)
+    return EXIT_OK
+
+
 def main(argv=None, out=None, environ=None):
     out = out or sys.stdout
     try:
@@ -1263,6 +1317,8 @@ def main(argv=None, out=None, environ=None):
             data = mark(args.to, kind)
             answer(Report(f"Marked {args.to} as a {kind} destination"), {"ok": True, "mark": data})
             return EXIT_OK
+        if args.report in ("run-all", "schedule"):
+            return _daily(args, environ, answer)
         root = Path(args.root)
         settings_file = _settings_file(root)
         if args.report == "plan":
@@ -1349,4 +1405,9 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS,
                                     "different file unasked"},
                         "mark": {"effect": WRITES, "note": "writes .safe-copies.json in the folder named, on the owner's word"},
                         "let-go": {"effect": WRITES, "when": "--apply", "note": "removes copies the list no longer takes, each "
-                                   "named, from the plain folder; never a source and never a copy in use"}}}
+                                   "named, from the plain folder; never a source and never a copy in use"},
+                        "run-all": {"effect": WRITES, "note": "runs every list of every repository on the games list, as run "
+                                    "does, then checks every copy with --verify"},
+                        "schedule": {"effect": WRITES, "when": "--at or --off", "note": "sets, moves or removes the daily run, "
+                                     "a Windows scheduled task of the owner's own; without --at or --off it only says how it "
+                                     "stands"}}}
