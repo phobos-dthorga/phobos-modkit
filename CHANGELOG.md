@@ -4,6 +4,18 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.70.0] - 2026-11-22
+
+The owner's word for reports to other authors (22 Nov 2026).
+
+### Added
+
+- **rules/reports.md: how a fault in another author's work is reported, in every game** (owner, 22 Nov 2026: "We'll make this
+  the handling of issue reports to all third-party authors, moving forward", after Vehicle Framework's issue #390). Find it with
+  the tools and look for an existing report first; a plain draft in the owner's private tracker, ready to paste (the title apart,
+  code in fenced blocks, angle brackets in backticks); the owner posts; check how it shows, then mark it posted everywhere.
+  Listed in the rules index and in every-session.md's table of files to read before some kinds of work.
+
 ## [1.69.0] - 2026-11-22
 
 The owner's go for the safe copies' follow-ups (22 Nov 2026).
