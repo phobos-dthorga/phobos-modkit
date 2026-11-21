@@ -415,6 +415,14 @@ class RestoreTests(Fixture):
         sc.restore("testgame", "trainings", target, unit="ours", overwrite=True, overwrite_newer=True, environ=self.environ)
         self.assertEqual(edited.read_text(encoding="utf-8"), "caption ours-0.png")
 
+    def test_restore_brings_back_one_file_a_set_lists_on_its_own(self):
+        # 1.70.1: status names an installed model by its file, and Restore passes that name as the unit.
+        sc.run(self.repo, self.environ, now=NOW)
+        target = self.base / "one-model"
+        done = sc.restore("testgame", "models", target, unit="phobos-private-ours.safetensors", environ=self.environ)
+        self.assertEqual(done["restored"], 1)
+        self.assertEqual((target / "phobos-private-ours.safetensors").read_bytes(), b"model ours")
+
     def test_restore_never_writes_inside_the_copies(self):
         sc.run(self.repo, self.environ, now=NOW)
         with self.assertRaises(sc.SafeCopiesError):

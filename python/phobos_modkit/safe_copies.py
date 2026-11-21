@@ -940,12 +940,13 @@ def restore(game, set_name, to, unit=None, source="local", overwrite=False, over
         raise SafeCopiesError("restore cannot write inside the copies themselves")
     prefix = "/".join(p for p in (game, set_name, unit) if p) + "/"
     state = read_state(destination.path)
-    chosen = {k: r for k, r in state.items() if k.startswith(prefix)}
+    # 1.70.1: a unit may also name one file of a set, as status names an installed model; that file comes back on its own.
+    chosen = {k: r for k, r in state.items() if k.startswith(prefix) or (unit and k == prefix[:-1])}
     if not chosen:
         raise SafeCopiesError(f"nothing is copied under {prefix} in the {source} copy")
     work, conflicts, same = [], [], 0
     for key, record in sorted(chosen.items()):
-        target = to / key[len(prefix):]
+        target = to / (key[len(prefix):] if key.startswith(prefix) else key.rsplit("/", 1)[-1])
         if target.exists():
             if target.is_file() and sha256_file(target) == record.get("sha256"):
                 same += 1

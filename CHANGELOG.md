@@ -4,6 +4,13 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.70.1] - 2026-11-22
+
+### Fixed
+
+- **safe-copies restore brings back one file a set lists on its own**, such as one installed style model, when the unit names it
+  as status does. It looked only for a folder of that name, so D'thorga Companion's Restore on a model's row found nothing.
+
 ## [1.70.0] - 2026-11-22
 
 The owner's word for reports to other authors (22 Nov 2026).
