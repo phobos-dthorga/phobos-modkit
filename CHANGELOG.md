@@ -4,6 +4,28 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.66.0] - 2026-11-21
+
+The owner asked for copies of "our training sets, models, etc." (21 Nov 2026), after the first style model of our own art took
+158 minutes of the graphics card to train, and chose the name, the places and the rules for files made from a game's own.
+
+### Added
+
+- **safe-copies: copies of what cannot be made again, kept apart by kind** (docs/safe-copies.md). A repository lists its sets in
+  config/safe-copies.json; `plan` says what a run would copy and where each kind may go, `run` copies what changed, `status` says
+  what is copied, changed since or never copied, `verify` hashes every copy again, `restore` copies a set back into a folder the
+  owner names, and `mark` marks a destination on the owner's word. Nothing is ever deleted, at the source or in a copy.
+- **Files made from a game's own never reach a shared place.** They go only to a plain folder marked private and local, which is
+  refused when it looks synced (a Synology, OneDrive or Dropbox folder, or a git clone, there or above), and never to a repository.
+- **A training is ours only when proven**: every picture listed by hash in its manifest, beside its marker. One unlisted picture
+  makes the whole training game-derived; a model follows the training it was made from, and a model no training explains is
+  game-derived. Checkpoints and resume files stay in the plain folder only.
+- **The repository's copy is committed and pushed after each run**; a quiet run makes no commit, and a failed push is reported and
+  sent with the next run. Every run records what rebuilds its copies (each tool's commit, a file's hash) and adds a line to the
+  history log.
+- Settings safeCopiesPath and safeCopiesRepositoryPath (the Settings page lists them).
+- AGENTS.md: safe copies join the list of tools that write, and what they may write where.
+
 ## [1.65.1] - 2026-11-21
 
 A program reading look-serve reads one JSON line first; with the game not running it got the error as Markdown instead.

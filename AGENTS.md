@@ -57,7 +57,11 @@ session**; `CLAUDE.md` imports it. The rules below are this repository's own, an
   --apply` and `--off` write only the LocalDumps key of the program named, only on request and from an administrator
   window; **agents never run them**, the owner does. **Reading a running game's memory is reading** (owner's yes, 20 November 2026,
   for D'thorga Companion's look inside): the heap reader takes a Windows snapshot, which pauses the game for about half a second,
-  and never writes to it; **ask before every snapshot of the owner's game**, as for every tool that attaches to one. Release and publishing tools write only inside the repository they are run on, and only
+  and never writes to it; **ask before every snapshot of the owner's game**, as for every tool that attaches to one. **One more, for
+  safe copies** (owner's go-ahead, 21 November 2026, with the art backups plan): `safe-copies run`, `restore` and `mark` write only into
+  the folders the owner chose and marked, and a restore folder the owner names, and push only to the private repository the owner
+  chose; they never delete, and never write to a game's folders. **Anything made from a game's files goes only to a folder marked
+  private and local**, never to a repository. Release and publishing tools write only inside the repository they are run on, and only
   when asked (`--write`, `--apply`, an upload's records).
 - **Never execute other authors' code.** Assemblies are read through their metadata
   (`System.Reflection.Metadata`), never loaded. Never run another mod's scripts. **One exception** (owner's yes, 20 November

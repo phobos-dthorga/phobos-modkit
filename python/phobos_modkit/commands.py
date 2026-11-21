@@ -45,6 +45,7 @@ COMMANDS = {
     "game-files": (".game_files", "what a game writes and what Steam records: what changed since you last played, saves, screenshots, space"),
     "programs": (".programs", "which other programs the tools use, whether each is on this PC, and where to get it"),
     "records": (".records", "a copy of D'thorga Companion's own records in a folder of your choosing, and how old the newest is"),
+    "safe-copies": (".safe_copies", "copies of what cannot be made again, kept apart by kind; checks them and copies them back"),
     "rules": (".rules_cli", "the rules every repository shares, and whether a repository reads them"),
     "settings": (".settings_cli", "the settings the tools read, where each value comes from, and the central settings file"),
     "test-pass": (".testpass_cli", "what a repository's in-game test list is waiting for, from the game's notes and the owner's verdicts"),

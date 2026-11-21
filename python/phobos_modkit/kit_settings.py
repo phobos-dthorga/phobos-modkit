@@ -42,7 +42,7 @@ class Setting:
 
 def _known():
     """The settings the kit itself reads, each from the module that owns it."""
-    from . import assembly_archive, claims, decisions, game_files, history, records
+    from . import assembly_archive, claims, decisions, game_files, history, records, safe_copies
     from .code import compare
     from .games.rimworld import paths as rimworld
     from .games.rimworld import textures
@@ -56,6 +56,10 @@ def _known():
                 "textures", "folder", default=lambda environ: paths.companion_data(environ) / "history"),
         Setting(*records.BACKUP, "Where copies of the Companion's own records go: choose a folder your NAS or other backup keeps",
                 "folder"),
+        Setting(*safe_copies.LOCAL, "Where safe copies of training sets and models go as plain files: a local disk that is not "
+                "synced, so files made from a game's own may go there too", "folder"),
+        Setting(*safe_copies.REPOSITORY, "A clone of the private repository that keeps safe copies of our own files (never anything "
+                "made from a game's files)", "folder"),
         Setting(*claims.BOARD, "The board where agent sessions say what they are working on", "file",
                 default=lambda environ: paths.companion_data(environ) / "claims.json"),
         Setting(*decisions.ANSWERS, "Where your answers to waiting decisions are kept (one file for each repository)", "folder",

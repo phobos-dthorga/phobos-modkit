@@ -130,6 +130,7 @@ in order of expected saving.
 | 26 | [Screen notes](docs/screen-notes.md) | What the owner flagged as looking wrong in D'thorga Companion with one key: the page's picture, its address and their words, for agent sessions to read at the start; marked dealt with, never deleted | Python | Built: 1.41.0 |
 | 25 | [Make-up](docs/makeup.md) | What a repository is made of: every committed file by product, kind, lines and size; how that grew day by day; where the work goes; and what each product holds for players (Defs by type, pictures, sounds, text keys) | Python, with git | Built: 1.39.0 |
 | 24 | [Pins](docs/pins.md) | Which version of this kit each repository pins, and what moving its pin would bring, by the kit's changelog | Python, with git | Built: 1.38.0 |
+| 33 | [Safe copies](docs/safe-copies.md) | Copies of what cannot be made again (training sets, style models, notes) in folders the owner chose and a private repository, kept apart by kind so nothing made from a game's files reaches a shared place; checked by hash and copied back on request; never deletes | Python, with git | Built: 1.66.0 |
 | 32 | [The heap reader](docs/heap-reader.md) (RimWorld 1.7 first) | Inside a running .NET game from a snapshot: every object by type and by mod, one kind's objects described, any object with every value it holds, what holds it, and paths from a root that say why it is still in memory; a held snapshot for a program's page | C# (Microsoft's ClrMD), Python | Built: 1.65.0 |
 | 31 | [Programs](docs/programs.md) | Which other programs the tools use (git, .NET, ilspycmd, Steam, a game's own), whether each is on this PC, what needs it and where to get it; builds the kit's compiled tools ready for an installer to carry | Python | Built: 1.62.0 |
 | 9 | [Workshop publishing](docs/workshop-publishing.md) | Release notes from changelogs, offline staging, the owner-run uploader, pulling Steam's state back | Python | Built: 0.10.0, from phobos-ostranauts |
@@ -183,6 +184,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/decisions.md](docs/decisions.md) | Decisions: the config, the answers file, and acting on an answer |
 | [docs/claims.md](docs/claims.md) | Claims: naming a thing, the board file and its lock |
 | [docs/records.md](docs/records.md) | Records: what is copied, where, and what each copy holds |
+| [docs/safe-copies.md](docs/safe-copies.md) | Safe copies: the two kinds, proving a training is ours, the destinations and their marks, the list's fields |
 | [docs/programs.md](docs/programs.md) | Programs: what status lists and how each is found, and what bundle makes |
 | [docs/heap-reader.md](docs/heap-reader.md) | The heap reader: looking inside a running game from a snapshot, what it answers, which memory-reading library it trusts, and its limits |
 | [docs/screen-notes.md](docs/screen-notes.md) | Screen notes: a note's folder, its files, and resolving one |
