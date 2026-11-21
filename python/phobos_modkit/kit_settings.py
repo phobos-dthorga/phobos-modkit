@@ -60,6 +60,8 @@ def _known():
                 "synced, so files made from a game's own may go there too", "folder"),
         Setting(*safe_copies.REPOSITORY, "A clone of the private repository that keeps safe copies of our own files (never anything "
                 "made from a game's files)", "folder"),
+        Setting(*safe_copies.CLAUDE_HOME, "Claude Code's own folder, whose notes about you the safe copies keep (on a private, "
+                "local folder only)", "folder", default=lambda environ: Path(environ.get("USERPROFILE") or Path.home()) / ".claude"),
         Setting(*claims.BOARD, "The board where agent sessions say what they are working on", "file",
                 default=lambda environ: paths.companion_data(environ) / "claims.json"),
         Setting(*decisions.ANSWERS, "Where your answers to waiting decisions are kept (one file for each repository)", "folder",

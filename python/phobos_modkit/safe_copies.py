@@ -16,6 +16,8 @@ files under a folder its settings name, each of a kind:
 - own: ours alone. It may go to every destination.
 - game-derived: made from a game's or another author's files. Only a destination marked private and local takes it, and never one
   that looks synced or shared. A git repository never takes it.
+- personal (1.67.0): the owner's own, but private: notes about them, a game's settings. The same rule as game-derived: a folder
+  marked private and local only, never a repository.
 - proven: own only when a manifest's hashes prove every picture in it is ours; anything unproven is game-derived. A set of loose
   files (installed models) can follow the kind of the training each was made from (unitOf).
 
@@ -30,6 +32,7 @@ the plain folder; git keeps the repository's. A file gone from its source keeps 
 from __future__ import annotations
 
 import argparse
+import fnmatch
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import hashlib
@@ -52,13 +55,17 @@ EXIT_OK, EXIT_PROBLEMS, EXIT_USAGE, EXIT_REFUSED = 0, 1, 2, 3
 LOCAL = ("safeCopiesPath", "PHOBOS_SAFE_COPIES")
 REPOSITORY = ("safeCopiesRepositoryPath", "PHOBOS_SAFE_COPIES_REPOSITORY")
 DESTINATIONS = (("local", LOCAL), ("repository", REPOSITORY))
+# Where Claude Code keeps its notes about the owner (1.67.0): CLAUDE_CONFIG_DIR is Claude Code's own way to move it.
+CLAUDE_HOME = ("claudeHomePath", "CLAUDE_CONFIG_DIR")
 CONFIG = Path("config") / "safe-copies.json"
 MARK = ".safe-copies.json"
 BOOK = "_safe-copies"
 PARTIAL = ".safe-copies-partial"
 FORMAT = 1
-OWN, GAME_DERIVED, PROVEN = "own", "game-derived", "proven"
-KINDS = (OWN, GAME_DERIVED, PROVEN)
+OWN, GAME_DERIVED, PERSONAL, PROVEN = "own", "game-derived", "personal", "proven"
+KINDS = (OWN, GAME_DERIVED, PERSONAL, PROVEN)
+# Why each kind that stays private may not go somewhere, in words.
+PRIVATE_WHY = {GAME_DERIVED: "made from a game's or another's files", PERSONAL: "personal"}
 REPOSITORY_ROOT = "@repository"
 # GitHub refuses a file over 100 MB; stay under it.
 MAX_REPOSITORY_FILE = 95 * 1024 * 1024
@@ -244,20 +251,54 @@ def _environment_names(root):
         return {}
 
 
+def _declared_default(key, root, environ):
+    """The default a setting the kit knows gives (1.67.0: RimWorld's Config folder, the notes folder), or None."""
+    try:
+        setting = next((s for s in kit_settings.registry([root]) if s.key == key), None)
+    except kit_settings.SettingsError:
+        return None
+    if setting is None or setting.default is None:
+        return None
+    try:
+        found = setting.default(os.environ if environ is None else environ)
+    except (OSError, RuntimeError, KeyError, ValueError):
+        return None
+    return Path(found) if found else None
+
+
 def set_base(spec, root, environ=None):
-    """The folder a set reads, or None when its root is not set."""
+    """The folder a set reads, or None when its root is not set and has no default."""
     if spec.root == REPOSITORY_ROOT:
         base = Path(root)
     else:
         env = spec.env or _environment_names(root).get(spec.root, "")
-        base = resolve(spec.root, env, None, None, environ, _settings_file(root))
+        base = resolve(spec.root, env, None, None, environ, _settings_file(root)) or _declared_default(spec.root, root, environ)
         if base is None:
             return None
     return base / spec.folder if spec.folder else base
 
 
+def could_hold(folder, patterns):
+    """Whether a folder (a slash-separated relative path) could hold a file one of the globs takes (1.67.0), so the walk skips
+    folders the list never reaches, such as a tool's logs and caches beside the notes it keeps."""
+    parts = folder.split("/")
+    for pattern in patterns:
+        segments = pattern.split("/")
+        for depth, part in enumerate(parts):
+            if depth < len(segments) and segments[depth].startswith("**"):
+                return True                             # ** reaches every folder beneath
+            if depth >= len(segments) - 1:
+                break                                   # the pattern's last segment names files, not this folder
+            if not fnmatch.fnmatch(part.casefold(), segments[depth].casefold()):
+                break
+        else:
+            return True
+    return False
+
+
 def _walk(base, spec, notes, label):
-    """(relative path, path, stat) of every file under base the set takes. Links are skipped and noted, never followed."""
+    """(relative path, path, stat) of every file under base the set takes. Links are skipped and noted, never followed; a folder
+    the list could never take a file from is not walked at all."""
     found = []
     for current, folders, names in os.walk(base):
         here = Path(current)
@@ -266,9 +307,11 @@ def _walk(base, spec, notes, label):
         kept = []
         for name in sorted(folders):
             relative = f"{inside}/{name}" if inside else name
+            if name == BOOK or matches(relative, spec.exclude) or not could_hold(relative, spec.include):
+                continue
             if is_link(here / name):
                 notes.append(f"{label}: {relative} is a link, not followed")
-            elif name != BOOK and not matches(relative, spec.exclude):
+            else:
                 kept.append(name)
         folders[:] = kept
         for name in sorted(names):
@@ -440,16 +483,17 @@ def destinations(environ=None, settings_file=None):
 
 def refusal(destination, item):
     """Why a destination will not take an item, or None when it will."""
+    why = PRIVATE_WHY.get(item.kind, item.kind)
     if destination.name == "repository":
         if item.kind != OWN:
-            return "made from a game's or another's files: never in a repository"
+            return f"{why}: never in a repository"
         if item.local_only:
             return "kept in the local copy only (checkpoints and resume files)"
         if item.size > MAX_REPOSITORY_FILE:
             return "over 95 MB, too big for GitHub"
         return None
     if item.kind != OWN and not destination.private_local:
-        return ("made from a game's or another's files: only a folder marked private and local takes it"
+        return (f"{why}: only a folder marked private and local takes it"
                 + (f" ({destination.shared[0]})" if destination.shared else ""))
     return None
 
@@ -873,7 +917,7 @@ def _destination_rows(dests):
     rows = []
     for d in dests:
         takes = ("own files" if d.name == "repository" else
-                 "own and game-derived files" if d.private_local else "own files only")
+                 "own, game-derived and personal files" if d.private_local else "own files only")
         rows.append([d.name, str(d.path or ""), takes if not d.problem else "", d.problem or "ready"])
     return Table(["Destination", "Folder", "Takes", "Ready"], rows)
 

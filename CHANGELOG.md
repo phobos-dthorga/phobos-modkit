@@ -4,6 +4,26 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.67.0] - 2026-11-22
+
+The owner's go for the next step of safe copies (22 Nov 2026): the notes Claude Code keeps about them, and their game settings,
+copied to a private, local folder only.
+
+### Added
+
+- **safe-copies: a personal kind**, for the owner's own files that stay private: notes about them, a game's settings. It follows
+  the game-derived rule: a folder marked private and local only, never a repository, and never a folder that looks synced.
+- **This repository's own list, config/safe-copies.json**: Claude Code's notes about the owner from every project
+  (`projects/*/memory`) and their global instructions (`CLAUDE.md`), personal, under the game id `tools`.
+- **A set's root falls back to the default the kit knows for its setting**, so RimWorld's Config folder and the new
+  claudeHomePath (CLAUDE_CONFIG_DIR, default `~/.claude`) need no value set by hand.
+
+### Changed
+
+- **The walk skips folders the list could never take a file from**: a list taking `projects/*/memory/**` from Claude Code's folder
+  no longer reads its transcripts, logs and caches, and no longer notes their links. phobos-rimworld's plan went from about a
+  second to under one, with the same 1,587 files.
+
 ## [1.66.0] - 2026-11-21
 
 The owner asked for copies of "our training sets, models, etc." (21 Nov 2026), after the first style model of our own art took

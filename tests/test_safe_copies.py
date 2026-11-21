@@ -113,6 +113,15 @@ class KindTests(Fixture):
         self.assertTrue(sc.matches("deep/er/a.png", ["**/*.png"]))
         self.assertTrue(sc.matches("a.png", ["**/*.png"]))
 
+    def test_the_walk_skips_folders_the_list_could_never_take_a_file_from(self):
+        notes = ["projects/*/memory/**"]
+        self.assertTrue(sc.could_hold("projects/a/memory/deeper", notes))
+        self.assertFalse(sc.could_hold("projects/a/subagents", notes))
+        self.assertFalse(sc.could_hold("debug", ["CLAUDE.md", *notes]))
+        self.assertTrue(sc.could_hold("anything/at/all", ["**"]))
+        self.assertTrue(sc.could_hold("output/run", ["output/**/*_0*.safetensors"]))
+        self.assertFalse(sc.could_hold("picks/deeper", ["picks/*.html"]))
+
     def test_a_proven_training_is_ours_and_an_unproven_one_is_game_derived(self):
         items, _ = self.kinds()
         self.assertEqual(items["testgame/trainings/ours/dataset/ours-0.png"].kind, sc.OWN)
@@ -183,6 +192,43 @@ class DestinationTests(Fixture):
         self.assertIn("not marked", local.problem)
         with self.assertRaises(sc.SafeCopiesError):
             sc.run(self.repo, self.environ, now=NOW)
+
+
+class PersonalTests(Fixture):
+    """1.67.0: notes about the owner and a game's settings stay on a private, local folder, as game-derived files do."""
+
+    def setUp(self):
+        super().setUp()
+        home = self.base / "home"
+        (home / ".claude" / "projects" / "some-project" / "memory").mkdir(parents=True)
+        (home / ".claude" / "projects" / "some-project" / "memory" / "MEMORY.md").write_text("- a note", encoding="utf-8")
+        (home / ".claude" / "projects" / "some-project" / "transcript.jsonl").write_text("{}", encoding="utf-8")
+        (home / ".claude" / "CLAUDE.md").write_text("# the owner's rules", encoding="utf-8")
+        config = json.loads((self.repo / "config" / "safe-copies.json").read_text(encoding="utf-8"))
+        config["sets"].append({"name": "notes-about-you", "root": "claudeHomePath",
+                               "include": ["CLAUDE.md", "projects/*/memory/**"], "kind": "personal"})
+        (self.repo / "config" / "safe-copies.json").write_text(json.dumps(config), encoding="utf-8")
+        self.environ["USERPROFILE"] = str(home)
+
+    def test_a_set_with_no_value_set_finds_its_folder_by_the_settings_default(self):
+        items, _ = self.kinds()
+        self.assertIn("testgame/notes-about-you/CLAUDE.md", items)
+        self.assertIn("testgame/notes-about-you/projects/some-project/memory/MEMORY.md", items)
+        self.assertNotIn("testgame/notes-about-you/projects/some-project/transcript.jsonl", items)
+        self.assertEqual(items["testgame/notes-about-you/CLAUDE.md"].kind, sc.PERSONAL)
+
+    def test_personal_files_go_only_to_a_private_local_folder_never_a_repository(self):
+        remote, clone = self.make_repository()
+        _, results = sc.run(self.repo, self.environ, now=NOW)
+        self.assertTrue((self.local / "testgame/notes-about-you/CLAUDE.md").is_file())
+        self.assertFalse((clone / "testgame/notes-about-you").exists())
+        repository = next(r for r in results if r["destination"] == "repository")
+        self.assertIn("personal: never in a repository", repository["refused"])
+        plain = self.base / "plain"
+        sc.mark(plain, "local", NOW)
+        local = next(d for d in sc.destinations(dict(self.environ, PHOBOS_SAFE_COPIES=str(plain))) if d.name == "local")
+        item = sc.Item("g", "s", None, "a", Path("a"), 1, 1, sc.PERSONAL, False)
+        self.assertIn("personal", sc.refusal(local, item))
 
 
 class RunTests(Fixture):

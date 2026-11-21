@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "description": "What safe-copies keeps for every game (docs/safe-copies.md): Claude Code's notes about the owner, from every project, and the owner's global instructions. Personal: a folder marked private and local only, never a repository (the owner's choice of 22 Nov 2026). Shown under D'thorga Companion's Tools game.",
+  "game": "tools",
+  "sets": [
+    {
+      "name": "notes-about-you",
+      "root": "claudeHomePath",
+      "include": ["CLAUDE.md", "projects/*/memory/**"],
+      "kind": "personal"
+    }
+  ]
+}

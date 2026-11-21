@@ -1,7 +1,8 @@
 # Safe copies: what cannot be made again, kept apart by kind
 
-**Status (21 Nov 2026):** built in 1.66.0. Not yet run on the owner's real files when this page was written. phobos-rimworld is its
-first user (training sets and style models); D'thorga Companion's Home will show it.
+**Status (22 Nov 2026):** built in 1.66.0; the personal kind, the notes about the owner and settings' own defaults in 1.67.0. In use:
+phobos-rimworld's training sets, style models and game settings, and this repository's own list (`config/safe-copies.json`: Claude
+Code's notes about the owner, shown under D'thorga Companion's Tools game). D'thorga Companion's Home shows each list (0.42.0).
 
 The owner asked on 21 Nov 2026: "Should we add backup functionality for our training sets, models, etc.?" The design, and the
 owner's answers, are in phobos-rimworld's `docs/development/art-backups-handoff.md`. It is called *safe copies*, never *backups*,
@@ -11,9 +12,11 @@ so it is not mixed up with the install backups of `installs` (the owner's choice
 
 - **Copy what cannot be made again, not what is big.** A repository lists its sets in `config/safe-copies.json`. Caches are left
   out by pattern, and base models stay with the tool that downloads and hash-checks them.
-- **Two kinds, two rules.** `own` may go anywhere the owner chose. **`game-derived` goes only to a folder marked private and
-  local, never to a repository, and never to a folder that looks synced or shared**, even one marked private before a sync tool
-  arrived.
+- **Two rules for three kinds.** `own` may go anywhere the owner chose. **`game-derived` and `personal` go only to a folder
+  marked private and local, never to a repository, and never to a folder that looks synced or shared**, even one marked private
+  before a sync tool arrived. `personal` (1.67.0) is the owner's own but private: notes about them, a game's settings.
+- **The walk skips folders the list could never take a file from** (1.67.0), so a list that takes `projects/*/memory/**` from
+  Claude Code's folder never reads its gigabytes of transcripts, logs and caches.
 - **A training is ours only when proven.** A `proven` set's unit is ours only when every picture in it is listed by hash in its
   manifest, and its marker file is there. One picture that is not listed makes the whole unit game-derived. A model follows the
   training it was made from (`unitOf`); a model no training explains is game-derived.
@@ -49,6 +52,7 @@ refuse.
 | --- | --- | --- |
 | `safeCopiesPath` | `PHOBOS_SAFE_COPIES` | A plain folder. Marked `--local` it takes our own files; marked `--private-local` (refused when the folder looks synced) it takes game-derived files too |
 | `safeCopiesRepositoryPath` | `PHOBOS_SAFE_COPIES_REPOSITORY` | The top folder of a clone of a private git repository, marked `--repository`. Our own files only, and no file over 95 MB (GitHub's limit is 100 MB) |
+| `claudeHomePath` | `CLAUDE_CONFIG_DIR` | Not a destination: Claude Code's own folder, which this repository's list reads for the notes about the owner. Defaults to `~/.claude` (1.67.0) |
 
 Set them on the Companion's Settings page or with `settings set`. A destination not chosen, not reachable or not marked is skipped,
 and `status` says why. **Looks synced** means one of `.SynologyWorkingDirectory`, `.git`, `.dropbox`, `.sync` or `.stfolder` is in
@@ -81,10 +85,10 @@ is kept only when the run changed something, so a quiet night makes no commit.
 | --- | --- |
 | `game` | The first folder of every copy |
 | `name` | The set's folder in every copy: letters, digits, dots and dashes |
-| `root`, `env`, `folder` | Where the set is: a settings key (read in the usual order: argument, environment, the repository's settings file, the central file), or `@repository`; then a folder under it. A root not set is a note, not a failure |
+| `root`, `env`, `folder` | Where the set is: a settings key (read in the usual order: argument, environment, the repository's settings file, the central file, then the default the kit knows for it, such as `claudeHomePath`'s `~/.claude` or RimWorld's Config folder), or `@repository`; then a folder under it. A root not set, with no default, is a note, not a failure |
 | `include`, `exclude` | Globs on the path under the set (or under each unit): `*` and `?` stay in one folder, `**` crosses folders. An excluded folder is not even walked |
 | `units` | Each folder directly under the set's folder is a unit of its own: a training, proven on its own |
-| `kind` | `own`, `game-derived`, `proven`, or `{"unitOf": SET, "pattern": "...{unit}..."}` |
+| `kind` | `own`, `game-derived`, `personal`, `proven`, or `{"unitOf": SET, "pattern": "...{unit}..."}` |
 | `proof` | For `proven`: the marker file, the manifest (a list of entries, or `{"files": [...]}`), the field holding each hash, and the globs it covers |
 | `localOnly` | Files kept in the plain folder only, never the repository: checkpoints and resume files |
 | `provenance` | What rebuilds the copies, recorded with every run: a folder's git commit (`root`) or a file's hash (`file`). This repository's own commit is always recorded |
