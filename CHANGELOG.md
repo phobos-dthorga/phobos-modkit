@@ -4,6 +4,23 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.68.0] - 2026-11-22
+
+The owner's go for safe copies of their RimWorld saves (22 Nov 2026): the newest pair of their rotation, five earlier versions of
+each, on a private, local folder only. Corruption has taken their saves before, and the game's folder is not synced.
+
+### Added
+
+- **safe-copies: `newest`**, for a set that takes only the newest few files it matches, by when each was last written (a save
+  rotation). A file that falls out of them keeps its copies and is never called gone.
+- **safe-copies: `keepEarlier`**, the first thing the tool lets go, by the owner's word: a set keeps that many earlier copies of
+  each file in the plain folder, and the oldest beyond them are deleted from the destination's own `_safe-copies/earlier`, each
+  named in the run's record and its report. Nothing at a source, no copy in use, and nothing of a set without it.
+
+### Changed
+
+- AGENTS.md, the README and the guide say exactly what may now go, in place of "never deletes".
+
 ## [1.67.0] - 2026-11-22
 
 The owner's go for the next step of safe copies (22 Nov 2026): the notes Claude Code keeps about them, and their game settings,

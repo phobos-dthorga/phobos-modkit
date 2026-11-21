@@ -26,8 +26,10 @@ Two destinations, both the owner's choice: safeCopiesPath, a plain folder (the o
 Each is marked once with `mark`, on the owner's word. Copies go to <game>/<set>/[<unit>/]<path> in each, as plain files anyone can
 open; each destination's _safe-copies folder holds the record of every file (state.json) and of every run (runs/).
 
-Nothing is ever deleted: not at the source, and not in a copy. A changed file's earlier copy moves to _safe-copies/earlier/<time>/ in
-the plain folder; git keeps the repository's. A file gone from its source keeps its copy, marked gone.
+Nothing at a source is ever deleted, and no copy in use. A changed file's earlier copy moves to _safe-copies/earlier/<time>/ in the
+plain folder; git keeps the repository's. A file gone from its source keeps its copy, marked gone. The one thing that goes (1.68.0,
+the owner's word of 22 Nov 2026): a set that names keepEarlier, such as the saves, keeps that many earlier copies of each file in
+the plain folder, and the oldest beyond them are let go, each named in the run's record.
 """
 from __future__ import annotations
 
@@ -151,6 +153,8 @@ class SetSpec:
     kind: object = OWN                # "own", "game-derived", "proven" or {"unitOf": set, "pattern": "...{unit}..."}
     units: bool = False               # each folder directly under the set's folder is a unit of its own
     proof: dict = None
+    newest: int = None                # 1.68.0: only the newest N files it takes, by when each was last written (a save rotation)
+    keep_earlier: int = None          # 1.68.0: earlier copies kept of each file; older ones go (the owner's word, 22 Nov 2026)
 
 
 @dataclass
@@ -177,7 +181,11 @@ def load_config(root):
         spec = SetSpec(name=item.get("name", ""), root=item.get("root", ""), env=item.get("env", ""),
                        folder=item.get("folder", ""), include=list(item.get("include", ["**"])),
                        exclude=list(item.get("exclude", [])), local_only=list(item.get("localOnly", [])),
-                       kind=item.get("kind", OWN), units=bool(item.get("units", False)), proof=item.get("proof"))
+                       kind=item.get("kind", OWN), units=bool(item.get("units", False)), proof=item.get("proof"),
+                       newest=item.get("newest"), keep_earlier=item.get("keepEarlier"))
+        for field_name, value in (("newest", spec.newest), ("keepEarlier", spec.keep_earlier)):
+            if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value < 1 or value > 1000):
+                raise SafeCopiesError(f"set {spec.name}: {field_name} must be a whole number from 1 to 1000")
         if not NAME.match(spec.name) or spec.name in seen:
             raise SafeCopiesError(f"a set needs a name of letters, digits, dots and dashes, each used once: {spec.name!r}")
         seen.add(spec.name)
@@ -214,6 +222,7 @@ class Item:
     mtime_ns: int
     kind: str
     local_only: bool
+    keep_earlier: int = None          # 1.68.0: how many earlier copies of this file to keep; None keeps every one
 
     @property
     def key(self):
@@ -387,13 +396,21 @@ def collect(root, environ=None, only=None):
                 kind, why = spec.kind, "named so in the list"
             if not wanted:
                 continue
-            walked.add((spec.name, unit))
+            if spec.newest:
+                # Only the newest few, by when each was last written. A file that falls out of them still exists at its source,
+                # so this set never says a file is gone: its copies simply stay.
+                files = sorted(files, key=lambda found: (found[2].st_mtime_ns, found[0]), reverse=True)[:spec.newest]
+                files = sorted(files, key=lambda found: found[0])
+                if why:
+                    why = f"{why}; the newest {spec.newest}"
+            else:
+                walked.add((spec.name, unit))
             follows = isinstance(spec.kind, dict)
             shown = {}
             for relative, path, info in files:
                 file_kind, file_why = _follow(spec, relative, kinds) if follows else (kind, why)
                 items.append(Item(config.game, spec.name, unit, relative, path, info.st_size, info.st_mtime_ns, file_kind,
-                                  matches(relative, spec.local_only)))
+                                  matches(relative, spec.local_only), spec.keep_earlier))
                 # A unit of a set of units; each file of a set that follows trainings; else the set as one.
                 label = relative if follows else unit
                 group = shown.setdefault(label, Unit(spec.name, label, file_kind, file_why))
@@ -672,9 +689,36 @@ def run(root, environ=None, only=None, push=True, now=None, progress=None, runne
     return collection, results
 
 
+def prune_earlier(folder, key, keep):
+    """Lets go of a file's oldest earlier copies in a destination, keeping the newest `keep` (1.68.0; the owner's word of 22 Nov
+    2026, for a set that names keepEarlier, such as saves). Deletes only inside the destination's own earlier folder, never a copy
+    in use and never anything at a source. Returns what it let go, as paths under that folder."""
+    earlier_root = Path(folder) / BOOK / "earlier"
+    if not earlier_root.is_dir():
+        return []
+    found = []
+    for moment in earlier_root.iterdir():
+        candidate = moment / key
+        if moment.is_dir() and not is_link(moment) and candidate.is_file() and not is_link(candidate):
+            found.append((moment.name, candidate))
+    found.sort()
+    gone = []
+    for moment, candidate in found[:max(0, len(found) - keep)]:
+        if not candidate.resolve().is_relative_to(earlier_root.resolve()):
+            continue
+        candidate.unlink()
+        gone.append(f"{moment}/{key}")
+        # Folders the copy leaves empty go too, up to the moment's own folder.
+        parent = candidate.parent
+        while parent != earlier_root and parent.is_dir() and not any(parent.iterdir()):
+            parent.rmdir()
+            parent = parent.parent
+    return gone
+
+
 def _run_one(destination, collection, stamp, when, made, push, progress, runner, root):
     state = read_state(destination.path)
-    copied, same, refused, failed, warnings = [], 0, {}, [], []
+    copied, same, refused, failed, warnings, let_go = [], 0, {}, [], [], []
     total = len(collection.items)
     for number, item in enumerate(collection.items, 1):
         progress(f"Copying to {destination.name}", number, total, item.key)
@@ -701,6 +745,8 @@ def _run_one(destination, collection, stamp, when, made, push, progress, runner,
             _copy(item.source, target, digest, item.mtime_ns)
             state[item.key] = _record(item, digest, when)
             copied.append({"path": item.key, "bytes": item.size, "sha256": digest, "kind": item.kind})
+            if item.keep_earlier and destination.name == "local":
+                let_go.extend(prune_earlier(destination.path, item.key, item.keep_earlier))
         except (OSError, SafeCopiesError) as error:
             failed.append({"path": item.key, "error": str(error)})
     present = {i.key for i in collection.items}
@@ -717,10 +763,10 @@ def _run_one(destination, collection, stamp, when, made, push, progress, runner,
     result = {"destination": destination.name, "folder": str(destination.path), "time": when, "kit": __version__,
               "from": Path(root).resolve().name, "game": collection.game, "copied": copied, "same": same,
               "refused": {why: {"files": len(keys), "first": keys[:SHOWN]} for why, keys in refused.items()},
-              "failed": failed, "gone": gone, "warnings": warnings, "provenance": made, "git": None}
+              "failed": failed, "gone": gone, "warnings": warnings, "letGo": let_go, "provenance": made, "git": None}
     record_path = destination.path / BOOK / "runs" / f"{stamp}-{collection.game}.json"
     # The repository keeps a run's record only when the run changed something, so a quiet night makes no commit.
-    if destination.name != "repository" or copied or gone or failed:
+    if destination.name != "repository" or copied or gone or failed or let_go:
         _write_json(record_path, result)
         result["record"] = str(record_path)
     if destination.name == "repository":
@@ -974,6 +1020,9 @@ def _run_report(results, notes):
     problems += [w for r in results for w in r["warnings"]]
     if problems:
         report.section("Problems", Bullets(problems[:SHOWN]))
+    let_go = [f"{r['destination']}: {path}" for r in results for path in r.get("letGo", [])]
+    if let_go:
+        report.section("Older copies let go (each set keeps its number of earlier copies)", Bullets(let_go[:SHOWN]))
     if notes:
         report.section("Notes", Bullets(notes[:SHOWN]))
     return report
@@ -1076,7 +1125,7 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS,
                         "status": {"question": "What has been copied safely, and what never has?"},
                         "verify": {"question": "Are the safe copies still whole?"},
                         "run": {"effect": WRITES, "note": "copies what changed to the chosen destinations, then commits and pushes "
-                                "the repository's copy; deletes nothing"},
+                                "the repository's copy; lets go only earlier copies beyond a set's keepEarlier"},
                         "restore": {"effect": WRITES, "note": "copies a set into a folder the owner names; never over a "
                                     "different file unasked"},
                         "mark": {"effect": WRITES, "note": "writes .safe-copies.json in the folder named, on the owner's word"}}}

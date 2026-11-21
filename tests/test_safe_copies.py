@@ -231,6 +231,70 @@ class PersonalTests(Fixture):
         self.assertIn("personal", sc.refusal(local, item))
 
 
+class SavesTests(Fixture):
+    """1.68.0: the newest few saves of a rotation, with a set number of earlier copies of each (the owner's word, 22 Nov 2026)."""
+
+    def setUp(self):
+        super().setUp()
+        self.saves = self.base / "saves"
+        self.saves.mkdir()
+        for number, name in enumerate(("PG15.rws", "PG16.rws", "PG17.rws", "Autosave-1.rws")):
+            path = self.saves / name
+            path.write_bytes(f"{name} first".encode())
+            os.utime(path, ns=(10**18 + number * 10**9, 10**18 + number * 10**9))
+        settings = json.loads((self.repo / ".local" / "install-settings.json").read_text(encoding="utf-8"))
+        settings["savesPath"] = str(self.saves)
+        (self.repo / ".local" / "install-settings.json").write_text(json.dumps(settings), encoding="utf-8")
+        config = json.loads((self.repo / "config" / "safe-copies.json").read_text(encoding="utf-8"))
+        config["sets"].append({"name": "saves", "root": "savesPath", "include": ["*.rws"], "exclude": ["Autosave-*"],
+                               "newest": 2, "keepEarlier": 2, "kind": "personal"})
+        (self.repo / "config" / "safe-copies.json").write_text(json.dumps(config), encoding="utf-8")
+        self.tick = 10**18 + 100 * 10**9
+
+    def save_again(self, name):
+        self.tick += 10**9
+        path = self.saves / name
+        path.write_bytes(f"{name} at {self.tick}".encode())
+        os.utime(path, ns=(self.tick, self.tick))
+
+    def saved(self):
+        items, _ = self.kinds()
+        return sorted(k.split("/")[-1] for k in items if k.startswith("testgame/saves/"))
+
+    def test_only_the_newest_two_saves_and_never_an_autosave(self):
+        self.assertEqual(self.saved(), ["PG16.rws", "PG17.rws"])
+        self.save_again("PG15.rws")
+        self.assertEqual(self.saved(), ["PG15.rws", "PG17.rws"])
+
+    def test_each_save_keeps_two_earlier_copies_and_lets_the_oldest_go(self):
+        let_go = []
+        for moment in range(4):
+            self.save_again("PG17.rws")
+            _, results = sc.run(self.repo, self.environ, now=datetime(2026, 11, 22, 1, moment, tzinfo=timezone.utc))
+            let_go += results[0]["letGo"]
+        earlier = sorted((self.local / sc.BOOK / "earlier").rglob("PG17.rws"))
+        self.assertEqual(len(earlier), 2)
+        self.assertEqual(len(let_go), 1)
+        self.assertTrue((self.local / "testgame/saves/PG17.rws").is_file())
+        self.assertTrue((self.saves / "PG17.rws").is_file())
+        # Other sets keep every earlier copy, as before.
+        self.assertTrue(all("saves" in path for path in let_go))
+
+    def test_a_save_that_falls_out_of_the_newest_keeps_its_copy_and_is_never_called_gone(self):
+        sc.run(self.repo, self.environ, now=NOW)
+        self.save_again("PG15.rws")
+        _, results = sc.run(self.repo, self.environ, now=LATER)
+        self.assertEqual(results[0]["gone"], 0)
+        self.assertTrue((self.local / "testgame/saves/PG16.rws").is_file())
+
+    def test_a_number_that_is_not_a_whole_number_is_refused(self):
+        config = json.loads((self.repo / "config" / "safe-copies.json").read_text(encoding="utf-8"))
+        config["sets"][-1]["keepEarlier"] = 0
+        (self.repo / "config" / "safe-copies.json").write_text(json.dumps(config), encoding="utf-8")
+        with self.assertRaises(sc.SafeCopiesError):
+            sc.load_config(self.repo)
+
+
 class RunTests(Fixture):
     def test_an_unchanged_file_is_not_copied_twice_and_a_changed_one_keeps_its_earlier_copy(self):
         _, first = sc.run(self.repo, self.environ, now=NOW)

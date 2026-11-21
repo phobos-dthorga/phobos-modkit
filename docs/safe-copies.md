@@ -20,8 +20,13 @@ so it is not mixed up with the install backups of `installs` (the owner's choice
 - **A training is ours only when proven.** A `proven` set's unit is ours only when every picture in it is listed by hash in its
   manifest, and its marker file is there. One picture that is not listed makes the whole unit game-derived. A model follows the
   training it was made from (`unitOf`); a model no training explains is game-derived.
-- **Nothing is ever deleted**: not at the source, and not in a copy. A changed file's earlier copy moves to
+- **Nothing at a source is ever deleted, and no copy in use.** A changed file's earlier copy moves to
   `_safe-copies/earlier/<time>/`; git keeps the repository's. A file gone from its source keeps its copy, marked gone.
+- **The one thing that goes** (1.68.0, the owner's word of 22 Nov 2026): **a set that names `keepEarlier` keeps that many earlier
+  copies of each file** in the plain folder, and lets the oldest beyond them go, each named in the run's record. Without
+  `keepEarlier`, every earlier copy stays.
+- **`newest` takes only the newest few files** a set matches, by when each was last written (a save rotation: the owner keeps
+  the two newest saves up to date). A file that falls out of them keeps its copies, and is never called gone.
 - **Restore never writes over a different file unasked**: `--overwrite` replaces files older than the copy, and
   `--overwrite-newer` newer ones too. It never writes inside the copies themselves.
 - **No graphics card, no game**: disk and git only, so it can run at any time, even mid-game.
@@ -88,6 +93,8 @@ is kept only when the run changed something, so a quiet night makes no commit.
 | `root`, `env`, `folder` | Where the set is: a settings key (read in the usual order: argument, environment, the repository's settings file, the central file, then the default the kit knows for it, such as `claudeHomePath`'s `~/.claude` or RimWorld's Config folder), or `@repository`; then a folder under it. A root not set, with no default, is a note, not a failure |
 | `include`, `exclude` | Globs on the path under the set (or under each unit): `*` and `?` stay in one folder, `**` crosses folders. An excluded folder is not even walked |
 | `units` | Each folder directly under the set's folder is a unit of its own: a training, proven on its own |
+| `newest` | 1.68.0: only the newest this many files the set matches, by when each was last written. Its copies of a file that falls out stay, and it never marks a file gone |
+| `keepEarlier` | 1.68.0: how many earlier copies of each file the plain folder keeps; the oldest beyond them are let go, each named in the run's record. Without it, every earlier copy stays |
 | `kind` | `own`, `game-derived`, `personal`, `proven`, or `{"unitOf": SET, "pattern": "...{unit}..."}` |
 | `proof` | For `proven`: the marker file, the manifest (a list of entries, or `{"files": [...]}`), the field holding each hash, and the globs it covers |
 | `localOnly` | Files kept in the plain folder only, never the repository: checkpoints and resume files |
