@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.75.0] - 2026-11-22
+
+A rule for every session: ask the owner to install a tool
+
+### Added
+
+- **Ask the owner to install a tool rather than work round its absence** (`rules/every-session.md`, "Tools the owner can install"; the
+  owner, 22 Nov 2026: "I honestly don't mind installing more tools; just let me know!", then "add that as a rule"). Say what it is, what
+  it gains and its licence; installing stays the owner's.
+
 ## [1.74.0] - 2026-11-22
 
 The sorter's side of the mod manager (the owner, 22 Nov 2026: step 3, "our own sorter", and moving mods "more freely"). The

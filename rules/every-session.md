@@ -31,6 +31,13 @@ Read the file named before doing the work, even when no file of that kind is ope
 - **What cannot be generic yet says what a next game would need**, in its design record or changelog entry, so the follow-up is
   small and known rather than found later.
 
+## Tools the owner can install
+
+- **Ask the owner to install a tool rather than work round its absence** (owner, 22 Nov 2026: "I honestly don't mind installing more
+  tools; just let me know!", and "add that as a rule"). When a library, program or model would make the work clearly better or simpler
+  (numpy for picture checks, a converter, a profiler), say what it is, what it gains and its licence, and ask; a workaround is for when
+  the owner says no, or until it is installed. Installing still goes through the owner: agents never install system-wide by themselves.
+
 ## Commits and changelog entries
 
 - **A change and its changelog entry go in the same commit.** The entry is how the owner reads what changed, and the commit that
