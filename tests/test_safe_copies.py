@@ -287,6 +287,26 @@ class SavesTests(Fixture):
         self.assertEqual(results[0]["gone"], 0)
         self.assertTrue((self.local / "testgame/saves/PG16.rws").is_file())
 
+    def test_a_save_that_left_the_rotation_is_listed_and_let_go_only_on_request(self):
+        sc.run(self.repo, self.environ, now=NOW)
+        self.save_again("PG15.rws")
+        sc.run(self.repo, self.environ, now=LATER)
+        collection = sc.collect(self.repo, self.environ)
+        local = next(d for d in sc.destinations(self.environ) if d.name == "local")
+        kept = sc.kept_only(collection, local)
+        self.assertEqual([(e["key"], e["why"]) for e in kept], [("testgame/saves/PG16.rws", "no longer among the newest 2")])
+        preview = sc.let_go(self.repo, ["testgame/saves/PG16.rws"], self.environ)
+        self.assertFalse(preview["applied"])
+        self.assertTrue((self.local / "testgame/saves/PG16.rws").is_file())
+        with self.assertRaises(sc.SafeCopiesError):
+            sc.let_go(self.repo, ["testgame/saves/PG17.rws"], self.environ, apply=True)   # still in the rotation
+        done = sc.let_go(self.repo, ["testgame/saves/PG16.rws"], self.environ, apply=True)
+        self.assertEqual(done["letGo"], ["testgame/saves/PG16.rws"])
+        self.assertFalse((self.local / "testgame/saves/PG16.rws").exists())
+        self.assertTrue((self.saves / "PG16.rws").is_file(), "the save itself is never touched")
+        self.assertNotIn("testgame/saves/PG16.rws", sc.read_state(self.local))
+        self.assertEqual(sc.verify(self.environ)[0]["problems"], [])
+
     def test_a_number_that_is_not_a_whole_number_is_refused(self):
         config = json.loads((self.repo / "config" / "safe-copies.json").read_text(encoding="utf-8"))
         config["sets"][-1]["keepEarlier"] = 0
@@ -354,6 +374,13 @@ class RepositoryTests(Fixture):
         self.assertFalse(any("_000000100" in path or "optimizer.pt" in path for path in held), held)
         self.assertNotIn(f"{sc.BOOK}/lock", held)
         self.assertIn(f"{sc.BOOK}/state.json", held)
+
+    def test_commits_not_sent_yet_stay_counted_until_a_run_sends_them(self):
+        _, clone = self.make_repository()
+        sc.run(self.repo, self.environ, now=NOW, push=False)
+        self.assertGreater(sc.unsent(clone), 0)
+        sc.run(self.repo, self.environ, now=LATER)
+        self.assertEqual(sc.unsent(clone), 0)
 
     def test_a_second_run_with_nothing_new_makes_no_commit(self):
         self.make_repository()

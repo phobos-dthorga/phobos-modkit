@@ -61,7 +61,8 @@ session**; `CLAUDE.md` imports it. The rules below are this repository's own, an
   safe copies** (owner's go-ahead, 21 November 2026, with the art backups plan): `safe-copies run`, `restore` and `mark` write only into
   the folders the owner chose and marked, and a restore folder the owner names, and push only to the private repository the owner
   chose; they never write to a game's folders, and never delete anything but earlier copies beyond the number a set keeps
-  (`keepEarlier`, the owner's word of 22 November 2026, for the saves), inside a destination's own `_safe-copies/earlier`. **Anything made from a game's files goes only to a folder marked
+  (`keepEarlier`, the owner's word of 22 November 2026, for the saves), inside a destination's own `_safe-copies/earlier`, and, on
+  request with `--apply`, `safe-copies let-go`'s copies of files the list no longer takes, each named (1.69.0). **Anything made from a game's files goes only to a folder marked
   private and local**, never to a repository. Release and publishing tools write only inside the repository they are run on, and only
   when asked (`--write`, `--apply`, an upload's records).
 - **Never execute other authors' code.** Assemblies are read through their metadata

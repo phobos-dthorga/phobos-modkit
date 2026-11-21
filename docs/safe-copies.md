@@ -27,6 +27,11 @@ so it is not mixed up with the install backups of `installs` (the owner's choice
   `keepEarlier`, every earlier copy stays.
 - **`newest` takes only the newest few files** a set matches, by when each was last written (a save rotation: the owner keeps
   the two newest saves up to date). A file that falls out of them keeps its copies, and is never called gone.
+- **Copies of files the list no longer takes are kept until asked** (1.69.0). `status` lists them with their sizes: a file
+  gone from its source, or a save that left the newest pair. `let-go` removes one, named, or `--all` of them, with their earlier
+  copies and their records, and only with `--apply`. It refuses any copy the list still takes.
+- **A push that failed stays counted** (1.69.0): `status` says how many commits the repository's copy holds that its remote has
+  not had yet (`data.destinations[].unsent`), until a run sends them.
 - **Restore never writes over a different file unasked**: `--overwrite` replaces files older than the copy, and
   `--overwrite-newer` newer ones too. It never writes inside the copies themselves.
 - **No graphics card, no game**: disk and git only, so it can run at any time, even mid-game.
@@ -41,6 +46,8 @@ python -m phobos_modkit safe-copies run --root REPO --set trainings --no-push
 python -m phobos_modkit safe-copies status --root REPO         each set: copied, changed since, never copied
 python -m phobos_modkit safe-copies verify                     hash every copy again against its record
 python -m phobos_modkit safe-copies restore --root REPO --set trainings --unit house-v1 --to D:\restored\house-v1
+python -m phobos_modkit safe-copies let-go --root REPO --file rimworld/saves/PG15.rws           what would go (a preview)
+python -m phobos_modkit safe-copies let-go --root REPO --all --apply                              remove every copy no longer taken
 python -m phobos_modkit safe-copies mark --to K:\phobos-modkit\safe-copies\local --private-local
 python -m phobos_modkit safe-copies mark --to K:\phobos-modkit\safe-copies\dthorga-safe-copies --repository
 ```

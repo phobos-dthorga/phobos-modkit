@@ -4,6 +4,23 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.69.0] - 2026-11-22
+
+The owner's go for the safe copies' follow-ups (22 Nov 2026).
+
+### Added
+
+- **safe-copies status says when the repository's copy holds commits not sent yet** (`unsent`), and keeps saying so until a run
+  sends them; before this, a failed push was said only once, by the run it failed in.
+- **safe-copies status lists copies of files the list no longer takes** (`keptOnly`): a file gone from its source, or a save that
+  left the newest pair, each with its size and its earlier copies'.
+- **safe-copies let-go removes them, on request**: one named with `--file`, or `--all`; a preview unless `--apply`. It removes the
+  copy, its earlier copies and its record from the plain folder only, and refuses any copy the list still takes.
+
+### Changed
+
+- AGENTS.md: let-go joins what safe copies may remove, each copy named and only with --apply.
+
 ## [1.68.0] - 2026-11-22
 
 The owner's go for safe copies of their RimWorld saves (22 Nov 2026): the newest pair of their rotation, five earlier versions of

@@ -8,6 +8,8 @@
     safe-copies verify  [--root REPO]                         hashes every copy again against its record
     safe-copies restore --set NAME [--unit NAME] --to FOLDER [--from local|repository] [--overwrite] [--overwrite-newer]
     safe-copies mark    --to FOLDER (--local | --private-local | --repository)
+    safe-copies let-go  [--root REPO] (--file COPY ... | --all) [--apply]
+                                                              removes copies the list no longer takes; a preview without --apply
 
 The owner asked for it on 21 Nov 2026 ("backup functionality for our training sets, models, etc."), after the first style model of
 our own art took 158 minutes of the graphics card to train. A repository lists what to copy in config/safe-copies.json: sets of
@@ -247,6 +249,7 @@ class Collection:
     notes: list                       # problems in words: a root not set, a folder missing, a link skipped
     walked: set                       # (set, unit) pairs read in full, whose missing files are really gone
     provenance: list
+    rotating: dict = field(default_factory=dict)   # 1.69.0: sets that take only their newest N files, by name
 
 
 def _settings_file(root):
@@ -362,7 +365,7 @@ def collect(root, environ=None, only=None):
     """Every file the repository's sets take, with its kind. `only` limits the items to those sets; proofs are still read for
     the sets others follow."""
     config = load_config(root)
-    items, units, notes, walked, kinds = [], [], [], set(), {}
+    items, units, notes, walked, kinds, rotating = [], [], [], set(), {}, {}
     ordered = sorted(config.sets, key=lambda s: isinstance(s.kind, dict))
     for spec in ordered:
         wanted = not only or spec.name in only
@@ -401,6 +404,7 @@ def collect(root, environ=None, only=None):
                 # so this set never says a file is gone: its copies simply stay.
                 files = sorted(files, key=lambda found: (found[2].st_mtime_ns, found[0]), reverse=True)[:spec.newest]
                 files = sorted(files, key=lambda found: found[0])
+                rotating[spec.name] = spec.newest
                 if why:
                     why = f"{why}; the newest {spec.newest}"
             else:
@@ -419,7 +423,7 @@ def collect(root, environ=None, only=None):
             if not files:
                 units.append(Unit(spec.name, unit, kind or GAME_DERIVED, "nothing to copy"))
             units.extend(shown.values())
-    return Collection(config.game, items, units, notes, walked, config.provenance)
+    return Collection(config.game, items, units, notes, walked, config.provenance, rotating)
 
 
 def _follow(spec, relative, kinds):
@@ -793,6 +797,82 @@ def last_run(path):
         return {"name": runs[-1].name, "time": None}
 
 
+def unsent(folder, runner=None):
+    """How many commits the repository's copy holds that its remote has not had yet (1.69.0): a push that failed stays counted until
+    a later run sends it. None when git cannot say."""
+    ahead = _git(folder, "rev-list", "--count", "@{u}..HEAD", runner=runner)
+    if ahead.returncode != 0:
+        ahead = _git(folder, "rev-list", "--count", "HEAD", runner=runner)   # no remote branch yet: every commit is unsent
+    try:
+        return int(ahead.stdout.strip()) if ahead.returncode == 0 else None
+    except ValueError:
+        return None
+
+
+def _earlier_of(folder, key):
+    """A copy's earlier copies in a destination's earlier folder, oldest first."""
+    earlier_root = Path(folder) / BOOK / "earlier"
+    if not earlier_root.is_dir():
+        return []
+    found = [moment / key for moment in sorted(earlier_root.iterdir()) if moment.is_dir() and not is_link(moment)]
+    return [path for path in found if path.is_file() and not is_link(path)]
+
+
+def kept_only(collection, destination):
+    """Copies a plain-folder destination keeps of files the list no longer takes (1.69.0): a file gone from its source, or a save
+    that left a rotation's newest few. Each with its size and its earlier copies'; only what the run can account for."""
+    if destination.problem or destination.name != "local":
+        return []
+    present = {item.key for item in collection.items}
+    found = []
+    for key, record in sorted(read_state(destination.path).items()):
+        parts = key.split("/")
+        if len(parts) < 3 or parts[0] != collection.game or key in present:
+            continue
+        if record.get("gone"):
+            why = "gone from its source"
+        elif parts[1] in collection.rotating:
+            why = f"no longer among the newest {collection.rotating[parts[1]]}"
+        else:
+            continue
+        earlier = _earlier_of(destination.path, key)
+        found.append({"key": key, "set": parts[1], "why": why, "bytes": int(record.get("size") or 0),
+                      "earlier": len(earlier), "earlierBytes": sum(p.stat().st_size for p in earlier)})
+    return found
+
+
+def let_go(root, keys, environ=None, apply=False, now=None):
+    """Lets go of copies the list no longer takes, by name, from the plain-folder destination (1.69.0; on the owner's word for each
+    run): the copy, its earlier copies and its record. Only a name kept_only lists may go; nothing at a source, never a copy in use.
+    Without apply it only says what would go."""
+    collection = collect(root, environ)
+    destination = next(d for d in destinations(environ, _settings_file(root)) if d.name == "local")
+    if destination.problem:
+        raise SafeCopiesError(f"the local copy {destination.problem}")
+    listed = {entry["key"]: entry for entry in kept_only(collection, destination)}
+    unknown = [key for key in keys if key not in listed]
+    if unknown:
+        raise SafeCopiesError(f"{unknown[0]} is not a copy the list no longer takes; safe-copies status lists those")
+    chosen = [listed[key] for key in keys]
+    if not apply:
+        return {"applied": False, "chosen": chosen,
+                "bytes": sum(entry["bytes"] + entry["earlierBytes"] for entry in chosen)}
+    with _Locked(destination.path):
+        state = read_state(destination.path)
+        gone = []
+        for entry in chosen:
+            for path in [destination.path / entry["key"], *_earlier_of(destination.path, entry["key"])]:
+                if path.is_file() and path.resolve().is_relative_to(Path(destination.path).resolve()):
+                    path.unlink()
+                    gone.append(str(path.relative_to(destination.path)).replace("\\", "/"))
+            state.pop(entry["key"], None)
+        _write_json(destination.path / BOOK / "state.json", {"format": FORMAT, "files": state})
+        _write_json(destination.path / BOOK / "runs" / f"{_stamp(now)}-{collection.game}-let-go.json",
+                    {"time": _iso(now), "kit": __version__, "game": collection.game, "letGo": gone, "chosen": chosen})
+    return {"applied": True, "chosen": chosen, "letGo": gone,
+            "bytes": sum(entry["bytes"] + entry["earlierBytes"] for entry in chosen)}
+
+
 def status(root, environ=None):
     """Each set and unit with its kind, and for each destination whether it is copied, refused, changed since, or never copied."""
     collection = collect(root, environ)
@@ -917,8 +997,9 @@ def _parser():
         "verify": sub.add_parser("verify", help="hashes every copy again against its record"),
         "restore": sub.add_parser("restore", help="copies a set back out into a folder you name"),
         "mark": sub.add_parser("mark", help="marks a folder as a destination, on the owner's word"),
+        "let-go": sub.add_parser("let-go", help="removes copies the list no longer takes, on request; a preview without --apply"),
     }
-    for name in ("plan", "run", "status", "verify", "restore"):
+    for name in ("plan", "run", "status", "verify", "restore", "let-go"):
         commands[name].add_argument("--root", default=".", help="the repository whose config/safe-copies.json to read")
     for name in ("plan", "run"):
         commands[name].add_argument("--set", action="append", default=[], help="only this set (repeatable)")
@@ -932,6 +1013,11 @@ def _parser():
                                 help="which copy to restore from")
     restore_parser.add_argument("--overwrite", action="store_true", help="replace files there that are older than the copy")
     restore_parser.add_argument("--overwrite-newer", action="store_true", help="with --overwrite, replace newer files too")
+    let_go_parser = commands["let-go"]
+    let_go_parser.add_argument("--file", action="append", default=[],
+                               help="a copy as status lists it, such as rimworld/saves/PG15.rws (repeatable)")
+    let_go_parser.add_argument("--all", action="store_true", help="every copy status lists as no longer taken")
+    let_go_parser.add_argument("--apply", action="store_true", help="remove them; without it, only say what would go")
     mark_parser = commands["mark"]
     mark_parser.add_argument("--to", required=True, help="the folder to mark")
     which = mark_parser.add_mutually_exclusive_group(required=True)
@@ -1088,11 +1174,39 @@ def main(argv=None, out=None, environ=None):
             return EXIT_PROBLEMS if any(r["failed"] or r["warnings"] for r in results) else EXIT_OK
         if args.report == "status":
             collection, dests, rows = status(root, environ)
-            data = {"game": collection.game, "notes": collection.notes, "sets": rows,
+            waiting = {d.name: unsent(d.path) for d in dests if d.name == "repository" and not d.problem}
+            kept = [entry for d in dests for entry in kept_only(collection, d)]
+            data = {"game": collection.game, "notes": collection.notes, "sets": rows, "keptOnly": kept,
                     "destinations": [{"name": d.name, "folder": str(d.path or ""), "problem": d.problem,
                                       "privateLocal": d.private_local, "shared": d.shared,
-                                      "lastRun": last_run(d.path) if not d.problem else None} for d in dests]}
-            answer(_status_report(collection, dests, rows), data)
+                                      "lastRun": last_run(d.path) if not d.problem else None,
+                                      "unsent": waiting.get(d.name)} for d in dests]}
+            report = _status_report(collection, dests, rows)
+            for name, count in waiting.items():
+                if count:
+                    report.lines.append(f"The {name} copy holds {count} commits not sent yet: the next run tries again.")
+            if kept:
+                report.section("Kept, no longer taken (safe-copies let-go lists and removes them on request)",
+                               Table(["Copy", "Why", "Size", "Earlier copies"],
+                                     [[e["key"], e["why"], _size(e["bytes"]), f"{e['earlier']} ({_size(e['earlierBytes'])})"]
+                                      for e in kept]))
+            answer(report, data)
+            return EXIT_OK
+        if args.report == "let-go":
+            if not args.file and not args.all:
+                raise SafeCopiesError("name each copy with --file, or --all for every copy status lists as no longer taken")
+            keys = args.file
+            if args.all:
+                keys = [entry["key"] for entry in kept_only(collect(root, environ), next(
+                    d for d in destinations(environ, settings_file) if d.name == "local"))]
+            done = let_go(root, keys, environ, apply=args.apply)
+            title = (f"Let go of {len(done['chosen'])} copies ({_size(done['bytes'])})" if done["applied"]
+                     else f"Would let go of {len(done['chosen'])} copies ({_size(done['bytes'])}); add --apply")
+            report = Report(title)
+            if done["chosen"]:
+                report.section("Copies", Table(["Copy", "Why", "Earlier copies"],
+                                               [[e["key"], e["why"], e["earlier"]] for e in done["chosen"]]))
+            answer(report, {"ok": True, **done})
             return EXIT_OK
         if args.report == "verify":
             found = verify(environ, settings_file, Progress(environ))
@@ -1128,4 +1242,6 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS,
                                 "the repository's copy; lets go only earlier copies beyond a set's keepEarlier"},
                         "restore": {"effect": WRITES, "note": "copies a set into a folder the owner names; never over a "
                                     "different file unasked"},
-                        "mark": {"effect": WRITES, "note": "writes .safe-copies.json in the folder named, on the owner's word"}}}
+                        "mark": {"effect": WRITES, "note": "writes .safe-copies.json in the folder named, on the owner's word"},
+                        "let-go": {"effect": WRITES, "when": "--apply", "note": "removes copies the list no longer takes, each "
+                                   "named, from the plain folder; never a source and never a copy in use"}}}
