@@ -36,6 +36,7 @@ the plain folder, and the oldest beyond them are let go, each named in the run's
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import fnmatch
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -46,9 +47,8 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-import time
 
-from . import __version__, history, kit_settings
+from . import __version__, file_lock, history, kit_settings
 from .files import is_link
 from .manifest import READS, WRITES
 from .paths import resolve
@@ -537,30 +537,14 @@ def _write_json(path, data):
     os.replace(partial, path)
 
 
-class _Locked:
+@contextmanager
+def _locked(path):
     """Holds a destination's lock while a run changes it; a lock left by a run that stopped is broken after six hours."""
-
-    def __init__(self, path):
-        self.lock = Path(path) / BOOK / "lock"
-
-    def __enter__(self):
-        self.lock.parent.mkdir(parents=True, exist_ok=True)
-        for _ in range(2):
-            try:
-                os.close(os.open(self.lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
-                return self
-            except (FileExistsError, PermissionError):
-                try:
-                    if time.time() - self.lock.stat().st_mtime > LOCK_STALE_S:
-                        self.lock.unlink(missing_ok=True)
-                        continue
-                except OSError:
-                    continue
-                raise SafeCopiesError(f"another run is copying to {self.lock.parent.parent}; try again when it ends") from None
-        raise SafeCopiesError(f"the lock in {self.lock.parent} could not be taken")
-
-    def __exit__(self, *exc):
-        self.lock.unlink(missing_ok=True)
+    try:
+        with file_lock.held(Path(path) / BOOK / "lock", 0, LOCK_STALE_S):
+            yield
+    except file_lock.LockBusy:
+        raise SafeCopiesError(f"another run is copying to {path}; try again when it ends") from None
 
 
 def _copy(source, target, digest, mtime_ns=None):
@@ -683,7 +667,7 @@ def run(root, environ=None, only=None, push=True, now=None, progress=None, runne
     made = provenance(root, collection.provenance, environ, runner)
     results = []
     for destination in ready:
-        with _Locked(destination.path):
+        with _locked(destination.path):
             results.append(_run_one(destination, collection, stamp, when, made, push, progress, runner, root))
     copied = sum(len(r["copied"]) for r in results)
     if copied:
@@ -857,7 +841,7 @@ def let_go(root, keys, environ=None, apply=False, now=None):
     if not apply:
         return {"applied": False, "chosen": chosen,
                 "bytes": sum(entry["bytes"] + entry["earlierBytes"] for entry in chosen)}
-    with _Locked(destination.path):
+    with _locked(destination.path):
         state = read_state(destination.path)
         gone = []
         for entry in chosen:

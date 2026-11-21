@@ -15,6 +15,7 @@ import tempfile
 import unittest
 
 from support import FIXTURES
+from phobos_modkit import file_lock
 from phobos_modkit import heap_reader as hr
 from phobos_modkit import native
 from phobos_modkit.dotnet_snapshots import heap_owners
@@ -155,8 +156,10 @@ def fixture_program():
     out = native.build_dir() / "dotnet" / "fixtures" / "HeapFixture"
     program = out / native.program_name("HeapFixture")
     if not getattr(fixture_program, "built", False):
-        result = subprocess.run(["dotnet", "build", str(FIXTURE_PROJECT), "-c", "Release", "-o", str(out), "--nologo", "-v", "q"],
-                                capture_output=True, text=True, check=False)
+        # The gate's two Python lanes build it into the same folder: one at a time, as the kit's own tools are built.
+        with file_lock.held(out.with_name(out.name + ".lock"), 10 * 60, 30 * 60):
+            result = subprocess.run(["dotnet", "build", str(FIXTURE_PROJECT), "-c", "Release", "-o", str(out), "--nologo", "-v",
+                                     "q"], capture_output=True, text=True, check=False)
         if result.returncode != 0:
             raise AssertionError("the fixture did not build:\n" + result.stdout[-2000:])
         fixture_program.built = True

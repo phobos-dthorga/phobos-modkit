@@ -10,9 +10,13 @@ import shutil
 import subprocess
 
 from . import __version__
+from . import file_lock
 from . import native
 
 STAMP = "kit-version.txt"
+# A first build restores packages and can take a few minutes; a lock older than half an hour was left by a run that stopped.
+BUILD_WAIT_S = 10 * 60
+BUILD_STALE_S = 30 * 60
 SDK_MISSING = "The .NET SDK is not installed; install .NET 10 from https://dotnet.microsoft.com to {purpose}."
 
 
@@ -64,17 +68,30 @@ class DotnetTool:
         if result.returncode != 0:
             raise self.error(f"Building {self.project} failed:\n{(result.stdout or '')[-2000:]}")
 
+    def _current(self, environ):
+        stamp = self.build_folder(environ) / STAMP
+        built = stamp.read_text(encoding="utf-8").strip() if stamp.is_file() else ""
+        return self.built_path(environ).is_file() and built == __version__
+
     def ensure(self, environ=None, run=subprocess.run):
         """The tool's path: the one an installer brought, else the kit's build, built first when it is missing or was built by
-        another version of the kit."""
+        another version of the kit. One run builds at a time (1.70.2): two runs starting together after an update, such as the
+        gate's two Python lanes, both found the tool out of date and wrote the same files at once; the one that waited now finds
+        it built."""
         bundled = self.bundled_path(environ)
         if bundled is not None:
             return bundled
         tool = self.built_path(environ)
-        stamp = self.build_folder(environ) / STAMP
-        current = stamp.read_text(encoding="utf-8").strip() if stamp.is_file() else ""
-        if not tool.is_file() or current != __version__:
-            self.build(environ, run)
-            stamp.parent.mkdir(parents=True, exist_ok=True)
-            stamp.write_text(__version__, encoding="utf-8")
+        if self._current(environ):
+            return tool
+        folder = self.build_folder(environ)
+        try:
+            with file_lock.held(folder.with_name(folder.name + ".lock"), BUILD_WAIT_S, BUILD_STALE_S):
+                if not self._current(environ):
+                    self.build(environ, run)
+                    (folder / STAMP).parent.mkdir(parents=True, exist_ok=True)
+                    (folder / STAMP).write_text(__version__, encoding="utf-8")
+        except file_lock.LockBusy:
+            raise self.error(f"Another run has been building {self.project} for over {BUILD_WAIT_S // 60} minutes; "
+                             "try again when it ends.") from None
         return tool

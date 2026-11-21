@@ -4,6 +4,20 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.70.2] - 2026-11-22
+
+### Fixed
+
+- **Two runs starting together after a kit update build a C# tool once.** Both found the heap reader (or the assembly reader)
+  built by the last version and ran `dotnet build` into the same folder at once, and one failed on a file the other held; the
+  gate's two Python lanes did so after each version change. The build now takes a lock beside the tool's folder, and a run
+  that waited finds the tool built and goes on. The heap-reader test builds its made-up program under the same lock.
+
+### Changed
+
+- **One lock file for the whole kit** (`file_lock.py`): the claims board and safe copies' destinations each had their own copy
+  of the same loop; both now hold the shared one, with the same waits and the same words when busy.
+
 ## [1.70.1] - 2026-11-22
 
 ### Fixed
