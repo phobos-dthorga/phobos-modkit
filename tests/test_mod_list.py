@@ -176,13 +176,38 @@ class RimWorldChanges(unittest.TestCase):
 
     def test_a_change_keeps_a_backup_and_undo_puts_it_back(self):
         before = self.path.read_bytes()
-        words, backup = core.apply_fix(self.adapter, self.fresh(), self.installed, core.REMOVE, "example.gone",
-                                       lambda names: [], self.environ)
+        words, backup, ids = core.apply_fix(self.adapter, self.fresh(), self.installed, core.REMOVE, "example.gone",
+                                            lambda names: [], self.environ)
+        self.assertNotIn("example.gone", ids)
         self.assertEqual(backup.read_bytes(), before)
         self.assertNotIn(b"example.gone", self.path.read_bytes())
         self.assertIn(b"\r\n    <li>example.hostel</li>", self.path.read_bytes())
         core.undo(self.adapter, self.fresh(), lambda names: [], self.environ)
         self.assertEqual(self.path.read_bytes(), before)
+
+    def test_moving_and_switching_on_at_a_place(self):
+        ids, words = core.plan(self.adapter, self.fresh(), None, core.MOVE, "example.gone", 1)
+        self.assertEqual((ids[0], words), ("example.gone", "move example.gone to place 1"))
+        ids, _ = core.plan(self.adapter, self.fresh(), None, core.MOVE, "example.gone", 999)
+        self.assertEqual(ids[-1], "example.gone")
+        ids, _ = core.plan(self.adapter, self.fresh(), self.installed, core.ENABLE, "example.library", 2)
+        self.assertEqual(ids[1], "example.library")
+        for place in (None, 0, 4):
+            with self.assertRaises(core.FixError):
+                core.plan(self.adapter, self.fresh(), None, core.MOVE, "example.gone", place)
+
+    def test_undo_walks_back_one_change_at_a_time(self):
+        first = self.path.read_bytes()
+        nobody = lambda names: []
+        core.apply_fix(self.adapter, self.fresh(), None, core.MOVE, "example.gone", nobody, self.environ, place=1)
+        second = self.path.read_bytes()
+        core.apply_fix(self.adapter, self.fresh(), None, core.REMOVE, "example.needy", nobody, self.environ)
+        self.assertEqual(core.undo(self.adapter, self.fresh(), nobody, self.environ)["why"], "take example.needy off the list")
+        self.assertEqual(self.path.read_bytes(), second)
+        self.assertEqual(core.undo(self.adapter, self.fresh(), nobody, self.environ)["why"], "move example.gone to place 1")
+        self.assertEqual(self.path.read_bytes(), first)
+        with self.assertRaises(core.FixError):
+            core.undo(self.adapter, self.fresh(), nobody, self.environ)
 
     def test_keeping_the_first_of_two(self):
         core.apply_fix(self.adapter, self.fresh(), self.installed, core.REMOVE_EXTRA, "example.hostel", lambda names: [],
@@ -318,10 +343,26 @@ class Command(unittest.TestCase):
         self.assertEqual((code, answer["data"]["ok"]), (1, False))
         self.assertIn("RimWorld.exe is running", answer["data"]["refusal"])
 
+    def test_mods_names_every_mod_and_each_list_in_order(self):
+        code, answer = self.run_cli("mods", "--name", "RimWorld")
+        data = answer["data"]
+        self.assertEqual(code, 0)
+        self.assertIn("example.library", [m["key"] for m in data["mods"]])
+        self.assertEqual([e["key"] for e in data["lists"][0]["entries"]], ["ludeon.rimworld", "example.hostel", "example.gone"])
+        self.assertEqual(data["changes"], {"active": 0})
+
+    def test_a_move_answers_with_the_list_as_it_now_stands(self):
+        code, answer = self.run_cli("fix", "--name", "rimworld", "--list", "active", "--move", "example.gone", "--to", "1",
+                                    "--apply")
+        self.assertEqual((code, answer["data"]["ids"][0]), (0, "example.gone"))
+        code, answer = self.run_cli("undo", "--name", "rimworld", "--list", "active", "--apply")
+        self.assertEqual(answer["data"]["ids"][-1], "example.gone")
+
     def test_a_game_without_an_adapter_is_told_in_words(self):
-        code, answer = self.run_cli("check", "--name", "Kenshi")
-        self.assertEqual((code, answer["data"]["supported"]), (0, False))
-        self.assertIn("cannot read Kenshi", answer["data"]["notes"][0])
+        for report in ("check", "mods"):
+            code, answer = self.run_cli(report, "--name", "Kenshi")
+            self.assertEqual((code, answer["data"]["supported"]), (0, False))
+            self.assertIn("cannot read Kenshi", answer["data"]["notes"][0])
 
     def test_games_by_name_or_steam_number(self):
         self.assertEqual(mod_list_game("Project Zomboid")[0], "project-zomboid")
@@ -332,7 +373,7 @@ class Command(unittest.TestCase):
         reports = {r["name"]: r for r in describe("mod-list", ".mod_list_cli", "")["reports"]}
         self.assertEqual({k: (v["effect"], v["when"]) for k, v in reports.items()},
                          {"check": ("reads-online", "--online"), "fix": ("writes", "--apply"), "undo": ("writes", "--apply"),
-                          "backups": ("reads", None), "games": ("reads", None)})
+                          "mods": ("reads", None), "backups": ("reads", None), "games": ("reads", None)})
         self.assertEqual(reports["check"]["surface"], "mod-list")
 
 

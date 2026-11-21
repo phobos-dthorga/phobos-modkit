@@ -4,6 +4,26 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.73.0] - 2026-11-22
+
+The list editor's side of the mod manager (the owner, 22 Nov 2026: switching mods on and off and moving them in D'thorga
+Companion, each change saved at once).
+
+### Added
+
+- **mod-list mods**: every mod on this PC (key, name, source, Workshop number, authors, versions, needs) and each list's entries
+  in order, joined by the key the game compares, with how many changes each list can still go back on. 1.2 s on the owner's
+  RimWorld (407 mods).
+- **mod-list fix --move ID --to PLACE** moves a mod to a place (1 is first), and **--enable ID --to PLACE** switches one on there.
+  Every change now answers with the list as it then stands (`ids`, `keys`).
+
+### Changed
+
+- **undo walks back one change at a time**: each undo marks the change it went back on (`undone` in its record), so pressing it
+  again goes back on the one before. Before, a second undo went back on the same change again.
+- **Moving and switching off no longer read every mod's files**: only switching on needs to know what is on this PC.
+- The RimWorld adapter reads ModsConfig.xml afresh each time a list is asked for, so an undo answers with the list as restored.
+
 ## [1.72.0] - 2026-11-22
 
 The first step of D'thorga Companion's own mod manager (the owner, 22 Nov 2026: "We actually should have our own, third-party, mod

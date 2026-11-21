@@ -35,8 +35,9 @@ FOLDER = ("modListPath", "PHOBOS_MOD_LIST")
 REMEMBERED_FORMAT = 1
 PROBLEM, WARNING, NOTE = "problem", "warning", "note"
 SEVERITIES = (PROBLEM, WARNING, NOTE)
-REMOVE, REMOVE_EXTRA, ENABLE = "remove", "remove-extra", "enable"
-ACTIONS = (REMOVE, REMOVE_EXTRA, ENABLE)
+REMOVE, REMOVE_EXTRA, ENABLE, MOVE = "remove", "remove-extra", "enable", "move"
+ACTIONS = (REMOVE, REMOVE_EXTRA, ENABLE, MOVE)
+BEFORE_GOING_BACK = "before going back"
 # Steam's GetPublishedFileDetails result: 1 is a public item; 9 is "no such item" (removed, private, or never published).
 STEAM_FOUND = 1
 SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
@@ -424,10 +425,27 @@ def backups_folder(game, environ=None, settings=None):
     return folder(game, environ, settings) / "backups"
 
 
-def plan(adapter, mod_list, installed, action, mod_id):
-    """The list's ids after one change, and the change in words. Raises FixError when the change makes no sense."""
+def _index(place, length):
+    """A place as people count (1 is first) as an index into a list of this length, kept inside it."""
+    return max(0, min(int(place) - 1, length))
+
+
+def plan(adapter, mod_list, installed, action, mod_id, place=None):
+    """The list's ids after one change, and the change in words. Raises FixError when the change makes no sense. `installed` is
+    needed only to switch a mod on; `place` (1 is first) says where a mod switched on or moved goes."""
     key = adapter.key(mod_id)
     ids = list(mod_list.ids)
+    if action == MOVE:
+        at = next((n for n, i in enumerate(ids) if adapter.key(i) == key), None)
+        if at is None:
+            raise FixError(f"{mod_id} is not on the list.")
+        if place is None or int(place) < 1:
+            raise FixError("Say where to move it: a place from 1 (first).")
+        moving = ids.pop(at)
+        to = _index(place, len(ids))
+        if to == at:
+            raise FixError(f"{mod_id} is in place {at + 1} already.")
+        return ids[:to] + [moving] + ids[to:], f"move {mod_id} to place {to + 1}"
     if action == REMOVE:
         kept = [i for i in ids if adapter.key(i) != key]
         if len(kept) == len(ids):
@@ -444,9 +462,12 @@ def plan(adapter, mod_list, installed, action, mod_id):
     if action == ENABLE:
         if any(adapter.key(i) == key for i in ids):
             raise FixError(f"{mod_id} is on the list already.")
-        mod = installed.first([mod_id])
+        mod = installed.first([mod_id]) if installed is not None else None
         if mod is None:
             raise FixError(f"{mod_id} is not on this PC, so it cannot be switched on.")
+        if place is not None:
+            at = _index(place, len(ids))
+            return ids[:at] + [adapter.listed_id(mod)] + ids[at:], f"switch {mod.name} on, at place {at + 1}"
         at = len(ids)
         for n, listed in enumerate(ids):
             there = installed.find(listed)
@@ -490,17 +511,17 @@ def read_text(path):
     return Path(path).read_bytes().decode("utf-8-sig")
 
 
-def apply_fix(adapter, mod_list, installed, action, mod_id, running, environ=None, settings=None, now=None):
-    """Makes one change, after a backup of the list as it stood. Returns (the change in words, the backup)."""
+def apply_fix(adapter, mod_list, installed, action, mod_id, running, environ=None, settings=None, now=None, place=None):
+    """Makes one change, after a backup of the list as it stood. Returns (the change in words, the backup, the list's ids now)."""
     if not mod_list.writable:
         raise FixError(f"{mod_list.label} is not a list this tool changes.")
     _refuse_while_running(adapter, running)
-    ids, words = plan(adapter, mod_list, installed, action, mod_id)
+    ids, words = plan(adapter, mod_list, installed, action, mod_id, place)
     before = read_text(mod_list.path)
     after = adapter.render(before, ids)
     backup = _backup(adapter, mod_list, before, words, environ, settings, now, written=digest_text(after))
     _write(mod_list.path, after)
-    return words, backup
+    return words, backup, ids
 
 
 def backups(game, environ=None, settings=None):
@@ -518,14 +539,21 @@ def backups(game, environ=None, settings=None):
     return found
 
 
+def changes(game, list_key, environ=None, settings=None):
+    """The changes made to a list that can still be gone back on, newest first: (record, backup file). Each undo marks the change
+    it went back on, so the next goes back on the one before (1.73.0)."""
+    return [(r, f) for r, f in backups(game, environ, settings)
+            if r.get("list") == list_key and r.get("why") != BEFORE_GOING_BACK and not r.get("undone")]
+
+
 def undo(adapter, mod_list, running, environ=None, settings=None, now=None, backup_file=None):
-    """Puts the list back as it was before the latest change this tool made to it (or the backup named), after a backup of the list
-    as it is now. Refuses when the list was changed since by something else, which going back would throw away."""
+    """Puts the list back as it was before the latest change this tool made to it and not yet gone back on (or the backup named),
+    after a backup of the list as it is now. Refuses when the list was changed since by something else, which going back would
+    throw away. Pressed again, it goes back on the change before."""
     if not mod_list.writable:
         raise FixError(f"{mod_list.label} is not a list this tool changes.")
     _refuse_while_running(adapter, running)
-    choices = [(r, f) for r, f in backups(adapter.game, environ, settings) if r.get("list") == mod_list.key
-               and r.get("why") != "before going back"]
+    choices = changes(adapter.game, mod_list.key, environ, settings)
     if backup_file:
         choices = [(r, f) for r, f in choices if f.name == Path(backup_file).name]
     if not choices:
@@ -535,8 +563,10 @@ def undo(adapter, mod_list, running, environ=None, settings=None, now=None, back
     if not backup_file and record.get("written") and record["written"] != digest_text(now_text):
         raise FixError(f"{mod_list.label} has changed since that change (a game or a mod manager saved it), so going back would "
                        "throw those changes away. Choose the backup by name to go back anyway.")
-    _backup(adapter, mod_list, now_text, "before going back", environ, settings, now)
+    _backup(adapter, mod_list, now_text, BEFORE_GOING_BACK, environ, settings, now)
     _write(mod_list.path, listed.read_bytes().decode("utf-8"))
+    record["undone"] = True
+    listed.with_suffix(".json").write_text(json.dumps(record, indent=1), encoding="utf-8")
     return record
 
 

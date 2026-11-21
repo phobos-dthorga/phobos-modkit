@@ -167,8 +167,10 @@ class RimWorld:
         return found
 
     def lists(self):
+        """Read afresh each time: a change or an undo answers with the list as it now stands."""
         if not self.config.is_file():
             return []
+        self._version, _, self._ids = read_mods_config(self.config)
         return [ModList("active", "Your active mods (ModsConfig.xml)", self.config, list(self._ids))]
 
     def subscribed(self):

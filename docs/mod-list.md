@@ -1,6 +1,6 @@
 # Mod list: what is wrong with a game's active mods, and why
 
-**Status (22 Nov 2026):** built in 1.72.0 for RimWorld and Project Zomboid. It is the first step of D'thorga Companion's own mod
+**Status (22 Nov 2026):** built in 1.72.0 for RimWorld and Project Zomboid; 1.73.0 adds the list editor's side (`mods`, moving, switching on at a place, and an undo that walks back one change at a time). It is the first step of D'thorga Companion's own mod
 manager (the owner, 22 Nov 2026: "We actually should have our own, third-party, mod managing", after RimSort said only "1 missing
 mod" for a patch whose author had taken it off the Workshop). The Companion's Mod list page shows it from 0.45.0.
 
@@ -10,6 +10,7 @@ mod" for a patch whose author had taken it off the Workshop). The Companion's Mo
   still exist (no account, no sign-in).
 - **`fix` and `undo` change nothing without `--apply`.** With it, each keeps a backup of the list as it stood first, and **refuses
   while the game or a program that rewrites the list is running** (RimSort, RimPy), because either would write over the change.
+- **`undo` walks back one change at a time** (1.73.0): each undo marks the change it went back on, so pressing it again goes back on the one before. There is no redo; the list as it stood before each undo is kept as a backup.
 - **`undo` refuses when the list changed after the change it would undo** (a game or a mod manager saved it since), because going
   back would throw those changes away. Name the backup with `--backup` to go back anyway.
 - **Nothing here deletes a backup or forgets a mod.** Both live in D'thorga Companion's folder, `mod-list/<game>/` (setting
@@ -26,7 +27,9 @@ mod" for a patch whose author had taken it off the Workshop). The Companion's Mo
 | --- | --- | --- |
 | `mod-list check --name GAME [--online] [--list KEY]` | Every problem, warning and note with each list, with the changes offered | reads (online with `--online`) |
 | `mod-list fix --name GAME --list KEY --remove ID [--apply]` | Takes a mod off a list; `--remove-extra ID` keeps its first entry; `--enable ID` switches it on just before the first mod that needs it | writes with `--apply` |
-| `mod-list undo --name GAME --list KEY [--backup FILE] [--apply]` | Puts a list back as it was before the latest change made here | writes with `--apply` |
+| `mod-list fix --name GAME --list KEY --move ID --to PLACE [--apply]` | Moves a mod to a place (1 is first); `--enable ID --to PLACE` switches one on there (1.73.0) | writes with `--apply` |
+| `mod-list undo --name GAME --list KEY [--backup FILE] [--apply]` | Goes back on the latest change made here not yet gone back on; again, on the one before | writes with `--apply` |
+| `mod-list mods --name GAME` | Every mod on this PC (key, name, source, Workshop number, authors, versions, needs) and each list's entries in order, joined by key, with how many changes each list can still go back on (1.73.0) | reads |
 | `mod-list backups --name GAME` | Every backup kept, newest first | reads |
 | `mod-list games` | The games whose lists it can read | reads |
 
@@ -69,5 +72,5 @@ A new game is one module with `adapter()` and a row in `games/__init__.py`'s `MO
 ## Backups
 
 `mod-list/<game>/backups/<UTC time>--<list>.list` holds the list file as it stood, byte for byte; the `.json` beside it says which
-list, where, what the change was, and a hash of what was written (how `undo` sees a later change). Going back keeps the list as it
+list, where, what the change was, a hash of what was written (how `undo` sees a later change), and from 1.73.0 `undone` once an undo has gone back on it. Going back keeps the list as it
 then stood as a backup too ("before going back").

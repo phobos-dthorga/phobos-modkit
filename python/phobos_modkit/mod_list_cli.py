@@ -1,8 +1,10 @@
 """mod-list: what is wrong with a game's list of active mods, why, and safe changes that put it right (1.72.0).
 
     mod-list check --name GAME [--online] [--list KEY]     every problem, warning and note, with the changes offered
+    mod-list mods --name GAME                                          every mod on this PC, and where each list has it (1.73.0)
     mod-list fix --name GAME --list KEY --remove ID [--apply]          take a mod off a list (also --remove-extra, --enable)
-    mod-list undo --name GAME --list KEY [--backup FILE] [--apply]     put a list back as it was before the last change
+    mod-list fix --name GAME --list KEY --move ID --to PLACE [--apply] move a mod to a place, 1 first (1.73.0)
+    mod-list undo --name GAME --list KEY [--backup FILE] [--apply]     go back on the last change; again, the one before
     mod-list backups --name GAME                                       every backup kept of the game's lists
     mod-list games                                                     the games whose lists the check can read
 
@@ -54,12 +56,16 @@ def _parser():
     change = fix.add_mutually_exclusive_group(required=True)
     change.add_argument("--remove", metavar="ID", help="take this mod off the list")
     change.add_argument("--remove-extra", metavar="ID", help="keep the first entry of this mod and take the others off")
-    change.add_argument("--enable", metavar="ID", help="switch this mod on, just before the first mod that needs it")
+    change.add_argument("--enable", metavar="ID", help="switch this mod on: at --to, else just before the first mod that needs it")
+    change.add_argument("--move", metavar="ID", help="move this mod to the place --to names")
+    fix.add_argument("--to", type=int, metavar="PLACE", help="the place a mod moved or switched on goes to, 1 first (1.73.0)")
     fix.add_argument("--apply", action="store_true", help="make the change; without it, only say what it would be")
     undo = sub.add_parser("undo", help="put a list back as it was before the last change made here; only with --apply")
     _common(undo)
     undo.add_argument("--backup", help="this backup (its file name), instead of the latest")
     undo.add_argument("--apply", action="store_true", help="go back; without it, only say what it would do")
+    mods = sub.add_parser("mods", help="every mod on this PC, and where each of the game's lists has it")
+    _common(mods, lists=False)
     backups = sub.add_parser("backups", help="every backup kept of the game's lists, newest first")
     _common(backups, lists=False)
     games = sub.add_parser("games", help="the games whose lists the check can read")
@@ -115,7 +121,35 @@ def survey(adapter, environ=None, settings=None, online=False, list_key=None, po
 
 
 def _backup_data(record, listed):
-    return {"list": record.get("list", ""), "why": record.get("why", ""), "at": record.get("at", ""), "file": listed.name}
+    return {"list": record.get("list", ""), "why": record.get("why", ""), "at": record.get("at", ""), "file": listed.name,
+            "undone": bool(record.get("undone"))}
+
+
+def mods_data(adapter, environ=None, settings=None, now=None, progress=None):
+    """Every mod on this PC with what the list editor shows, and each list's entries in order, joined by key (1.73.0)."""
+    progress = progress or (lambda *a, **k: None)
+    progress("Reading your mods", 1, 2)
+    mods = adapter.installed()
+    memory = core.remember(core.remembered_file(adapter.game, environ, settings), adapter, mods, now)
+    seen = set()
+    rows = []
+    for mod in mods:
+        key = adapter.key(mod.id)
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append({"key": key, "id": mod.id, "name": mod.name, "source": mod.source, "workshop_id": mod.workshop_id,
+                     "authors": mod.authors, "versions": list(mod.versions), "needs": [n.name or n.ids[0] for n in mod.needs]})
+    lists = []
+    for mod_list in adapter.lists():
+        lists.append({"key": mod_list.key, "label": mod_list.label, "writable": mod_list.writable, "count": len(mod_list.ids),
+                      "entries": [{"id": i, "key": adapter.key(i),
+                                   "remembered": (memory.get(adapter.key(i)) or {}).get("name", "")} for i in mod_list.ids]})
+    progress("Done", 2, 2)
+    return {"game": adapter.game, "name": adapter.name, "supported": True, "version": adapter.game_version(), "mods": rows,
+            "lists": lists, "running": game_running(list(adapter.processes) + list(adapter.managers)),
+            "notes": list(adapter.notes()),
+            "changes": {m["key"]: len(core.changes(adapter.game, m["key"], environ, settings)) for m in lists}}
 
 
 def _bullet(problem):
@@ -176,7 +210,8 @@ def _the_list(adapter, key):
 
 
 def _change(args):
-    for action, value in ((core.REMOVE, args.remove), (core.REMOVE_EXTRA, args.remove_extra), (core.ENABLE, args.enable)):
+    for action, value in ((core.REMOVE, args.remove), (core.REMOVE_EXTRA, args.remove_extra), (core.ENABLE, args.enable),
+                          (core.MOVE, args.move)):
         if value:
             return action, value
     raise core.FixError("Name one change: --remove, --remove-extra or --enable.")
@@ -185,14 +220,17 @@ def _change(args):
 def fix(adapter, args, environ=None, running=game_running, now=None):
     mod_list = _the_list(adapter, args.list_key)
     action, mod_id = _change(args)
-    installed = core.Installed(adapter, adapter.installed())
-    ids, words = core.plan(adapter, mod_list, installed, action, mod_id)
+    # Only switching on needs to know what is on this PC; reading 400 mods' files would slow every move (1.73.0).
+    installed = core.Installed(adapter, adapter.installed()) if action == core.ENABLE else None
+    ids, words = core.plan(adapter, mod_list, installed, action, mod_id, args.to)
     before = {adapter.key(i) for i in mod_list.ids}
     after = {adapter.key(i) for i in ids}
     data = {"list": mod_list.key, "label": mod_list.label, "action": action, "id": mod_id, "change": words,
-            "removed": sorted(before - after), "added": sorted(after - before), "applied": False, "backup": ""}
+            "removed": sorted(before - after), "added": sorted(after - before), "applied": False, "backup": "",
+            "ids": ids, "keys": [adapter.key(i) for i in ids]}
     if args.apply:
-        words, backup = core.apply_fix(adapter, mod_list, installed, action, mod_id, running, environ, args.settings, now)
+        words, backup, ids = core.apply_fix(adapter, mod_list, installed, action, mod_id, running, environ, args.settings, now,
+                                            args.to)
         data.update(applied=True, backup=backup.name)
         history.record(adapter.game, "mod-list-change", environ, args.settings, now, list=mod_list.key, change=words,
                        backup=backup.name)
@@ -205,8 +243,7 @@ def fix(adapter, args, environ=None, running=game_running, now=None):
 def undo(adapter, args, environ=None, running=game_running, now=None):
     mod_list = _the_list(adapter, args.list_key)
     if not args.apply:
-        choices = [(r, f) for r, f in core.backups(adapter.game, environ, args.settings)
-                   if r.get("list") == mod_list.key and r.get("why") != "before going back"]
+        choices = core.changes(adapter.game, mod_list.key, environ, args.settings)
         if args.backup:
             choices = [(r, f) for r, f in choices if f.name == args.backup]
         if not choices:
@@ -219,7 +256,9 @@ def undo(adapter, args, environ=None, running=game_running, now=None):
     history.record(adapter.game, "mod-list-undo", environ, args.settings, now, list=mod_list.key, undid=record.get("why", ""))
     report = Report(f"Mod list: went back on \"{record.get('why')}\"")
     report.lines.append("The list as it was just now is kept as a backup too.")
-    return report, {"list": mod_list.key, "undoes": record.get("why", ""), "applied": True}
+    ids = next((m.ids for m in adapter.lists() if m.key == mod_list.key), [])
+    return report, {"list": mod_list.key, "undoes": record.get("why", ""), "applied": True, "ids": ids,
+                    "keys": [adapter.key(i) for i in ids]}
 
 
 def main(argv=None, environ=None, out=None, post=None, running=None, now=None):
@@ -238,10 +277,11 @@ def main(argv=None, environ=None, out=None, post=None, running=None, now=None):
         return EXIT_OK
     row = mod_list_game(args.name, args.app_id)
     if row is None:
-        if args.report != "check":
+        if args.report not in ("check", "mods"):
             print(f"The tools cannot change {args.name or args.app_id}'s mod list yet.", file=sys.stderr)
             return EXIT_REFUSED
         data = unsupported(args.name, args.app_id)
+        data.update(mods=[], changes={})
         report = check_report(data)
         out.write((envelope_text("mod-list", report, redact, data) if args.json else render_markdown(report, redact)) + "\n")
         return EXIT_OK
@@ -250,6 +290,13 @@ def main(argv=None, environ=None, out=None, post=None, running=None, now=None):
         if args.report == "check":
             data = survey(adapter, environ, args.settings, args.online, args.list_key, post, Progress(environ), now)
             report = check_report(data)
+        elif args.report == "mods":
+            data = mods_data(adapter, environ, args.settings, now, Progress(environ))
+            report = Report(f"Mod list: {len(data['mods'])} mods on this PC for {adapter.name}")
+            for mod_list in data["lists"]:
+                report.lines.append(f"{mod_list['label']}: {mod_list['count']} on.")
+            report.section("Mods", Table(["Name", "Id", "From", "Workshop"],
+                                         [[m["name"], m["id"], m["source"], m["workshop_id"]] for m in data["mods"]]))
         elif args.report == "backups":
             found = core.backups(adapter.game, environ, args.settings)
             data = {"backups": [_backup_data(r, f) for r, f in found]}
@@ -278,6 +325,7 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS, "surface": "mod-li
                         "fix": {"effect": WRITES, "when": "--apply", "question": None},
                         "undo": {"effect": WRITES, "when": "--apply", "question": None},
                         "backups": {"question": "Which backups of my mod lists are kept?"},
+                        "mods": {"question": "Which mods are on this PC, and which are switched on?"},
                         "games": {"question": "Which games' mod lists can the tools read?"}}}
 
 
