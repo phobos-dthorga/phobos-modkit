@@ -250,6 +250,11 @@ class Collection:
     walked: set                       # (set, unit) pairs read in full, whose missing files are really gone
     provenance: list
     rotating: dict = field(default_factory=dict)   # 1.69.0: sets that take only their newest N files, by name
+    # 1.71.0: the sets this list names, and which list it is. A list speaks only for copies of its own sets: two lists of one
+    # game (two repositories of Farming Simulator, or a game's saves kept apart from its repository's art) never mark each other's
+    # copies gone or offer them to let go.
+    sets: frozenset = frozenset()
+    source: str = ""
 
 
 def _settings_file(root):
@@ -423,7 +428,27 @@ def collect(root, environ=None, only=None):
             if not files:
                 units.append(Unit(spec.name, unit, kind or GAME_DERIVED, "nothing to copy"))
             units.extend(shown.values())
-    return Collection(config.game, items, units, notes, walked, config.provenance, rotating)
+    return Collection(config.game, items, units, notes, walked, config.provenance, rotating,
+                      frozenset(spec.name for spec in config.sets), Path(root).resolve().name)
+
+
+def _owns(collection, key, record):
+    """Whether a copy is this list's to speak for: one of its game's copies, of a set it names, not made from another list."""
+    parts = key.split("/")
+    return (len(parts) >= 3 and parts[0] == collection.game and parts[1] in collection.sets
+            and record.get("from", collection.source) == collection.source)
+
+
+def claimed_elsewhere(collection, state):
+    """Sets of this list a destination already holds copies of from another list, as (set, that list): two lists naming the same
+    set of one game would overwrite each other's copies, so a run refuses until one is renamed (1.71.0)."""
+    found = set()
+    for key, record in state.items():
+        parts = key.split("/")
+        if len(parts) >= 3 and parts[0] == collection.game and parts[1] in collection.sets \
+                and record.get("from") not in (None, collection.source):
+            found.add((parts[1], record["from"]))
+    return sorted(found)
 
 
 def _follow(spec, relative, kinds):
@@ -663,6 +688,12 @@ def run(root, environ=None, only=None, push=True, now=None, progress=None, runne
     if not ready:
         raise SafeCopiesError("no destination is ready: " + "; ".join(f"{d.name} {d.problem}"
                                                                      for d in destinations(environ, _settings_file(root))))
+    for destination in ready:
+        clash = claimed_elsewhere(collection, read_state(destination.path))
+        if clash:
+            set_name, other = clash[0]
+            raise SafeCopiesError(f"the {destination.name} copy already holds {collection.game}/{set_name} from {other}: two lists "
+                                  f"name the same set, so give one of them another name")
     stamp, when = _stamp(now), _iso(now)
     made = provenance(root, collection.provenance, environ, runner)
     results = []
@@ -718,12 +749,13 @@ def _run_one(destination, collection, stamp, when, made, push, progress, runner,
             continue
         record, target = state.get(item.key), destination.path / item.key
         if _same(record, item, target):
+            record.setdefault("from", collection.source)     # a copy recorded before 1.71.0 learns which list it is
             same += 1
             continue
         try:
             digest = sha256_file(item.source)
             if target.is_file() and ((record or {}).get("sha256") == digest or sha256_file(target) == digest):
-                state[item.key] = _record(item, digest, (record or {}).get("copied", when))
+                state[item.key] = _record(item, digest, (record or {}).get("copied", when), collection.source)
                 same += 1
                 continue
             if target.exists() and destination.name == "local":
@@ -731,7 +763,7 @@ def _run_one(destination, collection, stamp, when, made, push, progress, runner,
                 earlier.parent.mkdir(parents=True, exist_ok=True)
                 os.replace(target, earlier)
             _copy(item.source, target, digest, item.mtime_ns)
-            state[item.key] = _record(item, digest, when)
+            state[item.key] = _record(item, digest, when, collection.source)
             copied.append({"path": item.key, "bytes": item.size, "sha256": digest, "kind": item.kind})
             if item.keep_earlier and destination.name == "local":
                 let_go.extend(prune_earlier(destination.path, item.key, item.keep_earlier))
@@ -741,7 +773,7 @@ def _run_one(destination, collection, stamp, when, made, push, progress, runner,
     gone = 0
     for key, record in state.items():
         parts = key.split("/")
-        if len(parts) < 3 or parts[0] != collection.game or key in present or record.get("gone"):
+        if not _owns(collection, key, record) or key in present or record.get("gone"):
             continue
         # Only a set or unit read in full this run can say a file is gone; one whose folder was missing says nothing.
         if (parts[1], parts[2]) in collection.walked or (parts[1], None) in collection.walked:
@@ -765,9 +797,9 @@ def _run_one(destination, collection, stamp, when, made, push, progress, runner,
     return result
 
 
-def _record(item, digest, copied):
+def _record(item, digest, copied, source):
     return {"size": item.size, "mtime_ns": item.mtime_ns, "sha256": digest, "kind": item.kind, "set": item.set,
-            "unit": item.unit, "copied": copied}
+            "unit": item.unit, "copied": copied, "from": source}
 
 
 def last_run(path):
@@ -811,7 +843,7 @@ def kept_only(collection, destination):
     found = []
     for key, record in sorted(read_state(destination.path).items()):
         parts = key.split("/")
-        if len(parts) < 3 or parts[0] != collection.game or key in present:
+        if not _owns(collection, key, record) or key in present:
             continue
         if record.get("gone"):
             why = "gone from its source"
@@ -862,6 +894,10 @@ def status(root, environ=None):
     collection = collect(root, environ)
     dests = destinations(environ, _settings_file(root))
     states = {d.name: read_state(d.path) if not d.problem else {} for d in dests}
+    for name, state in states.items():
+        for set_name, other in claimed_elsewhere(collection, state):
+            collection.notes.append(f"{set_name}: the {name} copy holds this set from {other} too; a run refuses until one is "
+                                    "renamed")
     rows = []
     for unit in collection.units:
         members = [i for i in collection.items if i.set == unit.set and unit.unit in (i.unit, i.relative)]

@@ -30,6 +30,10 @@ so it is not mixed up with the install backups of `installs` (the owner's choice
 - **Copies of files the list no longer takes are kept until asked** (1.69.0). `status` lists them with their sizes: a file
   gone from its source, or a save that left the newest pair. `let-go` removes one, named, or `--all` of them, with their earlier
   copies and their records, and only with `--apply`. It refuses any copy the list still takes.
+- **A list speaks only for its own sets** (1.71.0). Every copy records which list made it (`from`). A run marks gone, and `status`
+  offers to let go, only copies of the sets its own list names, so two lists of one game (two repositories of one game, or a
+  game's saves kept apart from its repository's art) never take each other's copies away. **Two lists naming the same set of one
+  game are refused** until one is renamed, since they would overwrite each other's copies.
 - **A push that failed stays counted** (1.69.0): `status` says how many commits the repository's copy holds that its remote has
   not had yet (`data.destinations[].unsent`), until a run sends them.
 - **Restore never writes over a different file unasked**: `--overwrite` replaces files older than the copy, and

@@ -459,5 +459,59 @@ class CommandTests(Fixture):
         self.assertIn("nothing is copied", refused["data"]["refusal"])
 
 
+class OwnershipTests(Fixture):
+    """1.71.0: two lists of one game, as two repositories of one game, or a game's saves kept apart from its art."""
+
+    def second_list(self, set_name="notes"):
+        other = self.base / "other"
+        (other / "config").mkdir(parents=True)
+        (other / "notes").mkdir()
+        (other / "notes" / "a.md").write_text("a", encoding="utf-8")
+        (other / "notes" / "b.md").write_text("b", encoding="utf-8")
+        (other / "config" / "safe-copies.json").write_text(json.dumps(
+            {"game": "testgame", "sets": [{"name": set_name, "root": "@repository", "folder": "notes", "include": ["*.md"],
+                                           "kind": "own"}]}), encoding="utf-8")
+        return other
+
+    def state(self):
+        return sc.read_state(self.local)
+
+    def test_one_list_never_marks_anothers_copies_gone_or_offers_them(self):
+        other = self.second_list()
+        sc.run(self.repo, self.environ, push=False, now=NOW)
+        sc.run(other, self.environ, push=False, now=NOW)
+        self.assertFalse([k for k, r in self.state().items() if r.get("gone")], "neither list took the other's files away")
+        (other / "notes" / "b.md").unlink()
+        collection, _ = sc.run(other, self.environ, push=False, now=LATER)
+        gone = sorted(k for k, r in self.state().items() if r.get("gone"))
+        self.assertEqual(gone, ["testgame/notes/b.md"])
+        mine = sc.collect(self.repo, self.environ)
+        local = next(d for d in sc.destinations(self.environ) if d.name == "local")
+        self.assertEqual(sc.kept_only(mine, local), [], "the first list does not offer the second's copy to let go")
+        self.assertEqual([e["key"] for e in sc.kept_only(collection, local)], ["testgame/notes/b.md"])
+
+    def test_each_copy_says_which_list_made_it(self):
+        sc.run(self.repo, self.environ, push=False, now=NOW)
+        self.assertEqual({r["from"] for r in self.state().values()}, {"repo"})
+
+    def test_two_lists_naming_one_set_are_refused_until_one_is_renamed(self):
+        sc.run(self.repo, self.environ, push=False, now=NOW)
+        other = self.second_list("plans")
+        with self.assertRaises(sc.SafeCopiesError) as refused:
+            sc.run(other, self.environ, push=False, now=NOW)
+        self.assertIn("testgame/plans from repo", str(refused.exception))
+        collection, _, _ = sc.status(other, self.environ)
+        self.assertTrue(any("from repo too" in note for note in collection.notes))
+
+    def test_a_copy_recorded_before_lists_had_names_is_still_its_lists(self):
+        sc.run(self.repo, self.environ, push=False, now=NOW)
+        state = self.state()
+        for record in state.values():
+            record.pop("from")
+        sc._write_json(self.local / sc.BOOK / "state.json", {"format": sc.FORMAT, "files": state})
+        sc.run(self.repo, self.environ, push=False, now=LATER)
+        self.assertEqual({r.get("from") for r in self.state().values()}, {"repo"}, "an unchanged copy learns its list")
+
+
 if __name__ == "__main__":
     unittest.main()

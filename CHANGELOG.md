@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.71.0] - 2026-11-22
+
+Safe copies for every game (the owner, 22 Nov 2026: "we should be trying to genericize as much as possible too so whatever is
+achievable can work across as many individual games and their mods from the get go, or with lesser follow-up at the very least").
+
+### Fixed
+
+- **safe-copies: a list speaks only for its own sets.** A run marked gone, and `status` offered to let go, every copy of its game
+  it had not taken itself, so two lists of one game (Farming Simulator's or Project Zomboid's several repositories, or a game's
+  saves kept apart from its art) would have taken each other's copies away. Each copy now records which list made it (`from`;
+  one recorded before learns it at the next run), a list speaks only for the sets it names, and two lists naming the same set of
+  one game are refused, with both names, until one is renamed.
+
 ## [1.70.2] - 2026-11-22
 
 ### Fixed
