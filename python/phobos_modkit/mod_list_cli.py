@@ -4,10 +4,15 @@
     mod-list mods --name GAME                                          every mod on this PC, and where each list has it (1.73.0)
     mod-list fix --name GAME --list KEY --remove ID [--apply]          take a mod off a list (also --remove-extra, --enable)
     mod-list fix --name GAME --list KEY --move ID --to PLACE [--apply] move a mod to a place, 1 first (1.73.0)
+    mod-list sort --name GAME --list KEY [--full] [--apply]           sort the list from every rule, each move explained (1.74.0)
+    mod-list rules --name GAME                                         your own rules, and every rule set the sorter reads
+    mod-list rules --name GAME --mod ID --after OTHER [--apply]        keep a rule of your own (also --before, --top, --bottom)
+    mod-list rules --name GAME --drop N [--apply]                      take your rule N away
     mod-list undo --name GAME --list KEY [--backup FILE] [--apply]     go back on the last change; again, the one before
     mod-list backups --name GAME                                       every backup kept of the game's lists
     mod-list games                                                     the games whose lists the check can read
 
+Several mods may be moved, switched on or switched off at once: name each with its own --move, --enable or --remove (1.74.0).
 GAME is a game's name or id (RimWorld, project-zomboid), or give --app-id. `check` reads only, and with --online also asks Steam's
 public Workshop API which items still exist (no account). `fix` and `undo` change nothing without --apply; with it, they keep a
 backup of the list as it stood first, and refuse while the game or a program that rewrites the list (RimSort) is running.
@@ -22,6 +27,7 @@ import sys
 
 from . import history
 from . import mod_list as core
+from . import mod_sort
 from .games import MOD_LIST_GAMES, mod_list_adapter, mod_list_game
 from .installs import game_running
 from .manifest import ONLINE, READS, WRITES
@@ -54,16 +60,32 @@ def _parser():
     fix = sub.add_parser("fix", help="one change to a list, after a backup; only with --apply")
     _common(fix)
     change = fix.add_mutually_exclusive_group(required=True)
-    change.add_argument("--remove", metavar="ID", help="take this mod off the list")
+    change.add_argument("--remove", metavar="ID", action="append", help="take this mod off the list (again for several)")
     change.add_argument("--remove-extra", metavar="ID", help="keep the first entry of this mod and take the others off")
-    change.add_argument("--enable", metavar="ID", help="switch this mod on: at --to, else just before the first mod that needs it")
-    change.add_argument("--move", metavar="ID", help="move this mod to the place --to names")
+    change.add_argument("--enable", metavar="ID", action="append",
+                        help="switch this mod on: at --to, else just before the first mod that needs it (again for several)")
+    change.add_argument("--move", metavar="ID", action="append",
+                        help="move this mod to the place --to names (again for several, moved as one block)")
     fix.add_argument("--to", type=int, metavar="PLACE", help="the place a mod moved or switched on goes to, 1 first (1.73.0)")
     fix.add_argument("--apply", action="store_true", help="make the change; without it, only say what it would be")
     undo = sub.add_parser("undo", help="put a list back as it was before the last change made here; only with --apply")
     _common(undo)
     undo.add_argument("--backup", help="this backup (its file name), instead of the latest")
     undo.add_argument("--apply", action="store_true", help="go back; without it, only say what it would do")
+    sort = sub.add_parser("sort", help="the list sorted from every rule, each move explained; written only with --apply")
+    _common(sort)
+    sort.add_argument("--full", action="store_true", help="rebuild the whole order (else move only what a rule says is out of place)")
+    sort.add_argument("--apply", action="store_true", help="write the sorted list, after a backup")
+    rules = sub.add_parser("rules", help="your own load-order rules, and every rule set the sorter reads")
+    _common(rules, lists=False)
+    rules.add_argument("--mod", metavar="ID", help="the mod a new rule is about")
+    where = rules.add_mutually_exclusive_group()
+    where.add_argument("--after", metavar="OTHER", help="it loads after this mod")
+    where.add_argument("--before", metavar="OTHER", help="it loads before this mod")
+    where.add_argument("--top", action="store_true", help="it loads as near the top as its rules allow")
+    where.add_argument("--bottom", action="store_true", help="it loads as near the bottom as its rules allow")
+    where.add_argument("--drop", type=int, metavar="N", help="take your rule N away (as `rules` numbers them)")
+    rules.add_argument("--apply", action="store_true", help="keep the change; without it, only say what it would be")
     mods = sub.add_parser("mods", help="every mod on this PC, and where each of the game's lists has it")
     _common(mods, lists=False)
     backups = sub.add_parser("backups", help="every backup kept of the game's lists, newest first")
@@ -213,8 +235,8 @@ def _change(args):
     for action, value in ((core.REMOVE, args.remove), (core.REMOVE_EXTRA, args.remove_extra), (core.ENABLE, args.enable),
                           (core.MOVE, args.move)):
         if value:
-            return action, value
-    raise core.FixError("Name one change: --remove, --remove-extra or --enable.")
+            return action, (value[0] if isinstance(value, list) and len(value) == 1 else value)
+    raise core.FixError("Name one change: --remove, --remove-extra, --enable or --move.")
 
 
 def fix(adapter, args, environ=None, running=game_running, now=None):
@@ -225,7 +247,8 @@ def fix(adapter, args, environ=None, running=game_running, now=None):
     ids, words = core.plan(adapter, mod_list, installed, action, mod_id, args.to)
     before = {adapter.key(i) for i in mod_list.ids}
     after = {adapter.key(i) for i in ids}
-    data = {"list": mod_list.key, "label": mod_list.label, "action": action, "id": mod_id, "change": words,
+    data = {"list": mod_list.key, "label": mod_list.label, "action": action,
+            "id": mod_id if isinstance(mod_id, str) else ", ".join(mod_id), "change": words,
             "removed": sorted(before - after), "added": sorted(after - before), "applied": False, "backup": "",
             "ids": ids, "keys": [adapter.key(i) for i in ids]}
     if args.apply:
@@ -238,6 +261,106 @@ def fix(adapter, args, environ=None, running=game_running, now=None):
     report.lines.append(f"{mod_list.label}: {len(mod_list.ids)} mods now, {len(ids)} after.")
     report.lines.append(f"Kept a backup first: {data['backup']}." if args.apply else "**Preview only. Add --apply to make it.**")
     return report, data
+
+
+SORT_SHOWN = 60          # moves listed in the Markdown report (the JSON has them all)
+
+
+def sort(adapter, args, environ=None, running=game_running, now=None, progress=None):
+    progress = progress or (lambda *a, **k: None)
+    mod_list = _the_list(adapter, args.list_key)
+    how = mod_sort.FULL if args.full else mod_sort.FEWEST
+    progress("Reading your mods and every rule", 1, 3)
+    data = mod_sort.sort_list(adapter, mod_list, how, environ, args.settings)
+    progress("Sorting", 2, 3)
+    words = ("re-sort the whole list" if args.full else "sort the list") + f": {len(data['moves'])} moved"
+    data.update(list=mod_list.key, label=mod_list.label, change=words, applied=False, backup="",
+                sets=[mod_sort.rule_data(s) for s in mod_sort.every_rule_set(adapter, environ, args.settings)])
+    if args.apply:
+        backup = core.apply_order(adapter, mod_list, data["ids"], words, running, environ, args.settings, now)
+        data.update(applied=True, backup=backup.name)
+        history.record(adapter.game, "mod-list-change", environ, args.settings, now, list=mod_list.key, change=words,
+                       backup=backup.name)
+    progress("Done", 3, 3)
+    report = Report(f"Mod list: {words}" + ("" if args.apply else " (preview)"))
+    used = data["rules"]
+    report.lines.append(f"Rules read: {used['own']} from mods' own files, {used['needs']} from what mods need, "
+                        f"{used['community']} community, {used['yours']} yours.")
+    if data["moves"]:
+        rows = [[str(m["from"]), str(m["to"]), m["name"], " ".join(m["why"])] for m in data["moves"][:SORT_SHOWN]]
+        report.section("Moves", Table(["From", "To", "Mod", "Why"], rows))
+    else:
+        report.lines.append("Nothing needs to move.")
+    if data["set_aside"]:
+        report.section("Rules set aside", Bullets([f"{g['rule']} (a loop: {g['loop']})" for g in data["set_aside"]]))
+    report.lines.append(f"Kept a backup first: {data['backup']}." if args.apply else "**Preview only. Add --apply to write it.**")
+    return report, data
+
+
+def _rule_kind(args):
+    for kind in ("after", "before"):
+        if getattr(args, kind):
+            return kind, getattr(args, kind)
+    for kind in ("top", "bottom"):
+        if getattr(args, kind):
+            return kind, ""
+    return None, ""
+
+
+def rules(adapter, args, environ=None, now=None):
+    path = mod_sort.rules_file(adapter.game, environ, args.settings)
+    kind, other = _rule_kind(args)
+    data = {"changed": "", "applied": False}
+    if args.drop is not None:
+        listed = mod_sort.load_own_rules(path)
+        if not 1 <= args.drop <= len(listed):
+            raise core.FixError(f"There is no rule {args.drop}; there are {len(listed)}.")
+        data["changed"] = "take away: " + mod_sort.rule_words(listed[args.drop - 1])
+        if args.apply:
+            mod_sort.drop_rule(path, args.drop)
+            data["applied"] = True
+    elif kind:
+        if not args.mod:
+            raise core.FixError("Name the mod the rule is about with --mod.")
+        data["changed"] = "keep: " + mod_sort.rule_words({"mod": args.mod, "kind": kind, "other": other})
+        if args.apply:
+            mod_sort.add_rule(adapter, path, args.mod, kind, other, now)
+            data["applied"] = True
+    elif args.mod:
+        raise core.FixError("Say where it loads: --after, --before, --top or --bottom.")
+    own = mod_sort.load_own_rules(path)
+    data.update(rules=[dict(r, number=n, words=mod_sort.rule_words(r)) for n, r in enumerate(own, 1)],
+                sets=[mod_sort.rule_data(s) for s in mod_sort.every_rule_set(adapter, environ, args.settings)],
+                theirs=_manager_rules(adapter))
+    report = Report(f"Mod list: {len(own)} rules of your own for {adapter.name}")
+    if data["changed"]:
+        report.lines.append(("Done: " if data["applied"] else "Preview: ") + data["changed"] + "."
+                            + ("" if data["applied"] else " **Add --apply to keep it.**"))
+    if own:
+        report.section("Your rules here", Bullets([f"{r['number']}. {r['words']}" for r in data["rules"]]))
+    if data["theirs"]:
+        report.section("Your rules in RimSort (read only)", Bullets([r["words"] for r in data["theirs"]]))
+    report.section("What the sorter reads", Table(["Rules", "Mods with rules", "Where"],
+                                                  [[s["label"], str(s["count"]), s["where"]] for s in data["sets"]]))
+    return report, data
+
+
+def _manager_rules(adapter):
+    """The owner's rules a mod manager keeps (RimSort's user rules), in words, read only."""
+    found = []
+    for rule_set in (adapter.rule_sets() if hasattr(adapter, "rule_sets") else []):
+        if rule_set.source != mod_sort.YOURS:
+            continue
+        for mod, entry in sorted(rule_set.rules.items()):
+            for kind in ("after", "before"):
+                for other, note in entry.get(kind, []):
+                    found.append({"mod": mod, "kind": kind, "other": other, "note": note,
+                                  "words": mod_sort.rule_words({"mod": mod, "kind": kind, "other": other})})
+            for kind in ("top", "bottom"):
+                if entry.get(kind) is not None:
+                    found.append({"mod": mod, "kind": kind, "other": "", "note": entry[kind],
+                                  "words": mod_sort.rule_words({"mod": mod, "kind": kind, "other": ""})})
+    return found
 
 
 def undo(adapter, args, environ=None, running=game_running, now=None):
@@ -303,6 +426,10 @@ def main(argv=None, environ=None, out=None, post=None, running=None, now=None):
             report = Report(f"Mod list: {len(found)} backups of {adapter.name}'s lists")
             report.section("Backups", Table(["When", "List", "Kept before", "File"],
                                             [[b["at"], b["list"], b["why"], b["file"]] for b in data["backups"]]))
+        elif args.report == "sort":
+            report, data = sort(adapter, args, environ, running or game_running, now, Progress(environ))
+        elif args.report == "rules":
+            report, data = rules(adapter, args, environ, now)
         elif args.report == "fix":
             report, data = fix(adapter, args, environ, running or game_running, now)
         else:
@@ -324,6 +451,9 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS, "surface": "mod-li
             "reports": {"check": {"effect": ONLINE, "when": "--online"},
                         "fix": {"effect": WRITES, "when": "--apply", "question": None},
                         "undo": {"effect": WRITES, "when": "--apply", "question": None},
+                        "sort": {"effect": WRITES, "when": "--apply",
+                                 "question": "How would my mods be sorted from their rules, and why?"},
+                        "rules": {"effect": WRITES, "when": "--apply", "question": "Which load-order rules does the sorter read?"},
                         "backups": {"question": "Which backups of my mod lists are kept?"},
                         "mods": {"question": "Which mods are on this PC, and which are switched on?"},
                         "games": {"question": "Which games' mod lists can the tools read?"}}}

@@ -76,7 +76,7 @@ class FakeRimWorld:
     def environ(self, tmp):
         return support.isolated_environ(tmp, RIMWORLD_PATH=str(self.game), RIMWORLD_WORKSHOP_PATH=str(self.workshop),
                                         RIMWORLD_CONFIG_PATH=str(self.config), PHOBOS_STEAM=str(self.root),
-                                        PHOBOS_MOD_LIST=str(Path(tmp) / "mod-list"))
+                                        PHOBOS_MOD_LIST=str(Path(tmp) / "mod-list"), PHOBOS_RIMSORT=str(Path(tmp) / "RimSort"))
 
 
 ACTIVE = ["ludeon.rimworld", "example.market", "example.hostel", "example.needy", "example.rival", "example.market",
@@ -373,6 +373,7 @@ class Command(unittest.TestCase):
         reports = {r["name"]: r for r in describe("mod-list", ".mod_list_cli", "")["reports"]}
         self.assertEqual({k: (v["effect"], v["when"]) for k, v in reports.items()},
                          {"check": ("reads-online", "--online"), "fix": ("writes", "--apply"), "undo": ("writes", "--apply"),
+                      "sort": ("writes", "--apply"), "rules": ("writes", "--apply"),
                           "mods": ("reads", None), "backups": ("reads", None), "games": ("reads", None)})
         self.assertEqual(reports["check"]["surface"], "mod-list")
 

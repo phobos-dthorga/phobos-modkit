@@ -4,6 +4,29 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.74.0] - 2026-11-22
+
+The sorter's side of the mod manager (the owner, 22 Nov 2026: step 3, "our own sorter", and moving mods "more freely"). The
+owner's choices on question cards: both sorts, chosen at the press; the owner's RimSort rules read as they are, plus new ones kept
+here.
+
+### Added
+
+- **mod-list sort: the list sorted from every rule, each move explained** (`mod-list sort --name GAME --list KEY [--full]
+  [--apply]`; `mod_sort.py`). Rules from each mod's own files, from what mods need, from the community rules a game's managers
+  share (RimWorld: RimSort's Community Rules database, read where RimSort keeps it, never copied) and from the owner's own rules.
+  **The fewest moves** keeps the list's order and moves only what a rule says is out of place, trying a forward and a backward pass
+  and keeping whichever moves fewer; **`--full`** rebuilds the order, the game's own first and then by name where no rule decides.
+  "Load at the top" never goes above the game's own. **A loop of rules is not a refusal**: its weakest rule (community, then needs,
+  then a mod's own, then yours) is set aside and named. Each move says from where to where and why, with whose rule. Written with
+  `--apply` after a backup, like every change, and taken back by `undo`. 0.2 s on the owner's 378 active mods, where it finds
+  2 moves on a list RimSort sorted: two "load at the top" rules RimSort reads more loosely.
+- **mod-list rules**: the owner's own load-order rules kept here (`rules.json` in the game's mod-list folder; `--mod ID --after
+  OTHER`, `--before`, `--top`, `--bottom`, `--drop N`, each only with `--apply`), the owner's RimSort rules read as they are, and
+  every rule set the sorter reads, with where it is. The RimWorld adapter's `rule_sets()` reads RimSort's files (variable
+  `PHOBOS_RIMSORT` names another folder).
+- **Several mods at once**: `fix` takes `--move`, `--enable` and `--remove` more than once; moved or switched on together, they go
+  to `--to` as one block, in the order the list had them.
 ## [1.73.0] - 2026-11-22
 
 The list editor's side of the mod manager (the owner, 22 Nov 2026: switching mods on and off and moving them in D'thorga

@@ -430,9 +430,64 @@ def _index(place, length):
     return max(0, min(int(place) - 1, length))
 
 
+def _several(mod_ids):
+    return [mod_ids] if isinstance(mod_ids, str) else list(mod_ids)
+
+
 def plan(adapter, mod_list, installed, action, mod_id, place=None):
     """The list's ids after one change, and the change in words. Raises FixError when the change makes no sense. `installed` is
-    needed only to switch a mod on; `place` (1 is first) says where a mod switched on or moved goes."""
+    needed only to switch a mod on; `place` (1 is first) says where a mod switched on or moved goes. Moving, switching on and
+    switching off take several mods at once (1.74.0): moved or switched on together, they go to the place as one block, in the
+    order they had on the list (or were named in)."""
+    wanted = _several(mod_id)
+    if not wanted:
+        raise FixError("Name a mod to change.")
+    if len(wanted) > 1 and action == REMOVE_EXTRA:
+        raise FixError("Keep the first of one mod at a time.")
+    if len(wanted) > 1:
+        return _plan_several(adapter, mod_list, installed, action, wanted, place)
+    return _plan_one(adapter, mod_list, installed, action, wanted[0], place)
+
+
+def _plan_several(adapter, mod_list, installed, action, wanted, place):
+    keys = {adapter.key(i) for i in wanted}
+    ids = list(mod_list.ids)
+    count = len(keys)
+    if action in (MOVE, REMOVE):
+        missing = [i for i in wanted if not any(adapter.key(x) == adapter.key(i) for x in ids)]
+        if missing:
+            raise FixError(f"{', '.join(missing)} {'is' if len(missing) == 1 else 'are'} not on the list.")
+        if action == REMOVE:
+            return [i for i in ids if adapter.key(i) not in keys], f"switch {count} mods off"
+        if place is None or int(place) < 1:
+            raise FixError("Say where to move them: a place from 1 (first).")
+        moving = [i for i in ids if adapter.key(i) in keys]
+        rest = [i for i in ids if adapter.key(i) not in keys]
+        to = _index(place, len(rest))
+        after = rest[:to] + moving + rest[to:]
+        if after == ids:
+            raise FixError("They are there already.")
+        return after, f"move {count} mods to place {to + 1}"
+    if action == ENABLE:
+        already = [i for i in wanted if any(adapter.key(x) == adapter.key(i) for x in ids)]
+        if already:
+            raise FixError(f"{', '.join(already)} {'is' if len(already) == 1 else 'are'} on the list already.")
+        mods = []
+        for i in wanted:
+            mod = installed.first([i]) if installed is not None else None
+            if mod is None:
+                raise FixError(f"{i} is not on this PC, so it cannot be switched on.")
+            mods.append(mod)
+        if place is not None:
+            at = _index(place, len(ids))
+            return ids[:at] + [adapter.listed_id(m) for m in mods] + ids[at:], f"switch {count} mods on, at place {at + 1}"
+        for mod in mods:
+            ids, _ = _plan_one(adapter, ModList(mod_list.key, mod_list.label, mod_list.path, ids), installed, ENABLE, mod.id, None)
+        return ids, f"switch {count} mods on"
+    raise FixError(f"{action} is not a change this tool makes; it makes {', '.join(ACTIONS)}.")
+
+
+def _plan_one(adapter, mod_list, installed, action, mod_id, place=None):
     key = adapter.key(mod_id)
     ids = list(mod_list.ids)
     if action == MOVE:
@@ -517,11 +572,28 @@ def apply_fix(adapter, mod_list, installed, action, mod_id, running, environ=Non
         raise FixError(f"{mod_list.label} is not a list this tool changes.")
     _refuse_while_running(adapter, running)
     ids, words = plan(adapter, mod_list, installed, action, mod_id, place)
+    return words, _commit(adapter, mod_list, ids, words, environ, settings, now), ids
+
+
+def _commit(adapter, mod_list, ids, words, environ=None, settings=None, now=None):
     before = read_text(mod_list.path)
     after = adapter.render(before, ids)
     backup = _backup(adapter, mod_list, before, words, environ, settings, now, written=digest_text(after))
     _write(mod_list.path, after)
-    return words, backup, ids
+    return backup
+
+
+def apply_order(adapter, mod_list, ids, words, running, environ=None, settings=None, now=None):
+    """Writes the list in a new order (a sort's), after a backup. Refuses an order that adds or drops a mod, or a list changed
+    since the order was worked out (1.74.0)."""
+    if not mod_list.writable:
+        raise FixError(f"{mod_list.label} is not a list this tool changes.")
+    _refuse_while_running(adapter, running)
+    if sorted(adapter.key(i) for i in ids) != sorted(adapter.key(i) for i in mod_list.ids):
+        raise FixError(f"{mod_list.label} has changed since it was sorted: sort it again.")
+    if list(ids) == list(mod_list.ids):
+        raise FixError(f"{mod_list.label} is in that order already.")
+    return _commit(adapter, mod_list, list(ids), words, environ, settings, now)
 
 
 def backups(game, environ=None, settings=None):

@@ -11,12 +11,15 @@ Summarised in our own words from the 1.7 game code (Verse.ModMetaData and Verse.
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import re
+import sys
 
 from ...game_files import libraries, parse_vdf, steam_root
 from ...mod_list import Mod, ModList, Need
+from ...mod_sort import COMMUNITY, YOURS, RuleSet
 from .installs import PROCESSES
 from .loading import STEAM_SUFFIX, bare_id, read_mods_config
 from .mods import _about_root, _child, _text
@@ -28,6 +31,11 @@ WORKSHOP_NUMBER = re.compile(r"(?:id=|CommunityFilePage/|filedetails/\?id=)(\d{6
 CLUE_SUFFIXES = frozenset({".xml", ".txt", ".dll", ".json"})
 CLUE_FILE_BYTES = 4 * 1024 * 1024       # larger files are skipped when looking for a clue (agent default)
 CLUE_TOTAL_BYTES = 64 * 1024 * 1024     # and the look stops after this much of one mod (agent default)
+# Where RimSort keeps its rules (1.74.0), read only: its Community Rules database (downloaded from GitHub by RimSort) and the
+# owner's own rules made in RimSort. Each is {"rules": {packageId: {"loadAfter": {id: {...}}, "loadBefore": {...},
+# "loadTop": {"value": true}, "loadBottom": {"value": true}}}}; seen in RimSort 1.17.4 on 22 Nov 2026.
+RIMSORT_COMMUNITY = ("dbs/Community-Rules-Database/communityRules.json", "communityRules.json")
+RIMSORT_USER = ("dbs/userRules.json", "userRules.json")
 ACTIVE = re.compile(r"(?P<open><activeMods>)(?P<body>.*?)(?P<close>[ \t]*</activeMods>)|<activeMods\s*/>", re.S)
 
 
@@ -63,6 +71,46 @@ def _needs(root, version):
         found.append(Need((package_id.lower(),) + tuple(a.lower() for a in alternatives), _text(li, "displayName"),
                           _workshop_number(_text(li, "steamWorkshopUrl"))))
     return found
+
+
+def rimsort_folder(environ):
+    """RimSort's own data folder on this system (PHOBOS_RIMSORT names another, as the tests do)."""
+    if environ.get("PHOBOS_RIMSORT"):
+        return Path(environ["PHOBOS_RIMSORT"])
+    home = Path(environ.get("USERPROFILE") or environ.get("HOME") or Path.home())
+    if sys.platform == "win32" or environ.get("LOCALAPPDATA"):
+        return Path(environ.get("LOCALAPPDATA") or home / "AppData" / "Local") / "RimSort"
+    if sys.platform == "darwin":
+        return home / "Library" / "Application Support" / "RimSort"
+    return Path(environ.get("XDG_DATA_HOME") or home / ".local" / "share") / "RimSort"
+
+
+def _words_of(value):
+    if isinstance(value, list):
+        return "; ".join(str(v) for v in value if v)
+    return str(value or "")
+
+
+def read_rimsort_rules(path):
+    """{key: {"after": [(id, note)], "before": [...], "top": note|None, "bottom": note|None}} from one RimSort rules file."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return None
+    rules = {}
+    for package_id, entry in (data.get("rules") or {}).items() if isinstance(data, dict) else ():
+        if not isinstance(entry, dict):
+            continue
+        found = {"after": [], "before": [], "top": None, "bottom": None}
+        for word, tag in (("after", "loadAfter"), ("before", "loadBefore")):
+            for other, info in (entry.get(tag) or {}).items():
+                found[word].append((other, _words_of(info.get("comment")) if isinstance(info, dict) else ""))
+        for word, tag in (("top", "loadTop"), ("bottom", "loadBottom")):
+            info = entry.get(tag)
+            if isinstance(info, dict) and info.get("value") is True:
+                found[word] = _words_of(info.get("comment"))
+        rules[package_id] = found
+    return rules
 
 
 def read_about(folder, source, workshop_id, version):
@@ -186,6 +234,19 @@ class RimWorld:
                         found.update(data[part].keys())
                 return found
         return None
+
+    def rule_sets(self):
+        """The rules RimSort keeps on this PC: the owner's own, and the community's, each read as it is (1.74.0)."""
+        base = rimsort_folder(self.environ)
+        found = []
+        for source, label, names in ((YOURS, "Your rules in RimSort", RIMSORT_USER),
+                                     (COMMUNITY, "The community rules (RimSort's database)", RIMSORT_COMMUNITY)):
+            for name in names:
+                rules = read_rimsort_rules(base / name)
+                if rules is not None:
+                    found.append(RuleSet(source, label, str(base / name), rules))
+                    break
+        return found
 
     def mentions(self, mod, words):
         """Whether any of a mod's text files or assemblies name one of the words (any case)."""
