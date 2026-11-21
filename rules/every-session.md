@@ -19,6 +19,17 @@ Read the file named before doing the work, even when no file of that kind is ope
 | Designing or building a new behaviour for a game or mod | [designs.md](designs.md) |
 | Writing or changing a `LICENSE`, starting a repository, or preparing a mod's first public page | [licences.md](licences.md) |
 | Drafting a report of another author's fault, or hearing from the owner that one is posted | [reports.md](reports.md) |
+| Making something that cannot be made again (a training, a model, notes or masters kept outside git), or starting on a new game | [safe-copies.md](safe-copies.md) |
+
+## Every game from the start
+
+- **Build for every game from the start** (owner, 22 Nov 2026: "we should be trying to genericize as much as possible too so
+  whatever is achievable can work across as many individual games and their mods from the get go, or with lesser follow-up at the
+  very least"). A tool, a check or a Companion page is written game-free, in phobos-modkit or D'thorga Companion, and what one game
+  needs is data: a row, a setting, or a small file. Code goes in one game's repository only when it is about that game's engine,
+  and code shared by one game's mods goes in that game's own library.
+- **What cannot be generic yet says what a next game would need**, in its design record or changelog entry, so the follow-up is
+  small and known rather than found later.
 
 ## Commits and changelog entries
 

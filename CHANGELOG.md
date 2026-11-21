@@ -11,6 +11,11 @@ achievable can work across as many individual games and their mods from the get 
 
 ### Added
 
+- **rules: every game from the start** (`every-session.md`; the owner's words of 22 Nov 2026, above): a tool, check or Companion
+  page is written game-free and what one game needs is data; what cannot be generic yet says what a next game would need.
+- **rules/safe-copies.md: what cannot be made again** (the owner's yes of 22 Nov 2026): listed in the same commit as the work that
+  first makes it; a game's own files listed once, for the game, so a new game adds two small things and nothing in its mod
+  repositories; each kind said truthfully, the narrower when unsure; the numbers and every removal the owner's.
 - **safe-copies: a game's own list, kept by any repository** (`config/safe-copies/<game>.json`, read with `--game`). A game's
   saves and settings are the game's, not one mod repository's, so a new game needs one file. This kit keeps the owner's:
   **RimWorld's** saves, Config folder and RimSort lists, moved here from phobos-rimworld with the same set names so their copies
