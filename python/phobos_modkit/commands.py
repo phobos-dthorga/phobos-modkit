@@ -43,6 +43,7 @@ COMMANDS = {
     "claims": (".claims", "who is working on what: agent sessions take and release version numbers, test rows and files"),
     "decisions": (".decisions", "the questions waiting for the owner, with options and the agent's lean; records answers"),
     "game-files": (".game_files", "what a game writes and what Steam records: what changed since you last played, saves, screenshots, space"),
+    "mod-list": (".mod_list_cli", "what is wrong with a game's list of active mods and why; safe changes, each after a backup"),
     "programs": (".programs", "which other programs the tools use, whether each is on this PC, and where to get it"),
     "records": (".records", "a copy of D'thorga Companion's own records in a folder of your choosing, and how old the newest is"),
     "safe-copies": (".safe_copies", "copies of what cannot be made again, kept apart by kind; checks them and copies them back"),

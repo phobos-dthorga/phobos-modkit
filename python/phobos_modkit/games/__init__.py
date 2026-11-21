@@ -6,3 +6,27 @@ def publish_adapters():
     from .ostranauts.publish import Ostranauts
     from .rimworld.publish import RimWorld
     return {adapter.app_id: adapter for adapter in (RimWorld(), Ostranauts())}
+
+
+# The games whose lists of active mods the mod-list check reads (1.72.0): (id, name, Steam app ID, module with adapter()).
+MOD_LIST_GAMES = (
+    ("rimworld", "RimWorld", 294100, ".rimworld.mod_list"),
+    ("project-zomboid", "Project Zomboid", 108600, ".zomboid.mod_list"),
+)
+
+
+def _plain(text):
+    return "".join(ch for ch in str(text or "").lower() if ch.isalnum())
+
+
+def mod_list_game(name=None, app_id=None):
+    """(id, name, app ID, module) of the game named or numbered, or None when the check cannot read its list yet."""
+    for row in MOD_LIST_GAMES:
+        if (app_id and int(app_id) == row[2]) or (name and _plain(name) in (_plain(row[0]), _plain(row[1]))):
+            return row
+    return None
+
+
+def mod_list_adapter(row, environ=None, settings=None, data=None, steam=None):
+    from importlib import import_module
+    return import_module(row[3], __name__).adapter(environ, settings, data, steam)

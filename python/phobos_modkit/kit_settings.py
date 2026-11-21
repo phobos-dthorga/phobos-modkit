@@ -42,7 +42,8 @@ class Setting:
 
 def _known():
     """The settings the kit itself reads, each from the module that owns it."""
-    from . import assembly_archive, claims, decisions, game_files, game_folders, history, records, safe_copies, safe_copies_daily
+    from . import assembly_archive, claims, decisions, game_files, game_folders, history, mod_list, records, safe_copies
+    from . import safe_copies_daily
     from .code import compare
     from .games.rimworld import paths as rimworld
     from .games.rimworld import textures
@@ -62,6 +63,8 @@ def _known():
                 "made from a game's files)", "folder"),
         Setting(*safe_copies.CLAUDE_HOME, "Claude Code's own folder, whose notes about you the safe copies keep (on a private, "
                 "local folder only)", "folder", default=lambda environ: Path(environ.get("USERPROFILE") or Path.home()) / ".claude"),
+        Setting(*mod_list.FOLDER, "Where the mod-list check keeps its memory of every mod it has seen and the backups of your "
+                "lists of active mods", "folder", default=lambda environ: paths.companion_data(environ) / "mod-list"),
         Setting(*claims.BOARD, "The board where agent sessions say what they are working on", "file",
                 default=lambda environ: paths.companion_data(environ) / "claims.json"),
         Setting(*decisions.ANSWERS, "Where your answers to waiting decisions are kept (one file for each repository)", "folder",

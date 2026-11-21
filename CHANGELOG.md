@@ -4,6 +4,30 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.72.0] - 2026-11-22
+
+The first step of D'thorga Companion's own mod manager (the owner, 22 Nov 2026: "We actually should have our own, third-party, mod
+managing", after RimSort said only "1 missing mod" for a patch whose author had taken it off the Workshop, without naming it).
+
+### Added
+
+- **mod-list: what is wrong with a game's list of active mods, and why** (`python -m phobos_modkit mod-list check --name GAME
+  [--online]`; `docs/mod-list.md`). Missing mods with the likeliest reason they went (taken off the Workshop, no longer subscribed,
+  a download not finished, a local folder gone, never seen here), who needs them, and a clue when one of the mods a missing patch
+  joined now names the other in its own files; needs switched off or not on this PC; order and clashes as the game itself reads
+  them; a mod listed twice; early warnings (a mod the Workshop no longer has, or Steam no longer keeps for you); and mods that do
+  not say they work with this game version. **RimWorld** (ModsConfig.xml, the 1.7 game's own rules: a version list replaces the
+  plain one, force rules count, needs are not order rules) and **Project Zomboid** (mods/default.txt and each save's mods.txt;
+  mod.info by version folder); any other game is told in words that it is not read yet. Checked on the owner's RimWorld (407 mods,
+  1.5 s, 9 s with Steam) and Project Zomboid lists (the game not installed: its Workshop mods are counted as "could not be looked
+  for", never as missing).
+- **mod-list fix, undo and backups**: one change at a time (`--remove`, `--remove-extra`, `--enable`), only with `--apply`, each
+  after a byte-for-byte backup of the list; refused while the game or RimSort runs. `undo` refuses when something else changed
+  the list since. Both writers give back the owner's real files byte for byte when nothing changes. Recorded in the history log.
+- **The check's memory of every mod it has seen**, so a mod is still known after its files go. Backups and memory live in
+  D'thorga Companion's folder (new setting `modListPath`, `PHOBOS_MOD_LIST`); nothing deletes either.
+- The manifest's `surface` gains `mod-list`.
+
 ## [1.71.0] - 2026-11-22
 
 Safe copies for every game (the owner, 22 Nov 2026: "we should be trying to genericize as much as possible too so whatever is
