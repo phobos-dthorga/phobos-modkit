@@ -377,6 +377,7 @@ class Command(unittest.TestCase):
                       "sort": ("writes", "--apply"), "rules": ("writes", "--apply"),
                       "lists": ("reads", None), "compare": ("reads", None), "load": ("writes", "--apply"),
                       "save": ("writes", "--apply"), "forget": ("writes", "--apply"), "export": ("writes", "--apply"),
+                      "subscribe": ("writes", "--apply"), "unsubscribe": ("writes", "--apply"),
                           "mods": ("reads", None), "backups": ("reads", None), "games": ("reads", None)})
         self.assertEqual(reports["check"]["surface"], "mod-list")
 

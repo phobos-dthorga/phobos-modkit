@@ -23,6 +23,7 @@ from xml.etree import ElementTree
 from ...game_files import libraries, parse_vdf, steam_root
 from ...mod_list import Mod, ModList, Need
 from ...installs import game_running
+from ...steam.client import library_path as steam_library_path
 from ...mod_lists import FILE, MANAGER, SAVE, SavedList
 from ...mod_sort import COMMUNITY, YOURS, RuleSet
 from .installs import PROCESSES
@@ -400,6 +401,10 @@ class RimWorld:
             found.append(SavedList(MANAGER, f"{path.parent.name}/{path.name}", label, saved.when, saved.ids,
                                    version=saved.version))
         return found
+
+    def steam_library(self):
+        """The game's own Steam library, which subscribing borrows (1.77.0)."""
+        return steam_library_path(self.game_folder)
 
     def read_list_file(self, path):
         return read_list_file(path)

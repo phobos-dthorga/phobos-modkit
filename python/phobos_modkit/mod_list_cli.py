@@ -14,6 +14,8 @@
     mod-list save --name GAME --list KEY --as NAME [--replace] [--apply]   keep the list as it stands, by name
     mod-list forget --name GAME --saved NAME [--apply]                 take away a list saved by name
     mod-list export --name GAME (--list KEY | --from SOURCE:REF) --to PATH [--apply]   write a list as the game's own file
+    mod-list subscribe --name GAME --item N [--item N ...] [--wait SECONDS] [--apply]   subscribe through Steam (1.77.0)
+    mod-list unsubscribe --name GAME --list KEY --item N [...] [--apply]   switch them off, then unsubscribe through Steam
     mod-list undo --name GAME --list KEY [--backup FILE] [--apply]     go back on the last change; again, the one before
     mod-list backups --name GAME                                       every backup kept of the game's lists
     mod-list games                                                     the games whose lists the check can read
@@ -34,6 +36,7 @@ import sys
 from . import history
 from . import mod_list as core
 from . import mod_lists
+from .steam import client as steam_client
 from . import mod_sort
 from .games import MOD_LIST_GAMES, mod_list_adapter, mod_list_game
 from .installs import game_running
@@ -119,6 +122,16 @@ def _parser():
     export.add_argument("--from", dest="from_list", metavar="SOURCE:REF", help="a saved list, instead of the game's list")
     export.add_argument("--to", dest="to_file", required=True, metavar="PATH", help="the file to write")
     export.add_argument("--apply", action="store_true", help="write it; without it, only say what it would do")
+    subscribe = sub.add_parser("subscribe", help="subscribe to Workshop items through the running Steam client; only with --apply")
+    _common(subscribe, lists=False)
+    subscribe.add_argument("--item", action="append", required=True, metavar="N", help="a Workshop number (again for several)")
+    subscribe.add_argument("--wait", type=int, default=0, metavar="SECONDS",
+                           help="wait this long for Steam to download them, saying how far it is")
+    subscribe.add_argument("--apply", action="store_true", help="subscribe; without it, only say what it would do")
+    unsubscribe = sub.add_parser("unsubscribe", help="switch Workshop mods off, then unsubscribe through Steam; only with --apply")
+    _common(unsubscribe)
+    unsubscribe.add_argument("--item", action="append", required=True, metavar="N", help="a Workshop number (again for several)")
+    unsubscribe.add_argument("--apply", action="store_true", help="do it; without it, only say what it would do")
     mods = sub.add_parser("mods", help="every mod on this PC, and where each of the game's lists has it")
     _common(mods, lists=False)
     backups = sub.add_parser("backups", help="every backup kept of the game's lists, newest first")
@@ -495,6 +508,106 @@ def export_report(adapter, args, environ=None):
     return Report(f"Mod list: {'wrote' if args.apply else 'write'} {chosen.label} to {target.name}"), data
 
 
+MAX_ITEMS = 500                 # Workshop items one press subscribes to (agent default)
+WAIT_LIMIT = 3600               # the longest wait for downloads asked for (agent default)
+
+
+def _items(args):
+    found = []
+    for item in args.item:
+        number = str(item).strip()
+        if not number.isdigit() or not 6 <= len(number) <= 20:
+            raise core.FixError(f"{item!r} is not a Workshop number.")
+        if number not in found:
+            found.append(number)
+    if len(found) > MAX_ITEMS:
+        raise core.FixError(f"At most {MAX_ITEMS} items at once.")
+    return found
+
+
+def _session(adapter, environ, library):
+    path = adapter.steam_library() if hasattr(adapter, "steam_library") else None
+    if path is None and library is None:
+        raise core.FixError(f"{adapter.name}'s own Steam library was not found, so the tools cannot ask Steam: is the game "
+                            "installed through Steam?")
+    return steam_client.Session((library or steam_client.Library)(path), adapter.app_id, environ)
+
+
+def _by_number(adapter):
+    found = {}
+    for mod in adapter.installed():
+        if mod.source == "workshop" and mod.workshop_id:
+            found.setdefault(mod.workshop_id, mod)
+    return found
+
+
+def subscribe_report(adapter, args, environ=None, library=None, progress=None, clock=None, sleep=None):
+    items = _items(args)
+    wait = max(0, min(int(args.wait or 0), WAIT_LIMIT))
+    data = {"items": items, "applied": False, "results": []}
+    if args.apply:
+        progress = progress or (lambda *a, **k: None)
+        session = _session(adapter, environ, library)
+        if clock is not None:
+            session.clock, session.sleep = clock, sleep
+        with session:
+            progress("Asking Steam to subscribe", 0, len(items))
+            subscribed = []
+            for n, item in enumerate(items, 1):
+                if session.subscribe(item):
+                    subscribed.append(item)
+                progress("Asking Steam to subscribe", n, len(items))
+            ends = session.clock() + wait
+            installed = 0
+            while wait and subscribed and session.clock() < ends:
+                done, total, installed = session.progress(subscribed)
+                if installed == len(subscribed):
+                    break
+                progress(f"Steam is downloading: {installed} of {len(subscribed)} done", done // 1024, max(total // 1024, 1))
+                session.sleep(1.0)
+            states = {item: session.state(item) for item in items}
+        here = _by_number(adapter)
+        data.update(applied=True, results=[
+            {"workshop_id": item, "subscribed": bool(states[item] & steam_client.SUBSCRIBED),
+             "installed": item in here, "state": steam_client.state_words(states[item]),
+             "id": here[item].id if item in here else "", "name": here[item].name if item in here else ""}
+            for item in items])
+        history.record(adapter.game, "mod-list-subscribe", environ, args.settings, None, items=items)
+    done = [r for r in data["results"] if r["subscribed"]]
+    title = (f"Mod list: subscribed to {len(done)} of {len(items)}" if args.apply
+             else f"Mod list: subscribe to {len(items)} (preview)")
+    report = Report(title)
+    for result in data["results"]:
+        report.lines.append(f"{result['workshop_id']}: {result['state']}" + (f" ({result['name']})" if result["name"] else ""))
+    return report, data
+
+
+def unsubscribe_report(adapter, args, environ=None, running=game_running, library=None, now=None):
+    mod_list = _the_list(adapter, args.list_key)
+    items = _items(args)
+    here = _by_number(adapter)
+    on = [here[i].id for i in items if i in here and any(adapter.key(x) == adapter.key(here[i].id) for x in mod_list.ids)]
+    data = {"items": items, "applied": False, "switched_off": on, "backup": "", "results": []}
+    if args.apply:
+        core._refuse_while_running(adapter, running)
+        if on:
+            words, backup, ids = core.apply_fix(adapter, mod_list, None, core.REMOVE, on, running, environ, args.settings,
+                                                now)
+            data.update(backup=backup.name, ids=ids, keys=[adapter.key(i) for i in ids], change=words)
+        with _session(adapter, environ, library) as session:
+            data["results"] = [{"workshop_id": item, "unsubscribed": session.unsubscribe(item),
+                                "name": here[item].name if item in here else ""} for item in items]
+        data["applied"] = True
+        history.record(adapter.game, "mod-list-unsubscribe", environ, args.settings, now, items=items,
+                       backup=data["backup"])
+    gone = [r for r in data["results"] if r["unsubscribed"]]
+    report = Report(f"Mod list: unsubscribed from {len(gone)} of {len(items)}" if args.apply
+                    else f"Mod list: unsubscribe from {len(items)} (preview)")
+    if on:
+        report.lines.append(f"Switched off first: {', '.join(on)}" + (f" (backup {data['backup']})." if data["backup"] else "."))
+    return report, data
+
+
 def undo(adapter, args, environ=None, running=game_running, now=None):
     mod_list = _the_list(adapter, args.list_key)
     if not args.apply:
@@ -516,7 +629,7 @@ def undo(adapter, args, environ=None, running=game_running, now=None):
                     "keys": [adapter.key(i) for i in ids]}
 
 
-def main(argv=None, environ=None, out=None, post=None, running=None, now=None):
+def main(argv=None, environ=None, out=None, post=None, running=None, now=None, steam=None):
     out = out or sys.stdout
     environ = os.environ if environ is None else environ
     try:
@@ -572,11 +685,15 @@ def main(argv=None, environ=None, out=None, post=None, running=None, now=None):
             report, data = forget_report(adapter, args, environ)
         elif args.report == "export":
             report, data = export_report(adapter, args, environ)
+        elif args.report == "subscribe":
+            report, data = subscribe_report(adapter, args, environ, steam, Progress(environ))
+        elif args.report == "unsubscribe":
+            report, data = unsubscribe_report(adapter, args, environ, running or game_running, steam, now)
         elif args.report == "fix":
             report, data = fix(adapter, args, environ, running or game_running, now)
         else:
             report, data = undo(adapter, args, environ, running or game_running, now)
-    except (core.FixError, ValueError, OSError) as error:
+    except (core.FixError, steam_client.SteamError, ValueError, OSError) as error:
         # A refusal is an answer, as the kit's other writers give it: {"ok": false, "refusal": words} under --json.
         said = str(error)
         report = Report("Mod list: nothing was changed")
@@ -602,6 +719,8 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS, "surface": "mod-li
                         "save": {"effect": WRITES, "when": "--apply", "question": None},
                         "forget": {"effect": WRITES, "when": "--apply", "question": None},
                         "export": {"effect": WRITES, "when": "--apply", "question": None},
+                        "subscribe": {"effect": WRITES, "when": "--apply", "question": None},
+                        "unsubscribe": {"effect": WRITES, "when": "--apply", "question": None},
                         "backups": {"question": "Which backups of my mod lists are kept?"},
                         "mods": {"question": "Which mods are on this PC, and which are switched on?"},
                         "games": {"question": "Which games' mod lists can the tools read?"}}}

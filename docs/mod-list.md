@@ -1,6 +1,6 @@
 # Mod list: what is wrong with a game's active mods, and why
 
-**Status (22 Nov 2026):** built in 1.72.0 for RimWorld and Project Zomboid; 1.73.0 adds the list editor's side (`mods`, moving, switching on at a place, and an undo that walks back one change at a time); 1.74.0 the sorter (`sort`), the owner's own rules (`rules`) and changes to several mods at once; 1.76.0 saved lists (`lists`, `compare`, `load`, `save`, `forget`, `export`) and a copy kept at each game start. It is the first step of D'thorga Companion's own mod
+**Status (22 Nov 2026):** built in 1.72.0 for RimWorld and Project Zomboid; 1.73.0 adds the list editor's side (`mods`, moving, switching on at a place, and an undo that walks back one change at a time); 1.74.0 the sorter (`sort`), the owner's own rules (`rules`) and changes to several mods at once; 1.76.0 saved lists (`lists`, `compare`, `load`, `save`, `forget`, `export`) and a copy kept at each game start; 1.77.0 subscribing and unsubscribing through Steam. It is the first step of D'thorga Companion's own mod
 manager (the owner, 22 Nov 2026: "We actually should have our own, third-party, mod managing", after RimSort said only "1 missing
 mod" for a patch whose author had taken it off the Workshop). The Companion's Mod list page shows it from 0.45.0.
 
@@ -35,6 +35,8 @@ mod" for a patch whose author had taken it off the Workshop). The Companion's Mo
 | `mod-list load --name GAME --list KEY (--from SOURCE:REF \| --file PATH) [--apply]` | Loads it, leaving out mods not on this PC, after a backup | writes with `--apply` |
 | `mod-list save --name GAME --list KEY --as NAME [--replace] [--apply]` / `forget --saved NAME` | Keeps the list by name; takes a saved list away | writes with `--apply` |
 | `mod-list export --name GAME (--list KEY \| --from SOURCE:REF) --to PATH [--apply]` | Writes a list as the game's own file (RimWorld `.rml`) | writes with `--apply` |
+| `mod-list subscribe --name GAME --item N [--item N ...] [--wait SECONDS] [--apply]` | Subscribes through the running Steam client and asks for each download; `--wait` reports Steam's progress until all are installed (1.77.0) | writes with `--apply` |
+| `mod-list unsubscribe --name GAME --list KEY --item N [...] [--apply]` | Switches those mods off (after a backup), then unsubscribes; Steam then deletes their files | writes with `--apply` |
 | `mod-list undo --name GAME --list KEY [--backup FILE] [--apply]` | Goes back on the latest change made here not yet gone back on; again, on the one before | writes with `--apply` |
 | `mod-list mods --name GAME` | Every mod on this PC (key, name, source, Workshop number, authors, versions, needs) and each list's entries in order, joined by key, with how many changes each list can still go back on (1.73.0) | reads |
 | `mod-list backups --name GAME` | Every backup kept, newest first | reads |
@@ -107,6 +109,14 @@ the list then is the one the game started with (unchanged more than two minutes 
 from the last copy; nothing is kept while the tools are not run, so a start followed by a change before the next read is missed.
 
 Not confirmed, and said so: RimSort's history times are read from its files' times; Project Zomboid has no start record yet.
+
+## Subscribing through Steam (1.77.0)
+
+The tools borrow **the game's own Steam library** (`steam_api64.dll` in RimWorld's folder) and join the Steam client already
+running and signed in, as the game would (`SteamAppId`), for the seconds a press takes: Steam shows the person as playing the game
+meanwhile. Nothing of Steam's is shipped and no account details are held. A subscribe or unsubscribe call is waited for up to 30
+s; whether it worked is read back from `GetItemState`, not assumed. **Agents never run these on the owner's account**: only the
+person's own press does, so the Steamworks calls had not met a real client when 1.77.0 was made.
 
 ## Backups
 

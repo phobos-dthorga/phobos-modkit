@@ -4,6 +4,22 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.77.0] - 2026-11-22
+
+Subscribing through Steam, step 5 of the mod manager (the owner, 22 Nov 2026: "Start step 5, subscribing through Steam"). The
+owner's choices on question cards: through the running Steam client, at once, with the game's own Steam library; unsubscribing
+asks first and switches the mod off; downloads shown until done.
+
+### Added
+
+- **mod-list subscribe and unsubscribe** (`steam/client.py`): through the Steam client already running and signed in on this PC,
+  as RimSort does, by borrowing the game's own Steam library (RimWorld's `steam_api64.dll`; Project Zomboid's once installed) for
+  the few seconds a press takes, so nothing of Steam's is shipped and no credentials are held. While it runs, Steam shows the person
+  as playing the game. `subscribe --item N ... [--wait SECONDS] --apply` subscribes, asks for each download at once, and with
+  `--wait` says how far Steam is until every item is installed; its answer names the mod each number installed. `unsubscribe --list
+  KEY --item N ... --apply` first switches those mods off (after a backup, refused while the game or RimSort runs), then
+  unsubscribes, after which Steam deletes their files. Whether each worked is read back from Steam's own item state. Not yet
+  tested against a real Steam client: agents never subscribe on the owner's account, so the first real use is the owner's own press.
 ## [1.76.0] - 2026-11-22
 
 Saved lists, step 4 of the mod manager (the owner, 22 Nov 2026: "Start step 4, saved lists"). The owner's choices on question

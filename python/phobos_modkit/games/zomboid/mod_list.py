@@ -24,6 +24,7 @@ import re
 from ...game_files import libraries, parse_vdf, steam_root
 from ...game_folders import FOLDERS
 from ...mod_list import Mod, ModList, Need
+from ...steam.client import library_path as steam_library_path
 from ...paths import resolve
 
 APP_ID = 108600
@@ -220,6 +221,12 @@ class Zomboid:
             if isinstance(data.get(part), dict):
                 found.update(data[part].keys())
         return found
+
+    def steam_library(self):
+        """The game's own Steam library, which subscribing borrows (1.77.0); None while the game is not installed."""
+        if not self.library:
+            return None
+        return steam_library_path(self.library / "steamapps" / "common" / "ProjectZomboid")
 
     def mentions(self, mod, words):
         needles = [w.lower().encode("utf-8") for w in words]
