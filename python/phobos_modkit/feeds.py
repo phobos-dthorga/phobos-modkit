@@ -30,7 +30,7 @@ import sys
 import time
 
 from . import cache as derived
-from . import github
+from . import github, repos
 from .manifest import ONLINE, READS, WRITES
 from .report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
 
@@ -41,6 +41,7 @@ MAX_INDEX_BYTES = 64 * 1024       # agent defaults (docs/online.md)
 MAX_FILE_BYTES = 1024 * 1024
 FRESH_HOURS = 6
 CACHE_FOLDER = "feeds"
+RESULTS_BRANCH = "companion-results"   # where a nightly run leaves its feed (docs/online.md)
 FOLDER_KINDS = {"theme": "theme", "guide": "guide"}     # a file in a folder of this name is of this kind
 PROGRAM_KINDS = {"theme", "guide"}                        # checked by the program that uses them
 SOURCE = re.compile(r"^(?P<repo>[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100})"
@@ -301,7 +302,10 @@ def _parser():
     c = sub.add_parser("check", help="whether a feed folder's index matches its files, and each file its kind")
     c.add_argument("--folder", required=True, help="the feed folder")
     r = sub.add_parser("read", help="each feed from GitHub's raw files, checked, with the last good copy kept")
-    r.add_argument("--source", action="append", required=True, help="OWNER/REPO[@REF][:PATH] (repeatable)")
+    r.add_argument("--source", action="append", default=[], help="OWNER/REPO[@REF][:PATH] (repeatable)")
+    r.add_argument("--root", action="append", default=[],
+                   help="a repository on this PC: its nightly results, found from its own GitHub remote (repeatable)")
+    r.add_argument("--results", default=RESULTS_BRANCH, help="with --root, the results branch (default %(default)s)")
     r.add_argument("--refresh", action="store_true", help="ask GitHub again even when the last answer is under six hours old")
     r.add_argument("--cache", help="the kit's cache folder (default: the setting, then the temporary folder)")
     for sub_parser in (i, c, r):
@@ -345,8 +349,21 @@ def main(argv=None, out=None, environ=None, get=None, clock=time.time, settings_
         return EXIT_FAILED if faults else EXIT_OK
     try:
         sources = [parse_source(s) and s for s in args.source]
+        if not SAFE_PATH.match(args.results):
+            raise FeedError(f"\"{args.results}\" is not a branch name")
     except FeedError as error:
         _emit(out, args, Report("feeds read: refused", [str(error)]), redact, {"feeds": []})
+        return EXIT_USAGE
+    off_github = []
+    for root in args.root:
+        name = repos.github_name(root)
+        if name:
+            sources.append(f"{name}@{args.results}:")
+        else:
+            off_github.append(Path(root).resolve().name)
+    if not sources and not off_github:
+        _emit(out, args, Report("feeds read: refused", ["Name a feed with --source, or a repository with --root."]), redact,
+              {"feeds": []})
         return EXIT_USAGE
     folder = derived.folder(github.CACHE_FOLDER, args.cache, environ, settings_file)
     client = github.Client(folder, get=get or github.http_get, clock=clock, max_age_hours=FRESH_HOURS, refresh=args.refresh,
@@ -354,11 +371,15 @@ def main(argv=None, out=None, environ=None, get=None, clock=time.time, settings_
     feeds = [read_feed(client, source, derived.folder(CACHE_FOLDER, args.cache, environ, settings_file), clock)
              for source in sources]
     report = Report(f"Feeds: {len(feeds)}")
-    report.section("Files", Table(["Feed", "File", "Kind", "Now", "Why"],
-                                  [[f["source"], x["path"], x.get("kind") or "", x["state"], x.get("why", "")]
-                                   for f in feeds for x in f["files"]] or [[f["source"], "", "", f.get("state", ""),
-                                                                           f.get("why", "")] for f in feeds]))
-    _emit(out, args, report, redact, {"feeds": feeds})
+    rows = []
+    for f in feeds:   # a feed with no files still gets its line: missing, unreachable or refused
+        rows += [[f["source"], x["path"], x.get("kind") or "", x["state"], x.get("why", "")] for x in f["files"]] or \
+                [[f["source"], "", "", f.get("state", ""), f.get("why", "")]]
+    report.section("Files", Table(["Feed", "File", "Kind", "Now", "Why"], rows))
+    if off_github:
+        report.section("Not on GitHub", Bullets([f"{name}: its remote is not on GitHub, so it has no feed to read"
+                                                 for name in off_github]))
+    _emit(out, args, report, redact, {"feeds": feeds, "offGithub": off_github})
     return EXIT_OK
 
 

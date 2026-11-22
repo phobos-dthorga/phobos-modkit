@@ -23,9 +23,16 @@ cd python
 python -m phobos_modkit feeds index --folder DIR --name phobos-rimworld --write      write the folder's index
 python -m phobos_modkit feeds check --folder DIR                                     for a gate: does the index match?
 python -m phobos_modkit feeds read --source phobos-dthorga/phobos-rimworld@companion-results:
+python -m phobos_modkit feeds read --root ../../phobos-rimworld --root ..           each one's nightly results, by folder
 ```
 
 A source is `OWNER/REPO`, then `@BRANCH` (default `HEAD`) and `:FOLDER` (default `feeds`; empty for the top of the branch).
+**`--root`** (1.92.0) names a repository on this PC instead: its nightly results (`--results`, default `companion-results`) on
+the GitHub repository its `origin` remote names. A repository not on GitHub is listed under `data.offGithub`; one with no results
+branch reads as `missing`, which is normal for a repository with no nightly run.
+
+**First nightly run on GitHub (23 Nov 2026, phobos-rimworld, 30 days):** 16 findings in 24 fresh clones in 56 seconds, read back
+keyless from `companion-results`.
 
 ## Kinds, format 1
 

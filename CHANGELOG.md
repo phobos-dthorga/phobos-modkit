@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.92.0] - 2026-11-23
+
+### Added
+
+- **`feeds read --root REPO`**: a repository on this PC, read for its nightly results on the GitHub repository its `origin` names
+  (`--results`, default `companion-results`), so D'thorga Companion names repositories by folder, as everywhere else. One not on
+  GitHub is listed apart (`data.offGithub`), and a feed with no files now keeps its line in the report (`missing`). The first
+  nightly run on GitHub (phobos-rimworld, 23 Nov 2026) found 16 commits in 24 fresh clones in 56 seconds.
+
 ## [1.91.1] - 2026-11-23
 
 ### Fixed

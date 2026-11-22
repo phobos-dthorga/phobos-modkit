@@ -2,6 +2,7 @@
 copy kept when a new one fails or GitHub cannot be reached (1.90.0). Nothing reaches the network."""
 import io
 import json
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -156,6 +157,25 @@ class ReadTests(unittest.TestCase):
         feed = self.read()
         self.assertEqual(["abc1234"], [f["content"]["findings"][0]["commit"] for f in feed["files"]])
         self.assertTrue(feed["stale"] or all(f["state"] == "kept" for f in feed["files"]))
+
+    def test_a_repository_on_this_pc_is_read_from_its_own_remote(self):
+        repo = Path(self.tmp.name) / "game"
+        repo.mkdir()
+        for args in (("init", "-q"), ("config", "core.fsmonitor", "false"),
+                     ("remote", "add", "origin", "https://github.com/me/game.git")):
+            subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+        elsewhere = Path(self.tmp.name) / "elsewhere"
+        elsewhere.mkdir()
+        for args in (("init", "-q"), ("remote", "add", "origin", "https://example.org/me/x.git")):
+            subprocess.run(["git", "-C", str(elsewhere), *args], check=True, capture_output=True)
+        out = io.StringIO()
+        code = feeds.main(["read", "--root", str(repo), "--root", str(elsewhere), "--cache", str(self.cache), "--json"],
+                          out=out, environ={}, get=self.raw, clock=self.clock)
+        self.assertEqual(feeds.EXIT_OK, code, out.getvalue())
+        data = json.loads(out.getvalue())["data"]
+        self.assertEqual(["me/game@companion-results:"], [f["source"] for f in data["feeds"]])
+        self.assertEqual("new", data["feeds"][0]["files"][0]["state"])
+        self.assertEqual(["elsewhere"], data["offGithub"])
 
     def test_a_feed_never_read_and_unreachable_says_so(self):
         self.raw.offline = True

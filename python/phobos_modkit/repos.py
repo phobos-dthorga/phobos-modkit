@@ -90,9 +90,14 @@ def local(root):
     counts = (_git(root, "rev-list", "--left-right", "--count", "HEAD...@{u}") or "").split()
     if len(counts) == 2 and all(c.isdigit() for c in counts):
         found["ahead"], found["behind"] = int(counts[0]), int(counts[1])
-    names = github.links(_git(root, "remote", "get-url", remote) or "")
-    found["github"] = names[0] if names else None
+    found["github"] = github_name(root, remote)
     return found
+
+
+def github_name(root, remote="origin"):
+    """owner/repo of the repository's remote (origin unless named) when it is on GitHub; None otherwise (1.92.0)."""
+    names = github.links(_git(Path(root), "remote", "get-url", remote) or "")
+    return names[0] if names else None
 
 
 def _newest_by_workflow(runs):
