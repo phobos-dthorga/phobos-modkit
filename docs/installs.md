@@ -43,7 +43,7 @@ Add `--json` for the envelope. A refusal is still an envelope, with `data.ok` fa
 | --- | --- |
 | `game` | The adapter: `games/<game>/installs.py` says where installed mods live, how to read a mod's name and version, and the game's process names |
 | `mods` | The folder holding the repository's mods, one folder each with its `CHANGELOG.md` |
-| `backups` | Where backups go, one folder each named `<Mod>-YYYYMMDD-HHMMSS` |
+| `backups` | Where backups go, one zip each named `<Mod>-YYYYMMDD-HHMMSS.zip` (1.96.0; older ones stay folders of that name until packed) |
 | `settings` | Optional: a settings file the adapter reads the game's folder from |
 | `sharedSources` | Optional: folders shared by every mod, whose uncommitted changes count against each mod |
 | `install` | The repository's own install command; `{python}` is the running Python, `{mod}` the mod's folder name (an element that is exactly `{mod}` becomes every mod named) |
@@ -81,6 +81,25 @@ Add `--json` for the envelope. A refusal is still an envelope, with `data.ok` fa
 
 `build` runs the repository's build command; it writes only inside the repository, so it does not wait for the game to close.
 
+## Backups kept as zips (1.96.0)
+
+**Each backup is one zip** (the owner's choice of 23 Nov 2026, "One zip per backup", over plain folders and a store keeping each
+file once). On the owner's 27 RimWorld backups: 4,254 MB as folders, about 855 MB as zips; the largest, 735 MB, became 95 MB in
+7 seconds. Zip was chosen over 7z because Python reads and writes it with nothing installed, Windows opens it, and one file inside
+is read without unpacking the rest; LZMA saved only 7% more.
+
+- **`backup` writes a zip**, through a `.partial` file renamed once the zip reads back whole and holds the same files as the install.
+- **`pack` turns backups kept as folders into zips**, one at a time, each checked file for file (`content_digests`, the same for a
+  folder and its zip) before its folder goes. One that fails a check, or would leave under 1 GB free, stays a folder and is named.
+  **Every install and go-back packs too**, after removing repeats (`installs.tidy`), so older backups turn into zips at the next
+  install without anything to run.
+- **Reading a zipped backup**: its name, version, changelog and install record, and the files `status` finds changed between the
+  install and the repository, are copied into the kit's cache (`installs/backup-peeks/<backup>`), which is the folder `status`
+  names for it, so a program can show a changed picture from it. A backup never changes, so they are copied once.
+- **Going back to a zipped backup** unpacks it beside the game's mods folder, then swaps as before; the zip is kept. A zip naming
+  a path outside its folder is refused.
+- `content_digests` gives the full and lean digests in one reading. Their formula is unchanged, so digests kept for folders still hold.
+
 ## Repeated backups (1.40.0)
 
 `status` marks each backup that repeats the one before it in time with `sameAs` (the oldest backup of its run, which is kept) and
@@ -115,7 +134,8 @@ backup made from that install carries it too. A copy installed before records be
 
 | Move | Does | Refuses when |
 | --- | --- | --- |
-| backup | Copies the installed mod to a new backup (through a `.partial` folder, renamed when complete) | Not installed; under 1 GB would be left free |
+| backup | Packs the installed mod into a new zip backup (through a `.partial` file, renamed once it reads back whole with the same files) | Not installed; under 1 GB would be left free |
+| pack | Turns backups kept as folders into zips, each checked file for file before its folder goes | A check fails or under 1 GB would be left free: that backup stays a folder, named in `left` |
 | restore | Copies the backup beside the game's mods folder, renames the install aside, renames the copy in, then moves the replaced install to a new backup. The backup is kept | The game runs; the name is not one of that mod's backups; something holds the install open; under 1 GB would be left free |
 | install | Runs the repository's install command in the repository, and returns its last 40 lines | The game runs; it runs over an hour (it is then stopped, and says to check the install) |
 

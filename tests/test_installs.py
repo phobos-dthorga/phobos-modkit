@@ -244,8 +244,11 @@ class MovingTests(unittest.TestCase):
             f = Fixture(tmp)
             code, answer = f.run("backup", "--mod", "Thing")
             self.assertEqual((code, answer["data"]["backup"]), (0, "Thing-20261118-210000"))
-            copied = f.repo / ".local" / "backups" / "Thing-20261118-210000"
-            self.assertEqual(installs.read_record(copied)["version"], "0.2.0")
+            # 1.96.0: a backup is one zip, read back like a folder.
+            self.assertTrue((f.repo / ".local" / "backups" / "Thing-20261118-210000.zip").is_file())
+            copied = installs.read_backup(f.where, "Thing-20261118-210000")
+            self.assertEqual((copied.record["version"], copied.version), ("0.2.0", "0.2.0"))
+            self.assertEqual(installs.content_digest(copied.archive), installs.content_digest(f.game / "Mods" / "Thing"))
             self.assertTrue((f.game / "Mods" / "Thing" / "CHANGELOG.md").is_file())
 
     def test_restore_swaps_and_keeps_both(self):
@@ -255,8 +258,10 @@ class MovingTests(unittest.TestCase):
             self.assertEqual((code, answer["data"]["replacedBy"]), (0, "Thing-20261118-210000"))
             self.assertEqual(f.where.game.identity(f.game / "Mods" / "Thing")[1], "0.1.0")
             backups = f.repo / ".local" / "backups"
-            self.assertTrue((backups / "Thing-20261101-120000").is_dir())
-            self.assertEqual(f.where.game.identity(backups / "Thing-20261118-210000")[1], "0.2.0")
+            # Both kept, packed as zips by the tidying that follows a go-back (1.96.0).
+            self.assertEqual(sorted(p.name for p in backups.iterdir()), ["Thing-20261101-120000.zip", "Thing-20261118-210000.zip"])
+            self.assertEqual(installs.read_backup(f.where, "Thing-20261118-210000").version, "0.2.0")
+            self.assertEqual(sorted(p["backup"] for p in answer["data"]["packed"]), ["Thing-20261101-120000", "Thing-20261118-210000"])
             self.assertEqual(sorted(p.name for p in f.game.iterdir()), ["Mods"])
 
     def test_restore_removes_the_repeated_backup_it_makes_and_keeps_the_older_twin(self):
@@ -269,7 +274,7 @@ class MovingTests(unittest.TestCase):
             self.assertEqual([(r["backup"], r["sameAs"], r["kind"]) for r in answer["data"]["removedRepeats"]],
                              [("Thing-20261118-210000", "Thing-20261110-120000", "identical")])
             self.assertIsNone(answer["data"]["tidyProblem"])
-            self.assertEqual(sorted(p.name for p in backups.iterdir()), ["Thing-20261101-120000", "Thing-20261110-120000"])
+            self.assertEqual(sorted(p.name for p in backups.iterdir()), ["Thing-20261101-120000.zip", "Thing-20261110-120000.zip"])
             self.assertEqual(f.where.game.identity(f.game / "Mods" / "Thing")[1], "0.1.0")
 
     def test_tidy_reports_a_problem_instead_of_raising(self):

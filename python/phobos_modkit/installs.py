@@ -26,7 +26,9 @@ import re
 import shutil
 import subprocess
 import sys
+import zipfile
 
+from . import backup_archive as archives
 from . import install_checks as checks
 from .cleanup import remove, size_of
 from .progress import run_streaming
@@ -371,6 +373,12 @@ class Copy:
     size: int = None
     same_as: str = ""         # a backup's older twin: the oldest backup of the run it repeats (duplicates)
     same_kind: str = ""       # how it repeats it: identical, or rebuilt only
+    archive: Path = None      # a backup kept as a zip (1.96.0): the zip, while folder holds the files read from it
+
+
+def stored_path(copy):
+    """Where a copy is kept: a zipped backup's zip, else its folder."""
+    return copy.archive or copy.folder
 
 
 def read_copy(kind, folder, game, measure=False, backup=""):
@@ -396,13 +404,43 @@ def mods_of(root, config):
 
 
 def backups_of(backups, mod):
-    """A mod's backup folder names, newest first."""
-    try:
-        names = [p.name for p in Path(backups).iterdir() if p.is_dir()]
-    except OSError:
-        return []
-    found = [n for n in names if (m := BACKUP_NAME.match(n)) and m.group("mod") == mod]
+    """A mod's backup names, newest first: folders, and zips (1.96.0) without their suffix."""
+    found = [n for n in archives.names(backups) if (m := BACKUP_NAME.match(n)) and m.group("mod") == mod]
     return sorted(found, key=lambda n: n[-15:], reverse=True)
+
+
+PEEKS = "backup-peeks"
+
+
+def _peek_folder(where, name):
+    from . import cache as derived
+    return derived.folder(DIGEST_CACHE, None, where.environ, where.settings) / PEEKS / name
+
+
+def _identity_files(game):
+    """The files a copy's name, version, changelog and install record are read from, in lower case."""
+    return {CHANGELOG.lower(), RECORD.lower(), str(getattr(game, "VERSION_FILE", "")).lower()} - {""}
+
+
+def read_backup(where, name, measure=False, also=()):
+    """One backup, kept as a folder or a zip. A zip's name, version, changelog and install record (and the files named in also,
+    such as a changed picture to compare) are read from a copy of just those files in the kit's cache, which its folder names."""
+    path = archives.stored(where.backups, name)
+    if path is None or not archives.is_archive(path):
+        return read_copy("backup", where.backups / name, where.game, measure, name)
+    wanted, extra = _identity_files(where.game), set(also)
+    folder = archives.peek(path, lambda relative: relative.lower() in wanted or relative in extra, _peek_folder(where, name))
+    copy = read_copy("backup", folder, where.game, False, name)
+    copy.archive = path
+    if measure:
+        copy.size = path.stat().st_size
+    return copy
+
+
+def _forget_peek(where, name):
+    folder = _peek_folder(where, name)
+    if folder.is_dir():
+        shutil.rmtree(folder, ignore_errors=True)
 
 
 # ---------------------------------------------------------------- duplicate backups
@@ -415,22 +453,38 @@ ASSEMBLY = ".dll"
 IDENTICAL, REBUILT = "identical", "rebuilt"
 
 
-def content_digest(folder, leave_out_assemblies=False):
-    """A hash of every file under a folder, by path and bytes, leaving out the install record (and, when asked, the assemblies):
-    two copies of a mod with the same full digest hold the same mod file for file, whenever and from whichever commit each was
-    installed."""
-    folder = Path(folder)
-    digest = hashlib.sha256()
-    for path in sorted(p for p in folder.rglob("*") if p.is_file()):
-        relative = path.relative_to(folder).as_posix()
-        if relative == RECORD or (leave_out_assemblies and relative.lower().endswith(ASSEMBLY)):
-            continue
-        digest.update(relative.encode("utf-8") + b"\0")
-        with open(path, "rb") as handle:
-            while chunk := handle.read(_CHUNK):
-                digest.update(chunk)
-        digest.update(b"\0")
-    return digest.hexdigest()
+def content_digests(path):
+    """(full, lean): hashes of every file in a folder or a backup's zip, by path and bytes, leaving out the install record, and
+    for lean the assemblies too. Two copies with the same full digest hold the same mod file for file, whenever and from whichever
+    commit each was installed, and a folder and its zip give the same digests. One reading makes both."""
+    full, lean = hashlib.sha256(), hashlib.sha256()
+    opened = zipfile.ZipFile(path) if archives.is_archive(path) else None
+    if opened is not None:
+        entries = [(relative, lambda info=info: opened.open(info)) for relative, info in archives.members(path)]
+    else:
+        entries = [(relative, lambda found=found: open(found, "rb")) for relative, found in archives.files_of(path)]
+    try:
+        for relative, open_it in entries:
+            if relative == RECORD:
+                continue
+            both = [full] if relative.lower().endswith(ASSEMBLY) else [full, lean]
+            for digest in both:
+                digest.update(relative.encode("utf-8") + b"\0")
+            with open_it() as handle:
+                while chunk := handle.read(_CHUNK):
+                    for digest in both:
+                        digest.update(chunk)
+            for digest in both:
+                digest.update(b"\0")
+    finally:
+        if opened is not None:
+            opened.close()
+    return full.hexdigest(), lean.hexdigest()
+
+
+def content_digest(path, leave_out_assemblies=False):
+    """content_digests' full digest, or its lean one."""
+    return content_digests(path)[1 if leave_out_assemblies else 0]
 
 
 def _digest_store(environ=None, settings=None):
@@ -451,25 +505,45 @@ def backup_digests(copies, environ=None, settings=None, progress=None):
     folders = kept.setdefault("folders", {})
     kept["format"] = DIGEST_FORMAT
     found, fresh = {}, False
-    sizes = {c.backup: c.size if c.size is not None else size_of(c.folder) for c in copies}
-    unread = sum(1 for c in copies if folders.get(str(c.folder), {}).get("size") != sizes[c.backup])
+    sizes = {c.backup: c.size if c.size is not None else size_of(stored_path(c)) for c in copies}
+    unread = sum(1 for c in copies if folders.get(str(stored_path(c)), {}).get("size") != sizes[c.backup])
     for position, copy in enumerate(copies, 1):
-        entry = folders.get(str(copy.folder))
+        key = str(stored_path(copy))
+        entry = folders.get(key)
         if not entry or entry.get("size") != sizes[copy.backup]:
             if progress:
                 progress(f"Comparing backups file for file ({unread:,} not read before)", position, len(copies), copy.backup)
-            entry = folders[str(copy.folder)] = {"size": sizes[copy.backup], "full": content_digest(copy.folder),
-                                                 "lean": content_digest(copy.folder, leave_out_assemblies=True)}
+            full, lean = content_digests(stored_path(copy))
+            entry = folders[key] = {"size": sizes[copy.backup], "full": full, "lean": lean}
             fresh = True
         found[copy.backup] = entry
     if fresh:
-        try:
-            store.parent.mkdir(parents=True, exist_ok=True)
-            kept["folders"] = {k: v for k, v in folders.items() if Path(k).is_dir()}
-            store.write_text(json.dumps(kept), encoding="utf-8")
-        except OSError:
-            pass
+        _keep_digests(store, kept)
     return found
+
+
+def _keep_digests(store, kept):
+    """Writes the digests kept, letting go of those whose backup has gone."""
+    try:
+        store.parent.mkdir(parents=True, exist_ok=True)
+        kept["folders"] = {k: v for k, v in kept.get("folders", {}).items() if Path(k).exists()}
+        store.write_text(json.dumps(kept), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _remember_digests(where, path, size, digests):
+    """Keeps the digests of a backup just written or packed, so the next reading need not read it again."""
+    store = _digest_store(where.environ, where.settings)
+    try:
+        kept = json.loads(store.read_text(encoding="utf-8"))
+        if kept.get("format") != DIGEST_FORMAT:
+            kept = {}
+    except (OSError, ValueError, AttributeError):
+        kept = {}
+    kept["format"] = DIGEST_FORMAT
+    kept.setdefault("folders", {})[str(path)] = {"size": size, "full": digests[0], "lean": digests[1]}
+    _keep_digests(store, kept)
 
 
 def _commit_of(copy):
@@ -534,20 +608,21 @@ def dedupe(where, mods=None, kinds=(IDENTICAL, REBUILT), progress=None):
     for mod in names:
         if mods:
             _known_mod(where, mod)
-        copies = [read_copy("backup", where.backups / name, where.game, True, name) for name in backups_of(where.backups, mod)]
+        copies = [read_backup(where, name, True) for name in backups_of(where.backups, mod)]
         doubles = [c for c in mark_duplicates(copies, backup_digests(copies, where.environ, where.settings, progress),
                                               _rebuilt_check(where, mod, builds)) if c.same_kind in kinds]
         kept = {}
         for position, copy in enumerate(sorted(doubles, key=lambda c: c.backup), 1):
             if progress:
                 progress(f"Removing repeated backups of {mod}", position, len(doubles), copy.backup)
-            keeper = where.backups / copy.same_as
+            keeper = archives.stored(where.backups, copy.same_as)
             lean = copy.same_kind == REBUILT
             if (copy.same_as, lean) not in kept:
-                kept[(copy.same_as, lean)] = content_digest(keeper, lean) if keeper.is_dir() else None
-            if kept[(copy.same_as, lean)] is None or content_digest(copy.folder, lean) != kept[(copy.same_as, lean)]:
+                kept[(copy.same_as, lean)] = content_digest(keeper, lean) if keeper else None
+            if kept[(copy.same_as, lean)] is None or content_digest(stored_path(copy), lean) != kept[(copy.same_as, lean)]:
                 continue    # no longer a twin of something that is still there: leave it alone
-            remove(copy.folder)
+            remove(stored_path(copy))
+            _forget_peek(where, copy.backup)
             removed.append({"mod": mod, "backup": copy.backup, "sameAs": copy.same_as, "kind": copy.same_kind,
                             "size": copy.size or 0})
     if removed:
@@ -556,22 +631,68 @@ def dedupe(where, mods=None, kinds=(IDENTICAL, REBUILT), progress=None):
     return removed
 
 
+PACKED = "packed"
+
+
+def pack(where, mods=None, progress=None):
+    """Turns every backup still kept as a folder into a zip (1.96.0; the owner's choice of 23 Nov 2026), each checked file for
+    file against its folder before the folder goes; one that fails a check, or would leave the drive short, stays a folder.
+    Returns (packed, left): [{mod, backup, kind: "packed", before, after}], and [{backup, problem}] for those left as they were."""
+    packed, left = [], []
+    names = list(mods or mods_of(where.root, where.config))
+    folders = [(mod, name) for mod in names for name in backups_of(where.backups, mod)
+               if (where.backups / name).is_dir() and not archives.archive_of(where.backups, name).exists()]
+    for position, (mod, name) in enumerate(folders, 1):
+        folder, archive = where.backups / name, archives.archive_of(where.backups, name)
+        before = size_of(folder)
+        if progress:
+            progress(f"Packing backups as zips ({before / 1024 ** 2:,.0f} MB)", position, len(folders), name)
+        try:
+            _need_space(where.backups, before, f"Packing {name}")
+            wanted = content_digests(folder)
+            after = archives.write(folder, archive)
+            if content_digests(archive) != wanted:
+                remove(archive)
+                raise InstallsError("the zip did not hold the same files as the folder")
+        except (InstallsError, archives.ArchiveError, OSError) as error:
+            left.append({"backup": name, "problem": str(error)})
+            continue
+        _remember_digests(where, archive, after, wanted)
+        remove(folder)
+        packed.append({"mod": mod, "backup": name, "kind": PACKED, "before": before, "after": after})
+    if packed:
+        note(where, "backups-packed", count=len(packed), before=sum(p["before"] for p in packed),
+             after=sum(p["after"] for p in packed), mods=sorted({p["mod"] for p in packed}))
+    return packed, left
+
+
 def tidy(where, mods, progress=None):
     """The last step of an install or a go-back (owner, 20 Nov 2026: removing repeated backups "should be part of the normal
-    process"): removes the repeated backups of the mods just moved, both kinds, as dedupe does. The move itself has already
-    succeeded, so this never raises. Returns (removed, problem): what dedupe removed, and why it could not finish, or None."""
+    process"): removes the repeated backups of the mods just moved, both kinds, as dedupe does, then packs those mods' backups
+    still kept as folders (1.96.0). The move itself has already succeeded, so this never raises. Returns (done, problem): what was
+    removed, then what was packed (each marked kind "packed"), and why it could not finish, or None."""
     try:
-        return dedupe(where, mods, progress=progress), None
+        removed = dedupe(where, mods, progress=progress)
+        packed, left = pack(where, mods, progress)
     except Exception as error:  # noqa: BLE001 (the install or go-back has already succeeded; only the tidying goes without)
         return [], str(error)
+    problem = "; ".join(f"{item['backup']}: {item['problem']}" for item in left) or None
+    return removed + packed, problem
 
 
-def tidy_lines(removed, problem):
+def tidy_lines(done, problem):
     """A person's lines for what tidy did, for an install or a go-back to print after its own."""
+    removed = [r for r in done if r["kind"] != PACKED]
+    packed = [p for p in done if p["kind"] == PACKED]
     lines = [f"Removed the backup {r['backup']}: it repeated {r['sameAs']}" + (" (only rebuilt)" if r["kind"] == REBUILT else "")
              + ", which is kept." for r in removed]
+    if packed:
+        before, after = sum(p["before"] for p in packed), sum(p["after"] for p in packed)
+        lines.append(f"Packed {len(packed):,} backup{'s' if len(packed) != 1 else ''} as zips: {before / 1024 ** 2:,.0f} MB "
+                     f"became {after / 1024 ** 2:,.0f} MB, each checked file for file first.")
     if problem:
-        lines.append(f"Repeated backups were not removed ({problem}); Remove repeated backups can do it later.")
+        lines.append(f"The backups were not all tidied ({problem}); Remove repeated backups can do it later, and the next install "
+                     "packs what is left.")
     return lines
 
 
@@ -650,14 +771,17 @@ def survey(where, mods=None, measure=True, run=subprocess.run, progress=None):
         progress(f"Comparing {repository.name or mod} with its installed copy and backups", position, len(names) + 1)
         installed_folder = where.installed(mod)
         installed = read_copy("installed", installed_folder, where.game) if installed_folder.is_dir() else None
-        backups = [read_copy("backup", where.backups / name, where.game, measure, name) for name in backups_of(where.backups, mod)]
+        files = checks.compare_files(installed.folder, repository.folder, install_only) if installed is not None else None
+        # A zipped backup's changed files are copied out beside its name and version, so a picture can be compared with it.
+        changed_paths = [p["path"] for p in (files or {}).get("paths", [])]
+        backups = [read_backup(where, name, measure, changed_paths) for name in backups_of(where.backups, mod)]
         changed = uncommitted(where.root, [f"{where.config['mods']}/{mod}", *where.config.get("sharedSources", [])])
         commit, exact = installed_commit(where, installed)
         since = commits_since(where.root, commit, f"{where.config['mods']}/{mod}")
         state = ModState(mod, repository, installed, backups, changed, since, builds=builds.get(mod, []), commit=commit,
                          commit_exact=exact, changelog=f"{where.config['mods']}/{mod}/{CHANGELOG}")
         if installed is not None:
-            state.files = checks.compare_files(installed.folder, repository.folder, install_only)
+            state.files = files
             checks.mark_rebuilt(state.files, state.builds, where.root, commit)
             state.look_out = checks.look_out(where.root, repository.name, installed.version, repository.version)
         states.append(state)
@@ -725,13 +849,14 @@ def _known_mod(where, mod):
 def _free_name(folder, mod, now):
     stamp = _stamp(now)
     name = f"{mod}-{stamp}"
-    if (Path(folder) / name).exists():
+    if (Path(folder) / name).exists() or archives.archive_of(folder, name).exists():
         raise InstallsError(f"A backup named {name} already exists; wait a second and try again. Nothing was changed.")
     return name
 
 
 def backup(where, mod, now=None):
-    """Copies the installed mod into the backups folder. Returns the new backup's name. Safe while the game runs: it only reads."""
+    """Packs the installed mod into a zip in the backups folder (a plain folder until 1.96.0), checked file for file. Returns the
+    new backup's name. Safe while the game runs: it only reads."""
     _known_mod(where, mod)
     installed = where.installed(mod)
     if not installed.is_dir():
@@ -739,15 +864,17 @@ def backup(where, mod, now=None):
     _need_space(where.backups, size_of(installed), "The backup")
     name = _free_name(where.backups, mod, now)
     where.backups.mkdir(parents=True, exist_ok=True)
-    partial = where.backups / f"{name}.partial"
+    archive = archives.archive_of(where.backups, name)
     try:
-        shutil.copytree(installed, partial)
-        partial.rename(where.backups / name)
-    except OSError as error:
-        if partial.exists():
-            remove(partial)
+        wanted = content_digests(installed)
+        after = archives.write(installed, archive)
+        if content_digests(archive) != wanted:
+            remove(archive)
+            raise archives.ArchiveError("it did not hold the same files as the install")
+    except (archives.ArchiveError, OSError) as error:
         raise InstallsError(f"The backup could not be made ({error}). Nothing was changed.") from None
-    copy = read_copy("backup", where.backups / name, where.game)
+    _remember_digests(where, archive, after, wanted)
+    copy = read_backup(where, name)
     note(where, "backed-up", mod=mod, product=copy.name or mod, version=copy.version, backup=name)
     return name
 
@@ -762,8 +889,9 @@ def restore(where, mod, name, now=None, running=game_running):
     if name not in backups_of(where.backups, mod):
         raise InstallsError(f"{name!r} is not a backup of {mod}.")
     _refuse_while_running(where, running)
-    source, target = where.backups / name, where.installed(mod)
-    _need_space(where.target, size_of(source), "Going back to the backup")
+    source, target = archives.stored(where.backups, name), where.installed(mod)
+    zipped = archives.is_archive(source)
+    _need_space(where.target, archives.unpacked_size(source) if zipped else size_of(source), "Going back to the backup")
     if target.is_dir():
         _need_space(where.backups, size_of(target), "Keeping the replaced install as a backup")
     replaced = _free_name(where.backups, mod, now) if target.is_dir() else None
@@ -771,8 +899,11 @@ def restore(where, mod, name, now=None, running=game_running):
     staging = where.target.parent / f"{mod}-restoring-{stamp}"
     aside = where.target.parent / f"{mod}-replaced-{stamp}"
     try:
-        shutil.copytree(source, staging)
-    except OSError as error:
+        if zipped:
+            archives.unpack(source, staging)
+        else:
+            shutil.copytree(source, staging)
+    except (OSError, archives.ArchiveError) as error:
         if staging.exists():
             remove(staging)
         raise InstallsError(f"The backup could not be copied beside the game's mods ({error}). Nothing was changed.") from None
@@ -794,7 +925,7 @@ def restore(where, mod, name, now=None, running=game_running):
         where.backups.mkdir(parents=True, exist_ok=True)
         shutil.move(str(aside), str(where.backups / replaced))
     restored = read_copy("installed", target, where.game)
-    replaced_copy = read_copy("backup", where.backups / replaced, where.game) if replaced else None
+    replaced_copy = read_backup(where, replaced) if replaced else None
     note(where, "went-back", mod=mod, product=restored.name or mod, version=restored.version, backup=name,
          fromVersion=replaced_copy.version if replaced_copy else None, keptAs=replaced)
     return replaced

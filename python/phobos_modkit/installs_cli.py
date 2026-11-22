@@ -41,6 +41,7 @@ def _parser():
              "install": "run the repository's own install command for one or more mods",
              "build": "run the repository's own build command; it writes only inside the repository",
              "dedupe": "remove every backup that repeats the one before it (the same, or only rebuilt), keeping the oldest of each run",
+             "pack": "turn every backup still kept as a folder into a zip, each checked file for file before its folder goes",
              "settings": "every setting the repository's mods ever added, removed or gave a new default, with when, newest first"}
     for name, helptext in helps.items():
         s = sub.add_parser(name, help=helptext)
@@ -48,8 +49,8 @@ def _parser():
         if name == "install":
             s.add_argument("--mod", action="append", required=True, help="a mod's folder name (repeatable)")
         elif name not in ("build", "settings"):
-            s.add_argument("--mod", required=name not in ("status", "dedupe"),
-                           help="the mod's folder name" + (" (default: every mod)" if name in ("status", "dedupe") else ""))
+            s.add_argument("--mod", required=name not in ("status", "dedupe", "pack"),
+                           help="the mod's folder name" + (" (default: every mod)" if name in ("status", "dedupe", "pack") else ""))
         if name == "restore":
             s.add_argument("--backup", required=True, help="the backup's folder name, as status lists it")
         if name == "dedupe":
@@ -278,21 +279,31 @@ def main(argv=None, environ=None, out=None, now=None, running=None, run=None):
                      if removed else "No backup repeats the one before it file for file, so nothing was removed."]
             report, data = _done("Removed duplicate backups" if removed else "No duplicate backups", lines,
                                  {"ok": True, "removed": removed, "freed": freed})
+        elif args.report == "pack":
+            packed, left = installs.pack(where, [args.mod] if args.mod else None, progress)
+            before, after = sum(p["before"] for p in packed), sum(p["after"] for p in packed)
+            lines = ([f"{len(packed):,} backups packed as zips: {before / MB:,.0f} MB became {after / MB:,.0f} MB, each checked file "
+                      "for file before its folder went."] if packed else ["Every backup is already a zip, so nothing was packed."])
+            lines += [f"{item['backup']} stays a folder: {item['problem']}" for item in left]
+            report, data = _done("Packed backups as zips" if packed else "Nothing to pack", lines,
+                                 {"ok": not left, "packed": packed, "left": left, "before": before, "after": after})
         elif args.report == "restore":
             progress(f"Putting {args.backup} back; the install it replaces becomes a backup")
             replaced = installs.restore(where, args.mod, args.backup, now, running)
             progress(f"Removing repeated backups of {args.mod}")
             removed, problem = installs.tidy(where, [args.mod], progress)
-            gone = {r["backup"] for r in removed}
+            # Packing (1.96.0) keeps a backup, as a zip: only what was removed is gone.
+            gone = {r["backup"] for r in removed if r["kind"] != installs.PACKED}
             lines = [f"{args.backup} is now the installed copy of {args.mod}" + ("." if args.backup in gone else "; the backup itself is kept.")]
             if not replaced:
                 lines.append("Nothing was installed before.")
             elif replaced not in gone:
                 lines.append(f"The install it replaced was kept as the backup {replaced}.")
             lines += installs.tidy_lines(removed, problem)
-            report, data = _done(f"Went back to {args.backup}", lines, {"ok": True, "mod": args.mod, "backup": args.backup,
-                                                                         "replacedBy": replaced, "removedRepeats": removed,
-                                                                         "tidyProblem": problem})
+            report, data = _done(f"Went back to {args.backup}", lines, {
+                "ok": True, "mod": args.mod, "backup": args.backup, "replacedBy": replaced,
+                "removedRepeats": [r for r in removed if r["kind"] != installs.PACKED],
+                "packed": [r for r in removed if r["kind"] == installs.PACKED], "tidyProblem": problem})
         elif args.report == "build":
             progress("Starting the build")
             exit_code, lines = installs.build(where, run, progress)
@@ -322,12 +333,15 @@ def main(argv=None, environ=None, out=None, now=None, running=None, run=None):
 
 MANIFEST = {"game": None, "parser": _parser, "effect": READS,
             "reports": {"status": {"question": "What would updating or going back change in my installed mods?"},
-                        "backup": {"effect": WRITES, "note": "copies an installed mod into the repository's backups folder"},
+                        "backup": {"effect": WRITES, "note": "packs an installed mod into a zip in the repository's backups folder"},
                         "restore": {"effect": WRITES,
                                     "note": "replaces an installed mod with a backup; the replaced install is kept as a backup, "
-                                            "then the mod's backups that repeat the one before them are removed"},
+                                            "then the mod's backups that repeat the one before them are removed and the rest "
+                                            "packed as zips"},
                         "install": {"effect": RUNS, "note": "runs the repository's own install command, which builds and copies"},
                         "build": {"effect": RUNS, "note": "runs the repository's own build command, which writes only inside it"},
                         "settings": {"note": "the history of the mods' settings; for a program to list"},
                         "dedupe": {"effect": WRITES,
-                                   "note": "deletes backups that repeat the one before them file for file; the oldest of each run is kept"}}}
+                                   "note": "deletes backups that repeat the one before them file for file; the oldest of each run is kept"},
+                        "pack": {"effect": WRITES,
+                                 "note": "turns backups kept as folders into zips, each checked file for file before its folder goes"}}}

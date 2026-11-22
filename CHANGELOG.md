@@ -4,6 +4,22 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.96.0] - 2026-11-23
+
+### Added
+
+- **Install backups are kept as zips** (the owner's choice of 23 Nov 2026, "One zip per backup"). `installs backup` writes one zip,
+  checked file for file; **`installs pack`** turns backups kept as folders into zips, each checked before its folder goes; and the
+  tidying after every install and go-back packs too, so older backups turn into zips at the next install. On the owner's
+  RimWorld backups: 4,254 MB as folders, about 855 MB as zips; the largest, 735 MB, became 95 MB in 7 seconds.
+- **A zipped backup reads as a folder did**: `status` names its name, version and changelog, its size on disk, and a folder in the
+  kit's cache holding the files that changed, so a program can compare a picture with it. Going back unpacks it; repeated zipped
+  backups are found and removed as repeated folders were. Guide: `docs/installs.md`.
+
+### Changed
+
+- **The go-back answer lists `packed` apart from `removedRepeats`.**
+
 ## [1.95.0] - 2026-11-23
 
 ### Added
