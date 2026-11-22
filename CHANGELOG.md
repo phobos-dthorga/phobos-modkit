@@ -24,6 +24,18 @@ player?"; their choices on a question card: all four offered). Each came in its 
 - **A continued version is offered** for a mod that is missing, or does not say it works with the game's version, when the
   community's Use This Instead list (2,846 rules, MIT, read where RimSort keeps it) names a continuation that does: a note with
   the continuation's name, author and Workshop number. None on the owner's list, which already uses the continuations.
+- **Did my change break it? `mod-list since`**, and the check's data (`since`, `last_run`): after a change made here, the first
+  game run that started after it is compared with the run before, which ended before it, and the error signatures new since are
+  named with the mods their clues point at. New since is not the same as caused by, and the words say so. Only like with like is
+  compared: a run that loaded a save against one that did (on 23 Nov 2026 a two-minute run that loaded nothing made 76 errors from
+  loading a save look new). When the list was changed since by something else (the game, RimSort, by hand), it says so rather
+  than judge the wrong change. Each run is judged once, when the game has closed, and kept in `runs.json`; 3 s on the owner's
+  logs. `mod_runs.py`; the RimWorld adapter's `runs()` and `run_report()` read Player.log and Player-prev.log with the kit's log
+  reader.
+- **Ran clean**: the copy of the list kept at a game start is marked with that run's verdict (`ran` in `lists`), and
+  `compare` / `load --last-clean` take the newest one that ran clean.
+- **No errors from it**: a mod that does not say it works with the game's version, but was on the list and named by no error in
+  the newest run, counts as likely to work. On the owner's list the version notes go from 98 to 5.
 ## [1.84.0] - 2026-11-23
 
 From the owner's log of 23 Nov 2026: after a full re-sort, I Am Mother's compat code failed to load ("ReflectionTypeLoadException

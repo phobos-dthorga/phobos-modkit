@@ -30,6 +30,7 @@ mod" for a patch whose author had taken it off the Workshop). The Companion's Mo
 | `mod-list fix --name GAME --list KEY --move ID --to PLACE [--apply]` | Moves a mod to a place (1 is first); `--enable ID --to PLACE` switches one on there (1.73.0) | writes with `--apply` |
 | `mod-list sort --name GAME --list KEY [--full] [--apply]` | The list sorted from every rule, each move explained; `--full` rebuilds the whole order (1.74.0) | writes with `--apply` |
 | `mod-list rules --name GAME [--mod ID --after OTHER \| --before OTHER \| --top \| --bottom \| --drop N] [--apply]` | Your own rules, your RimSort rules (read only), and every rule set the sorter reads; adds or takes away one of yours (1.74.0) | writes with `--apply` |
+| `mod-list since --name GAME [--list KEY]` | What the first game run after the last change made here showed: new errors, clean, or why it cannot tell (1.85.0) | reads |
 | `mod-list lists --name GAME` | Every saved list: by name, kept at game starts, each save's, RimSort's history (1.76.0) | reads |
 | `mod-list compare --name GAME --list KEY (--from SOURCE:REF \| --file PATH)` | What loading a list would switch on, off and move, and which of its mods are not on this PC, with why | reads |
 | `mod-list load --name GAME --list KEY (--from SOURCE:REF \| --file PATH) [--apply]` | Loads it, leaving out mods not on this PC, after a backup | writes with `--apply` |

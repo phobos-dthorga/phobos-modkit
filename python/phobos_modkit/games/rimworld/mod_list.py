@@ -29,7 +29,7 @@ from ...mod_sort import CODE, COMMUNITY, WORKSHOP, YOURS, RuleSet
 from .installs import PROCESSES
 from .loading import STEAM_SUFFIX, bare_id, load_folders, read_mods_config
 from .mods import _about_root, _child, _text
-from .paths import LOG_NAME, config_path, game_path, logs_path, saves_path, workshop_path
+from .paths import LOG_NAME, PREVIOUS_LOG_NAME, config_path, game_path, logs_path, saves_path, workshop_path
 
 APP_ID = 294100
 MANAGERS = ("RimSort.exe", "RimPy.exe")
@@ -329,6 +329,15 @@ def read_replacements(path):
         return []
     rules = data.get("rules") if isinstance(data, dict) else None
     return [r for r in rules or [] if isinstance(r, dict) and r.get("newWorkshopId")]
+
+
+LOADED_SAVE = re.compile(r"Loading game from file (.+?) with mods")
+
+
+def _save_loaded(text):
+    """The save a run loaded (the first), or ""."""
+    found = LOADED_SAVE.search(text or "")
+    return found.group(1).strip() if found else ""
 
 
 def read_about(folder, source, workshop_id, version):
@@ -671,21 +680,61 @@ class RimWorld:
     def last_start(self):
         """When the game last started (its log's Started line, else the time the log was begun), when it last wrote its log,
         and whether it runs now; None when it has no log."""
-        log = Path(logs_path(None, self.environ, self.settings)) / LOG_NAME
-        try:
-            with open(log, "rb") as handle:
-                head = handle.read(4096).decode("utf-8", errors="replace")
-            ended = datetime.fromtimestamp(log.stat().st_mtime, timezone.utc)
-            begun = datetime.fromtimestamp(log.parent.stat().st_mtime, timezone.utc)
-        except OSError:
+        found = self.runs()
+        if not found:
             return None
-        found = STARTED.search(head)
-        started = begun
-        if found:
-            stamp = found.group(1) + (found.group(2) or "")
-            parsed = datetime.fromisoformat(stamp)
-            started = (parsed if parsed.tzinfo else parsed.astimezone()).astimezone(timezone.utc)
-        return {"started": started, "ended": ended, "running": bool(self.running(list(self.processes)))}
+        return {"started": found[0]["started"], "ended": found[0]["ended"],
+                "running": bool(self.running(list(self.processes)))}
+
+    def runs(self):
+        """The game's last two runs, newest first (1.85.0): [{"path", "started", "ended"}]. A run starts at its log's Started line
+        (else, for the newest, when the Logs folder was last written, since the game renames the old log as it starts) and ends
+        when its log was last written; an older log without a Started line has no start."""
+        logs = Path(logs_path(None, self.environ, self.settings))
+        found = []
+        for name in (LOG_NAME, PREVIOUS_LOG_NAME):
+            path = logs / name
+            try:
+                with open(path, "rb") as handle:
+                    head = handle.read(4096).decode("utf-8", errors="replace")
+                ended = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+                begun = datetime.fromtimestamp(logs.stat().st_mtime, timezone.utc) if name == LOG_NAME else None
+            except OSError:
+                continue
+            started = begun
+            match = STARTED.search(head)
+            if match:
+                parsed = datetime.fromisoformat(match.group(1) + (match.group(2) or ""))
+                started = (parsed if parsed.tzinfo else parsed.astimezone()).astimezone(timezone.utc)
+            found.append({"path": path, "started": started, "ended": ended})
+        return found
+
+    def run_report(self, path, previous=None):
+        """A run's errors, the mods they name (by the clues the log carries) and the error signatures new since the previous
+        run (1.85.0), from the kit's log reader."""
+        from ...logs.triage import compare, group
+        from ...textfile import read_text_shared
+        from .log import parse
+        from .mods import ModIndex, default_roots
+        if not hasattr(self, "_mod_index"):
+            self._mod_index = ModIndex.scan(default_roots(self.game_folder, self.workshop))
+        text = read_text_shared(path)
+        now = parse(text, Path(path).name)
+        self._mod_index.annotate(now.entries)
+        groups = group(now.entries)
+        errors = [g for g in groups if g.level in ("ERROR", "FATAL")]
+        named = sorted({evidence.mod for g in errors for evidence in g.evidence if evidence.mod})
+        new, previous_loaded = [], ""
+        if previous is not None:
+            previous_text = read_text_shared(previous)
+            previous_loaded = _save_loaded(previous_text)
+            before = parse(previous_text, Path(previous).name)
+            self._mod_index.annotate(before.entries)
+            new = [c.group for c in compare(groups, group(before.entries)).new if c.group.level in ("ERROR", "FATAL")]
+        return {"errors": sum(g.count for g in errors), "error_mods": named, "loaded": _save_loaded(text),
+                "previous_loaded": previous_loaded,
+                "new": [{"id": g.id, "level": g.level, "count": g.count, "message": g.signature[:300],
+                         "mods": [e.mod for e in g.top_evidence() if e.mod]} for g in new]}
 
     def mentions(self, mod, words):
         """Whether any of a mod's text files or assemblies name one of the words (any case)."""

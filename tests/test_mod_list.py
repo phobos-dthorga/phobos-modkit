@@ -385,6 +385,7 @@ class Command(unittest.TestCase):
                          {"check": ("reads-online", "--online"), "fix": ("writes", "--apply"), "undo": ("writes", "--apply"),
                       "sort": ("writes", "--apply"), "rules": ("writes", "--apply"),
                       "lists": ("reads", None), "compare": ("reads", None), "load": ("writes", "--apply"),
+                      "since": ("reads", None),
                       "save": ("writes", "--apply"), "forget": ("writes", "--apply"), "export": ("writes", "--apply"),
                       "subscribe": ("writes", "--apply"), "unsubscribe": ("writes", "--apply"),
                           "mods": ("reads", None), "backups": ("reads", None), "games": ("reads", None)})

@@ -9,6 +9,7 @@
     mod-list rules --name GAME --mod ID --after OTHER [--apply]        keep a rule of your own (also --before, --top, --bottom)
     mod-list rules --name GAME --drop N [--apply]                      take your rule N away
     mod-list lists --name GAME                                         every saved list: by name, at game starts, saves, RimSort
+    mod-list since --name GAME [--list KEY]                            what the first game run after your last change showed (1.85.0)
     mod-list compare --name GAME --list KEY --from SOURCE:REF          what loading a list would change (or --file PATH)
     mod-list load --name GAME --list KEY --from SOURCE:REF [--apply]   load it, leaving out mods not on this PC (1.75.0)
     mod-list save --name GAME --list KEY --as NAME [--replace] [--apply]   keep the list as it stands, by name
@@ -36,6 +37,7 @@ import sys
 from . import history
 from . import mod_list as core
 from . import mod_lists
+from . import mod_runs
 from .steam import client as steam_client
 from . import mod_sort
 from .games import MOD_LIST_GAMES, mod_list_adapter, mod_list_game
@@ -96,6 +98,8 @@ def _parser():
     where.add_argument("--bottom", action="store_true", help="it loads as near the bottom as its rules allow")
     where.add_argument("--drop", type=int, metavar="N", help="take your rule N away (as `rules` numbers them)")
     rules.add_argument("--apply", action="store_true", help="keep the change; without it, only say what it would be")
+    since = sub.add_parser("since", help="what the first game run after the last change made here showed; only reads")
+    _common(since)
     lists = sub.add_parser("lists", help="every saved list: by name, kept at game starts, each save's, and RimSort's history")
     _common(lists, lists=False)
     for name, words in (("compare", "what loading a list would change; only reads"),
@@ -105,6 +109,8 @@ def _parser():
         source = each.add_mutually_exclusive_group(required=True)
         source.add_argument("--from", dest="from_list", metavar="SOURCE:REF",
                             help="a list as `lists` names it: saved:NAME, kept:TIME, save:FILE, manager:FILE")
+        source.add_argument("--last-clean", action="store_true",
+                            help="the newest list kept at a game start that then ran clean (1.85.0)")
         source.add_argument("--file", metavar="PATH", help="a list file (the game's .rml, a save, an exported RimSort list)")
         if name == "load":
             each.add_argument("--apply", action="store_true", help="write it; without it, only say what it would do")
@@ -158,6 +164,8 @@ def survey(adapter, environ=None, settings=None, online=False, list_key=None, po
     installed = core.Installed(adapter, mods)
     memory = core.remember(core.remembered_file(adapter.game, environ, settings), adapter, mods, now)
     _keep_at_start(adapter, installed, environ, settings)
+    is_running = bool(game_running(list(adapter.processes)))
+    last_run = mod_runs.judge_latest(adapter, installed, environ, settings, is_running, now)
     lists = [m for m in adapter.lists() if list_key is None or m.key == list_key]
     notes = list(adapter.notes())
     progress("Asking Steam what it keeps", 2, 4)
@@ -184,7 +192,8 @@ def survey(adapter, environ=None, settings=None, online=False, list_key=None, po
         except Exception as error:   # the check stands without them: the reader may be missing (.NET not installed)
             notes.append(f"What each mod's code builds on could not be read ({error}).")
     for mod_list in lists:
-        problems += core.check(adapter, mod_list, installed, memory, steam, subscribed, code_rules, library_copies)
+        problems += core.check(adapter, mod_list, installed, memory, steam, subscribed, code_rules, library_copies,
+                               last_run)
     progress("Done", 4, 4)
     counts = {s: sum(1 for p in problems if p.severity == s) for s in core.SEVERITIES}
     return {"game": adapter.game, "name": adapter.name, "supported": True, "version": adapter.game_version(),
@@ -193,6 +202,9 @@ def survey(adapter, environ=None, settings=None, online=False, list_key=None, po
             "lists": [{"key": m.key, "label": m.label, "path": str(m.path), "count": len(m.ids), "writable": m.writable}
                       for m in lists],
             "problems": [core.problem_data(p) for p in problems], "counts": counts,
+            "since": {m.key: mod_runs.since_change(adapter, m.key, last_run, environ, settings, is_running)
+                      for m in lists if m.writable},
+            "last_run": last_run,
             "backups": [_backup_data(r, f) for r, f in core.backups(adapter.game, environ, settings)[:BACKUPS_LISTED]]}
 
 
@@ -443,12 +455,48 @@ def lists_report(adapter, args, environ=None):
 
 
 def _chosen(adapter, args, environ):
+    if getattr(args, "last_clean", False):
+        found = mod_runs.last_clean(adapter, environ, args.settings)
+        if found is None:
+            raise core.FixError("No list kept at a game start has run clean yet: one is marked once the game has run on it and "
+                                "closed without new errors.")
+        return found
     if getattr(args, "file", None):
         return mod_lists.find_list(adapter, mod_lists.FILE, args.file, environ, args.settings)
     source, sep, ref = (args.from_list or "").partition(":")
     if not sep or not ref:
         raise core.FixError("Name a list as SOURCE:REF, as `mod-list lists` gives it.")
     return mod_lists.find_list(adapter, source, ref, environ, args.settings)
+
+
+SINCE_WORDS = {mod_runs.CLEAN: "ran with no new errors", mod_runs.NEW_ERRORS: "ran with new errors",
+               mod_runs.NOT_RUN: "has not run since", mod_runs.TOO_LATE: "has run more than once since, so the logs kept "
+               "no longer reach back to before it", mod_runs.RUNNING: "is running now: ask again once it has closed",
+               mod_runs.NO_CHANGE: "", mod_runs.UNKNOWN: "could not be compared with the run before (one of the two runs "
+               "loaded a save and the other did not, or a log is missing)",
+               mod_runs.CHANGED: "is no longer what the list says: it was changed since, outside these tools (the game, RimSort "
+               "or by hand)"}
+
+
+def since_report(adapter, args, environ=None):
+    mod_list = _the_list(adapter, args.list_key)
+    installed = core.Installed(adapter, adapter.installed())
+    is_running = bool(game_running(list(adapter.processes)))
+    _keep_at_start(adapter, installed, environ, args.settings)
+    latest = mod_runs.judge_latest(adapter, installed, environ, args.settings, is_running)
+    data = mod_runs.since_change(adapter, mod_list.key, latest, environ, args.settings, is_running)
+    data["list"] = mod_list.key
+    if data["verdict"] == mod_runs.NO_CHANGE:
+        return Report(f"Mod list: no change to {mod_list.label} made here yet"), data
+    change = data["change"]
+    report = Report(f"Mod list: since \"{change['why']}\", the game {SINCE_WORDS[data['verdict']]}")
+    if data["verdict"] == mod_runs.NEW_ERRORS:
+        report.lines.append(f"{data['new_errors']} error signatures are new since the change. New since is not the same as "
+                            "caused by: a save or a mod update can bring errors too. Undo puts the list back.")
+        report.section("New errors", Table(["Count", "Message", "Points at"],
+                                           [[str(n["count"]), n["message"][:160], ", ".join(n["mods"][:3])]
+                                            for n in data["new"]]))
+    return report, data
 
 
 def compare_report(adapter, args, environ=None, running=game_running, now=None):
@@ -683,6 +731,8 @@ def main(argv=None, environ=None, out=None, post=None, running=None, now=None, s
             report, data = sort(adapter, args, environ, running or game_running, now, Progress(environ))
         elif args.report == "rules":
             report, data = rules(adapter, args, environ, now)
+        elif args.report == "since":
+            report, data = since_report(adapter, args, environ)
         elif args.report == "lists":
             report, data = lists_report(adapter, args, environ)
         elif args.report in ("compare", "load"):
@@ -722,6 +772,7 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS, "surface": "mod-li
                                  "question": "How would my mods be sorted from their rules, and why?"},
                         "rules": {"effect": WRITES, "when": "--apply", "question": "Which load-order rules does the sorter read?"},
                         "lists": {"question": "Which saved mod lists can I load?"},
+                        "since": {"question": "Did my last change to the mod list break anything?"},
                         "compare": {"question": "What would loading a saved mod list change?"},
                         "load": {"effect": WRITES, "when": "--apply", "question": None},
                         "save": {"effect": WRITES, "when": "--apply", "question": None},

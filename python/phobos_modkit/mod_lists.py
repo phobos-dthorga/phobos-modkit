@@ -51,6 +51,7 @@ class SavedList:
     workshop: dict = field(default_factory=dict)    # key: Workshop number
     version: str = ""
     note: str = ""
+    ran: dict = field(default_factory=dict)         # a kept copy's verdict from the run that started with it (1.85.0)
 
 
 def lists_folder(game, environ=None, settings=None):
@@ -82,7 +83,7 @@ def _read_json_list(path, source):
         return None
     return SavedList(source, Path(path).stem, str(data.get("label") or Path(path).stem), str(data.get("when", "")),
                      [str(i) for i in data["ids"]], dict(data.get("names") or {}), dict(data.get("workshop") or {}),
-                     str(data.get("version", "")), str(data.get("note", "")))
+                     str(data.get("version", "")), str(data.get("note", "")), dict(data.get("ran") or {}))
 
 
 def _data(saved):
@@ -269,7 +270,7 @@ def load(adapter, mod_list, chosen, installed, running, environ=None, settings=N
 
 def list_data(saved, with_ids=False):
     data = {"source": saved.source, "ref": saved.ref, "label": saved.label, "when": saved.when, "count": len(saved.ids),
-            "version": saved.version, "note": saved.note}
+            "version": saved.version, "note": saved.note, "ran": dict(saved.ran)}
     if with_ids:
         data["ids"] = list(saved.ids)
     return data

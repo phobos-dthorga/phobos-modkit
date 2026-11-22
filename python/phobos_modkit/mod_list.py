@@ -265,11 +265,13 @@ def _gone_reason(adapter, remembered, workshop_id, subscribed, steam):
     return "No check has seen it on this PC, so the tools cannot say what it was."
 
 
-def check(adapter, mod_list, installed, memory, steam=None, subscribed=None, code_rules=None, library_copies=None):
+def check(adapter, mod_list, installed, memory, steam=None, subscribed=None, code_rules=None, library_copies=None,
+          last_run=None):
     """Every problem with one list. `steam` is {workshop id: Steam's result} when read online, else None; `subscribed` the
     Workshop ids Steam keeps for this game, or None when unknown; `code_rules` {key: {"after": [(id, note)]}} what each mod's code
     builds on (1.84.0), when the adapter can read it; `library_copies` the libraries several mods carry, where an older copy
-    loads first (1.85.0)."""
+    loads first (1.85.0); `last_run` the newest game run's verdict (mod_runs.judge_latest), whose mods without an error count as
+    likely to work."""
     problems = []
     entries = [(position, listed, installed.find(listed)) for position, listed in enumerate(mod_list.ids)]
     active = {}
@@ -322,7 +324,7 @@ def check(adapter, mod_list, installed, memory, steam=None, subscribed=None, cod
     problems += _code_order(adapter, mod_list, entries, active, position_of, code_rules or {})
     problems += _library_clashes(mod_list, library_copies or [])
     problems += _warnings(adapter, mod_list, entries, steam, subscribed)
-    problems += _versions(adapter, mod_list, entries)
+    problems += _versions(adapter, mod_list, entries, last_run)
     problems += _replacements(adapter, mod_list, entries, memory)
     order = {s: i for i, s in enumerate(SEVERITIES)}
     return sorted(problems, key=lambda p: (order[p.severity], p.kind, p.name.lower()))
@@ -447,7 +449,7 @@ def _warnings(adapter, mod_list, entries, steam, subscribed):
     return problems
 
 
-def _versions(adapter, mod_list, entries):
+def _versions(adapter, mod_list, entries, last_run=None):
     """Mods that do not say they work with this version: one note each, except those known or likely to work anyway (1.85.0),
     which share one note saying why."""
     problems, likely = [], []
@@ -461,6 +463,10 @@ def _versions(adapter, mod_list, entries):
         if not reason:
             continue
         anyway = adapter.works_anyway(mod, version) if hasattr(adapter, "works_anyway") else ""
+        key = adapter.key(mod.id)
+        if not anyway and last_run and key in set(last_run.get("active", [])) and \
+                key not in set(last_run.get("error_mods", [])):
+            anyway = f"it ran without an error in your game of {_local_day(last_run.get('started', ''))}"
         if anyway:
             likely.append((_named(mod), anyway))
             continue
@@ -476,6 +482,15 @@ def _versions(adapter, mod_list, entries):
                                 " ".join(f"Because {why}: {', '.join(sorted(names, key=str.lower))}."
                                          for why, names in sorted(by_reason.items(), key=lambda item: -len(item[1])))))
     return problems
+
+
+def _local_day(iso):
+    """An ISO moment as the day on this PC's clock: 23 Nov 2026."""
+    try:
+        moment = datetime.fromisoformat(iso).astimezone()
+    except (TypeError, ValueError):
+        return str(iso)[:10]
+    return f"{moment.day} {moment:%b %Y}"
 
 
 def _replacements(adapter, mod_list, entries, memory):
