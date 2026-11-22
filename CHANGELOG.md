@@ -4,6 +4,17 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.81.0] - 2026-11-23
+
+### Added
+
+- **zeroed: files a crash left filled with zero bytes** (`python -m phobos_modkit zeroed check`; `docs/zeroed.md`; the owner,
+  23 Nov 2026, after a crash left two of the kit's files and a test assembly as zeros). Looks through every repository on D'thorga
+  Companion's games list (`.git` included), the kit's build folder and the Companion's own folder, opening only files written in
+  the last three days (`--days N`, `--all`), and names each zero-filled file with its kind and what puts it right: tracked (git's
+  last commit has it: `zeroed restore --apply` writes it back), committed zeros, untracked, git's own store (`git fsck`), built (a
+  full rebuild) or Companion data. Nothing is deleted. On the owner's PC: 24 folders, none found, 5.8 s with the folders cached
+  and about two minutes straight after a restart.
 ## [1.80.0] - 2026-11-23
 
 ### Added

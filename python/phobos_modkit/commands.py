@@ -46,6 +46,7 @@ COMMANDS = {
     "mod-list": (".mod_list_cli", "what is wrong with a game's list of active mods and why; safe changes, each after a backup"),
     "programs": (".programs", "which other programs the tools use, whether each is on this PC, and where to get it"),
     "records": (".records", "a copy of D'thorga Companion's own records in a folder of your choosing, and how old the newest is"),
+    "zeroed": (".zeroed", "files a crash left filled with zero bytes, what each is, and putting tracked ones back from git"),
     "safe-copies": (".safe_copies", "copies of what cannot be made again, kept apart by kind; checks them and copies them back"),
     "rules": (".rules_cli", "the rules every repository shares, and whether a repository reads them"),
     "settings": (".settings_cli", "the settings the tools read, where each value comes from, and the central settings file"),
