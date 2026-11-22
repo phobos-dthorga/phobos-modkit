@@ -44,6 +44,11 @@ writes its feed files into `$FEED`. It checks out the results branch (or starts 
 folder, writes and checks the index, and commits and pushes **only when something changed**, never force-pushing. The caller
 grants `contents: write` to that job alone; nothing holds a credential. The file's header shows a caller.
 
+**The kit runs at the workflow's own version** (1.90.1), not the caller's pin of it: the caller passes `kit-ref`, the same tag it
+calls the workflow at (`uses: …/nightly-feed.yml@v1.90.1` with `kit-ref: v1.90.1`), and without it the workflow uses the commit
+GitHub says its file came from (`job.workflow_sha`, new in September 2026, not yet seen working here). So a repository whose
+submodule pins an older kit (phobos-rimworld pinned 1.83.0 on 23 Nov 2026) still gets the nightly tools it calls for.
+
 For RimWorld the command is `rimworld-upstream pending --clone-into DIR --feed "$FEED/upstream-watch.json"`: it makes lean clones
 straight from the source register (no GitHub API call) and writes its findings as an `upstream-watch` file.
 

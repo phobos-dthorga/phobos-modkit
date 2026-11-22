@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.90.1] - 2026-11-23
+
+### Fixed
+
+- **The nightly workflow runs the kit at its own version**, not the calling repository's pin of it: the caller passes `kit-ref`
+  (the tag it calls the workflow at), else the commit GitHub says the workflow came from. phobos-rimworld pins kit 1.83.0, which
+  has neither `feeds` nor `--clone-into`, so 1.90.0's workflow would have failed there. The caller no longer needs submodules.
+
 ## [1.90.0] - 2026-11-23
 
 The second slice of going online (D'thorga Companion's `docs/online.md`, S3 and S5, for O3's nightly watch).

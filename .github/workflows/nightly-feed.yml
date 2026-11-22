@@ -3,7 +3,11 @@
 # changed, never force-pushed; D'thorga Companion reads it keyless from GitHub's raw files. Nothing here holds a credential: the
 # push uses the run's own token, which the caller grants as contents: write for this job only.
 #
-# A caller, in the game repository's .github/workflows/ (the kit pinned as the submodule external/phobos-modkit):
+# The kit runs at this workflow's own version (1.90.1): `kit-ref`, which a caller sets to the same tag it calls this workflow at,
+# else the commit GitHub says this workflow file came from (job.workflow_sha). A caller's own pin of the kit plays no part, so a
+# repository whose pin is older still gets the nightly tools it calls for.
+#
+# A caller, in the game repository's .github/workflows/:
 #
 #   on:
 #     schedule: [{cron: "17 16 * * *"}]
@@ -12,11 +16,14 @@
 #     watch:
 #       permissions:
 #         contents: write
-#       uses: phobos-dthorga/phobos-modkit/.github/workflows/nightly-feed.yml@v1.90.0
+#       uses: phobos-dthorga/phobos-modkit/.github/workflows/nightly-feed.yml@v1.90.1
 #       with:
+#         kit-ref: v1.90.1
 #         feed: phobos-rimworld
 #         title: Phobos RimWorld, nightly
-#         command: python3 -m phobos_modkit rimworld-upstream pending --root "$GITHUB_WORKSPACE" --clone-into "$RUNNER_TEMP/clones" --feed "$FEED/upstream-watch.json"
+#         command: >-
+#           python3 -m phobos_modkit rimworld-upstream pending --root "$GITHUB_WORKSPACE" --clone-into "$RUNNER_TEMP/clones"
+#           --feed "$FEED/upstream-watch.json"
 name: Nightly feed
 on:
   workflow_call:
@@ -39,11 +46,16 @@ on:
         type: string
         required: false
         default: companion-results
-      kit:
-        description: Where the calling repository keeps the kit
+      kit-ref:
+        description: The kit's tag or commit to run; the same tag this workflow is called at
         type: string
         required: false
-        default: external/phobos-modkit
+        default: ""
+      kit-repository:
+        description: Where the kit lives
+        type: string
+        required: false
+        default: phobos-dthorga/phobos-modkit
 
 permissions:
   contents: read
@@ -59,14 +71,28 @@ jobs:
       cancel-in-progress: false
     env:
       FEED: ${{ runner.temp }}/feed
+      KIT: ${{ runner.temp }}/phobos-modkit/python
       BRANCH: ${{ inputs.branch }}
       NAME: ${{ inputs.feed }}
       TITLE: ${{ inputs.title }}
       COMMAND: ${{ inputs.command }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          submodules: true
+      - name: Check out the kit at this workflow's own version
+        shell: bash
+        env:
+          KIT_REPOSITORY: ${{ inputs.kit-repository }}
+          KIT_REF: ${{ inputs.kit-ref || job.workflow_sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KIT_REF" ]; then
+            echo "No kit version to run: set kit-ref to the tag this workflow is called at." >&2
+            exit 1
+          fi
+          git init --quiet "$RUNNER_TEMP/phobos-modkit"
+          git -C "$RUNNER_TEMP/phobos-modkit" fetch --quiet --depth=1 "https://github.com/$KIT_REPOSITORY.git" "$KIT_REF"
+          git -C "$RUNNER_TEMP/phobos-modkit" checkout --quiet FETCH_HEAD
+          python3 -c "import sys; sys.path.insert(0, '$KIT'); import phobos_modkit; print('Kit', phobos_modkit.__version__)"
       - name: Check out the results branch, or start it
         shell: bash
         run: |
@@ -80,15 +106,15 @@ jobs:
           fi
       - name: Write the feed
         shell: bash
-        working-directory: ${{ inputs.kit }}/python
+        working-directory: ${{ runner.temp }}/phobos-modkit/python
         run: bash -c "$COMMAND"
       - name: Write the index, kept as it was when no file changed
         shell: bash
-        working-directory: ${{ inputs.kit }}/python
+        working-directory: ${{ runner.temp }}/phobos-modkit/python
         run: python3 -m phobos_modkit feeds index --folder "$FEED" --name "$NAME" --title "${TITLE:-$NAME}" --write
       - name: Check the feed before it is published
         shell: bash
-        working-directory: ${{ inputs.kit }}/python
+        working-directory: ${{ runner.temp }}/phobos-modkit/python
         run: python3 -m phobos_modkit feeds check --folder "$FEED"
       - name: Commit and push, only when the answer changed
         shell: bash
