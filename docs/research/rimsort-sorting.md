@@ -76,6 +76,12 @@ Expanded Framework, and otherwise would hold the framework back, which is exactl
 6. **Workshop requirements stay a rule source, but the weakest after community**: RimSort does not sort by them, so they are the
    least proven of ours.
 
+## What was adopted (1.86.0)
+
+The owner's choices of 23 Nov 2026: proposals 1, 3 and 5; proposal 6 as "weakest of all"; and "top" and "bottom" as RimSort means
+them (group membership), which also ended two moves fewest moves had always flagged on the owner's list. "Libraries first, the
+most used first" (1.84.0) was removed.
+
 ## For a next game
 
 The tiers are game-free; what each game gives is data: its tier-0 ids (the game's own and its loader, such as Harmony), its known

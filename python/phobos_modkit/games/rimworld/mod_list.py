@@ -371,6 +371,13 @@ def _preview(folder):
 class RimWorld:
     game = "rimworld"
     name = "RimWorld"
+    # The sorter's groups (1.86.0), facts about mods as RimSort lists them (app/utils/constants.py, commit d446d3b, read 23 Nov
+    # 2026): loaders that go with the game's own, and known frameworks that go first after them.
+    tier_zero = ("zetrith.prepatcher", "brrainz.harmony", "brrainz.visualexceptions")
+    known_frameworks = ("adaptive.storage.framework", "aoba.framework", "aoba.exosuit.framework", "ebsg.framework",
+                        "imranfish.xmlextensions", "thesepeople.ritualattachableoutcomes", "oskarpotocki.vanillafactionsexpanded.core",
+                        "owlchemist.cherrypicker", "redmattis.betterprerequisites", "smashphil.vehicleframework",
+                        "unlimitedhugs.hugslib", "vanillaexpanded.backgrounds")
     app_id = APP_ID
     processes = PROCESSES
     managers = MANAGERS

@@ -4,6 +4,34 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.86.0] - 2026-11-23
+
+The sorter after the RimSort study (`docs/research/rimsort-sorting.md`; the owner's choices on question cards of 23 Nov 2026:
+groups as RimSort's tiers, needs as RimSort reads them, Workshop requirements weakest, "top" and "bottom" as RimSort means them,
+and a full re-sort's moves told apart by kind).
+
+### Changed
+
+- **Mods sort in groups, as RimSort's tiers**: the game's own and its loaders (Harmony, Prepatcher, Visual Exceptions); then
+  frameworks (a list kept as the RimWorld adapter's data, from the facts RimSort lists) and "load at the top" mods, joined in a
+  full re-sort by the mods others' code builds on; then the rest; then "load at the bottom" mods. **Each of the first two takes
+  in every mod its members must load after, and the last every mod that must load after its members**: what both earlier full
+  re-sorts lacked (Vanilla Backgrounds Expanded must load before Vanilla Expanded Framework, and held it back). Unlike RimSort,
+  every rule still counts across groups: the group is only the first thing chosen by. On the owner's list a full re-sort moves
+  146 mods (204 before) with Vanilla Expanded Framework 20th, Combat Extended 25th and Vehicle Framework 33rd.
+- **"Load at the top" and "at the bottom" mean the group**, as in RimSort, not "as high (or low) as its rules allow". Fewest moves
+  no longer lifts a top mod past others in its group: on the owner's list it now finds no moves (XML Extensions and Vehicle
+  Framework were flagged by every earlier sort).
+- **Needs make no order rule for frameworks and "top" or "bottom" mods**, as RimSort: their needs usually mean "install this".
+- **Workshop requirements are the weakest rule source**, below the community rules: RimSort does not sort by them at all.
+- **Each move says what kind it is** (`kind`): a rule asks for it, its group places it, or (in a full re-sort) names put in order;
+  for the Companion to show the rule moves and fold the rest.
+
+### Removed
+
+- **"Libraries first, the most used first" (1.84.0)**, which counted any mod others load after: it lifted big content mods such as
+  Vanilla Vehicles Expanded 214 places, and narrowed, let the frameworks sink again. The groups replace it.
+
 ### Docs
 
 - **RimSort's sorting studied** (`docs/research/rimsort-sorting.md`; the owner, 23 Nov 2026: study it "before any further

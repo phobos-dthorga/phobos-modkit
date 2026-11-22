@@ -87,8 +87,8 @@ A new game is one module with `adapter()` and a row in `games/__init__.py`'s `MO
 **Where a rule comes from**, strongest first: **yours** (made here, in `rules.json`, or in RimSort), **own** (the mod's load after
 and load before), **needs** (a mod loads after what it needs, as RimSort does with "use modDependencies as loadAfter"), and
 **code** (1.84.0: a mod loads after any mod whose assembly holds the parent classes or interfaces of its own loaded code, read from the assemblies' metadata; a call inside a method does not count), **workshop** (1.79.0: a mod loads after the items its Workshop page lists as required; RimWorld: RimSort's Steam Workshop Database) and **community** (RimWorld: RimSort's Community Rules database). Strength is used only to choose which rule of a loop to set aside
-(agent's order). A mod may also be asked to load **at the top** (as early as its rules allow, never above the game's own unless a
-rule puts it there, as Harmony's does) or **at the bottom**.
+(agent's order). A mod may also be asked to load **at the top** or **at the bottom**: from 1.86.0 that is membership of the top or bottom
+group, as RimSort means it.
 
 - **Fewest moves** (the default): Kahn's sort, choosing among the mods whose rules are met the one highest on the list now; done
   forwards and backwards (building from the end), keeping whichever moves fewer. A **moved** mod is one outside the longest run of
@@ -121,6 +121,14 @@ running and signed in, as the game would (`SteamAppId`), for the seconds a press
 meanwhile. Nothing of Steam's is shipped and no account details are held. A subscribe or unsubscribe call is waited for up to 30
 s; whether it worked is read back from `GetItemState`, not assumed. **Agents never run these on the owner's account**: only the
 person's own press does, so the Steamworks calls had not met a real client when 1.77.0 was made.
+
+### Groups (1.86.0)
+
+From the RimSort study (`docs/research/rimsort-sorting.md`): the game's own and its loaders first; then frameworks (the RimWorld
+adapter's `known_frameworks`) and "top" mods, with, in a full re-sort, the mods others' code builds on; then the rest; then
+"bottom" mods. The first two groups take in every mod their members must load after, the last every mod that must load after
+its members. Every rule still counts across groups. Needs make no order rule for frameworks and "top" or "bottom" mods. Each
+move carries a `kind`: `rule`, `group`, `order` (full re-sort only) or `room`.
 
 ## Backups
 

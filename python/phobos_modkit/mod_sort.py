@@ -13,13 +13,15 @@ Where a rule comes from, strongest first (agent's order, used only to choose whi
 - **code** (1.84.0; the owner's choice, 23 Nov 2026): a mod loads after any mod whose assembly holds the parent classes or
   interfaces of its own loaded code (read from the assemblies' metadata, never loaded), which the game needs first and which
   neither mod may declare; ranked under yours only, since compiled code cannot be wrong about what it builds on;
-- **needs**: a mod loads after the mods it needs (RimSort does the same with "use modDependencies as loadAfter");
+- **needs**: a mod loads after the mods it needs (RimSort does the same with "use modDependencies as loadAfter"); not for
+  frameworks or "top" and "bottom" mods (1.86.0, as RimSort: their needs usually mean "install this");
 - **workshop** (1.79.0; the owner's choice, 23 Nov 2026): a mod loads after the items its Workshop page lists as required, which
   catches needs a mod never wrote into its own files (RimWorld: RimSort's Steam Workshop Database, read where RimSort keeps it);
 - **community**: the community rules a game's mod managers share (RimWorld: RimSort's Community Rules database, read where RimSort
   keeps it and never copied into our repositories).
 
-A mod may also be asked to load **at the top** (as early as its rules allow, but never above the game's own) or **at the bottom**.
+A mod may also be asked to load **at the top** or **at the bottom**. From 1.86.0 these mean what RimSort means (the owner's choice):
+membership of the top group (with the frameworks) or the bottom group, not "as high as its rules allow".
 Rules that form a loop cannot all be kept: the sorter sets aside the weakest link of each loop and says which, where RimSort refuses
 to sort. The fewest-moves sort tries both a forward and a backward pass and keeps whichever moves fewer mods; a moved mod is one
 outside the longest run of mods whose order is kept.
@@ -37,14 +39,26 @@ from pathlib import Path
 from .mod_list import FixError, Installed, folder
 
 YOURS, CODE, OWN, NEEDS, WORKSHOP, COMMUNITY, GAME = "yours", "code", "own", "needs", "workshop", "community", "game"
-STRENGTH = {YOURS: 6, CODE: 5, OWN: 4, NEEDS: 3, WORKSHOP: 2, COMMUNITY: 1, GAME: 0}
-RULE_SOURCES = (YOURS, CODE, OWN, NEEDS, WORKSHOP, COMMUNITY)
+# Workshop requirements are the weakest (1.86.0; the owner's choice of 23 Nov 2026, after the RimSort study found RimSort does not
+# sort by them at all).
+STRENGTH = {YOURS: 6, CODE: 5, OWN: 4, NEEDS: 3, COMMUNITY: 2, WORKSHOP: 1, GAME: 0}
+RULE_SOURCES = (YOURS, CODE, OWN, NEEDS, COMMUNITY, WORKSHOP)
 SOURCE_WORDS = {YOURS: "your rule", CODE: "its code builds on it", OWN: "its own files", NEEDS: "it needs it",
                 WORKSHOP: "its Workshop page requires it",
                 COMMUNITY: "the community rules",
                 GAME: "the game's own load first"}
 FEWEST, FULL = "fewest", "full"
 TOP, NORMAL, BOTTOM = 0, 1, 2
+# Groups (1.86.0; the owner's choices of 23 Nov 2026 after the RimSort study, `docs/research/rimsort-sorting.md`): the game's own
+# and its loaders first, then frameworks and "load at the top" mods, then the rest, then "load at the bottom" mods. Each of the
+# first two takes in every mod its members must load after, and the last every mod that must load after its members. Every rule
+# still counts across groups: the group is only the first thing chosen by.
+GAME_GROUP, TOP_GROUP, MIDDLE_GROUP, BOTTOM_GROUP = 0, 1, 2, 3
+RULE_MOVE, GROUP_MOVE, ORDER_MOVE, ROOM_MOVE = "rule", "group", "order", "room"
+GROUP_WORDS = {GAME_GROUP: "it loads with the game's own and its loaders, or one of them needs it first",
+               TOP_GROUP: "it is a framework or loads at the top, or one of those needs it first: that group loads before "
+                          "the other mods",
+               BOTTOM_GROUP: "it loads at the bottom, or after a mod that does: that group loads after the other mods"}
 RULES_FORMAT = 1
 RULE_KINDS = ("after", "before", "top", "bottom")
 
@@ -338,23 +352,32 @@ def arrange(adapter, mod_list, installed, rule_sets, how=FEWEST):
                        "(What's wrong offers it).")
     listed = dict(zip(keys, ids))
     rules, placings, mods = gather(adapter, keys, installed, rule_sets)
-    best = _strongest(rules)
     game_keys = {k for k, m in mods.items() if m.source == "game"}
     tier = {k: NORMAL for k in keys}
     placed_by = {}
     for placing in sorted(placings, key=lambda p: STRENGTH[p.source]):
         tier[placing.key] = placing.where            # the strongest source's placing wins
         placed_by[placing.key] = placing
+    on = set(keys)
+    frameworks = {adapter.key(i) for i in getattr(adapter, "known_frameworks", ())} & on
+    top_base = frameworks | {k for k in keys if tier[k] == TOP}
+    bottom_base = {k for k in keys if tier[k] == BOTTOM}
+    # Needs make no order rule for frameworks and "top" or "bottom" mods (as RimSort): their needs usually mean "install this".
+    rules = [r for r in rules if not (r.source == NEEDS and r.then in top_base | bottom_base)]
+    best = _strongest(rules)
+    if how == FULL:
+        # In a full re-sort, a mod others' code builds on joins the frameworks.
+        top_base |= {r.first for r in best.values() if r.source == CODE}
+    game_base = (game_keys | {adapter.key(i) for i in getattr(adapter, "tier_zero", ())}) & on
+    group = _groups(keys, list(best), game_base, top_base, bottom_base)
     early = _before_the_game(list(best), game_keys)
     implicit = {}
     for key in keys:
-        if key in game_keys or key in early:
+        if key in game_keys or key in early or how != FULL:
             continue
-        if how == FULL or tier[key] == TOP:
-            for game in game_keys:
-                if (game, key) not in best:
-                    implicit[(game, key)] = Rule(game, key, GAME, "a full re-sort puts the game's own first" if how == FULL
-                                                 else "a mod at the top still loads below the game's own")
+        for game in game_keys:
+            if (game, key) not in best:
+                implicit[(game, key)] = Rule(game, key, GAME, "a full re-sort puts the game's own first")
     set_aside = _settle_loops(keys, {**implicit, **best})
     edges = dict(implicit)
     edges.update(best)
@@ -362,17 +385,10 @@ def arrange(adapter, mod_list, installed, rule_sets, how=FEWEST):
         edges.pop((gone["rule"].first, gone["rule"].then), None)
     old_place = {k: n for n, k in enumerate(keys)}
     if how == FULL:
-        # Libraries first (1.84.0; the owner's choice, 23 Nov 2026, after a full re-sort put Vanilla Expanded Framework 176 places
-        # lower and broke mods that used it without saying so): a mod others load after goes as early as its rules allow, the most
-        # used first, then the rest by name.
-        used = {k: 0 for k in keys}
-        for first, _ in edges:
-            used[first] = used.get(first, 0) + 1
-        priority = {k: (tier[k], 0 if k in game_keys else 1, 0 if used[k] else 1, -used[k], _name(mods, k).lower(), k)
-                    for k in keys}
+        priority = {k: (group[k], 0 if k in game_keys else 1, _name(mods, k).lower(), k) for k in keys}
         order = _kahn(keys, edges, priority)
     else:
-        priority = {k: (tier[k], old_place[k]) for k in keys}
+        priority = {k: (group[k], old_place[k]) for k in keys}
         forward = _kahn(keys, edges, priority)
         backward = _kahn(keys, edges, priority, backwards=True)
         order = min((forward, backward), key=lambda o: len(keys) - len(kept_run(old_place, o)))
@@ -382,11 +398,14 @@ def arrange(adapter, mod_list, installed, rule_sets, how=FEWEST):
     for key in order:
         if key in kept:
             continue
-        moves.append(_explain(key, old_place, new_place, edges, placed_by, mods, kept, how))
+        moves.append(_explain(key, old_place, new_place, edges, placed_by, mods, kept, how, group))
     return {"how": how, "ids": [listed[k] for k in order], "keys": order, "moves": moves,
             "set_aside": [_aside(gone, mods) for gone in set_aside],
             "rules": {source: sum(1 for r in best.values() if r.source == source) for source in RULE_SOURCES},
             "placings": {"top": sum(1 for t in tier.values() if t == TOP), "bottom": sum(1 for t in tier.values() if t == BOTTOM)},
+            "groups": {"game": sum(1 for g in group.values() if g == GAME_GROUP),
+                       "top": sum(1 for g in group.values() if g == TOP_GROUP),
+                       "bottom": sum(1 for g in group.values() if g == BOTTOM_GROUP)},
             "count": len(keys)}
 
 
@@ -396,7 +415,31 @@ def _said(rule, mods):
     return text + (f". {rule.note}" if rule.note else "")
 
 
-def _explain(key, old_place, new_place, edges, placed_by, mods, kept, how=FEWEST):
+def _groups(keys, edges, game_base, top_base, bottom_base):
+    """Each mod's group: the game's own and its loaders with everything they must load after; frameworks and "top" mods with
+    everything they must load after; "bottom" mods with everything that must load after them; the rest in the middle."""
+    before, after = {}, {}
+    for first, then in edges:
+        before.setdefault(then, set()).add(first)
+        after.setdefault(first, set()).add(then)
+
+    def reach(start, links):
+        found, waiting = set(start), list(start)
+        while waiting:
+            for other in links.get(waiting.pop(), ()):
+                if other not in found:
+                    found.add(other)
+                    waiting.append(other)
+        return found
+
+    game = reach(game_base, before)
+    top = reach(top_base, before) - game
+    bottom = reach(bottom_base, after) - game - top
+    return {k: GAME_GROUP if k in game else TOP_GROUP if k in top else BOTTOM_GROUP if k in bottom else MIDDLE_GROUP
+            for k in keys}
+
+
+def _explain(key, old_place, new_place, edges, placed_by, mods, kept, how=FEWEST, group=None):
     reasons, sources = [], []
     for (first, then), rule in edges.items():
         if key not in (first, then) or old_place[first] < old_place[then]:
@@ -404,10 +447,7 @@ def _explain(key, old_place, new_place, edges, placed_by, mods, kept, how=FEWEST
         reasons.append(_said(rule, mods))
         sources.append(rule.source)
     placing = placed_by.get(key)
-    if placing is not None:
-        where = "top" if placing.where == TOP else "bottom"
-        reasons.append(f"{_name(mods, key)} loads as near the {where} as its rules allow ({placing.by})"
-                       + (f". {placing.note}" if placing.note else ""))
+    if reasons and placing is not None:
         sources.append(placing.source)
     if not reasons and how == FEWEST:
         for (first, then), rule in edges.items():
@@ -415,13 +455,22 @@ def _explain(key, old_place, new_place, edges, placed_by, mods, kept, how=FEWEST
                 reasons.append(f"Moved with {_name(mods, then if first == key else first)}: " + _said(rule, mods))
                 sources.append(rule.source)
                 break
-    if not reasons and how == FULL:
-        reasons.append("A full re-sort puts the game's own first, then the mods others depend on (the most used first), then the "
-                       "rest in order of their names.")
+    kind = RULE_MOVE if reasons else ROOM_MOVE
+    level = (group or {}).get(key, MIDDLE_GROUP)
+    if not reasons and level != MIDDLE_GROUP:
+        kind = GROUP_MOVE
+        said = f"{_name(mods, key)}: {GROUP_WORDS[level]}."
+        if placing is not None:
+            said += f" ({placing.by}" + (f": {placing.note}" if placing.note else "") + ")"
+            sources.append(placing.source)
+        reasons.append(said)
+    elif not reasons and how == FULL:
+        kind = ORDER_MOVE
+        reasons.append("No rule places it: a full re-sort puts such mods in order of their names.")
     if not reasons:
         reasons.append("Moved to make room for the mods around it.")
     return {"key": key, "name": _name(mods, key), "from": old_place[key] + 1, "to": new_place[key] + 1,
-            "why": reasons, "sources": sorted(set(sources), key=lambda s: -STRENGTH[s])}
+            "why": reasons, "sources": sorted(set(sources), key=lambda s: -STRENGTH[s]), "kind": kind}
 
 
 def _aside(gone, mods):

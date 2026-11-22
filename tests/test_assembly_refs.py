@@ -166,13 +166,42 @@ class LibraryCopies(unittest.TestCase):
         self.assertEqual(self.copies(), [])
 
 
-class LibrariesFirst(unittest.TestCase):
-    def test_a_full_resort_puts_the_most_used_library_first_after_the_game(self):
-        mods = [mod("core", source="game", name="Core"), mod("apple", needs=["zlib"], name="Apple"),
-                mod("berry", needs=["zlib", "ylib"], name="Berry"), mod("zlib", name="Zlib"), mod("ylib", name="Ylib"),
-                mod("cherry", name="Cherry")]
-        found = sort(["apple", "berry", "cherry", "core", "ylib", "zlib"], mods, how=mod_sort.FULL)
-        self.assertEqual(found["ids"], ["core", "zlib", "ylib", "apple", "berry", "cherry"])
+class Groups(unittest.TestCase):
+    """Groups as RimSort's tiers (1.86.0): frameworks lead and take in what they must load after; top means the group."""
+
+    def setUp(self):
+        from test_mod_sort import Plain
+        Plain.known_frameworks = ("vef",)
+        self.addCleanup(lambda: delattr(Plain, "known_frameworks"))
+
+    def test_a_framework_leads_a_full_resort_and_takes_what_it_must_follow_along(self):
+        mods = [mod("core", source="game", name="Core"), mod("apple", needs=["vef"], name="Apple"),
+                mod("vef", name="Vanilla Expanded Framework"), mod("bg", before=["vef"], name="Backgrounds"),
+                mod("zed", name="Zed")]
+        found = sort(["apple", "zed", "core", "bg", "vef"], mods, how=mod_sort.FULL)
+        self.assertEqual(found["ids"], ["core", "bg", "vef", "apple", "zed"])
+
+    def test_a_frameworks_needs_make_no_order_rule(self):
+        mods = [mod("vef", needs=["apple"], name="Vanilla Expanded Framework"), mod("apple", name="Apple")]
+        found = sort(["vef", "apple"], mods)
+        self.assertEqual(found["moves"], [])
+        self.assertEqual(found["rules"]["needs"], 0)
+
+    def test_top_means_the_group_so_a_top_mod_among_frameworks_stays(self):
+        top = mod_sort.RuleSet(mod_sort.YOURS, "Your rules", "here",
+                               {"fast": {"after": [], "before": [], "top": "", "bottom": None}})
+        mods = [mod("core", source="game"), mod("vef", name="Vanilla Expanded Framework"), mod("fast"), mod("x")]
+        found = sort(["core", "vef", "fast", "x"], mods, [top])
+        self.assertEqual(found["moves"], [])
+
+    def test_workshop_requirements_give_way_even_to_the_community(self):
+        community = mod_sort.RuleSet(mod_sort.COMMUNITY, "Community", "here",
+                                     {"a": {"after": [("b", "")], "before": [], "top": None, "bottom": None}})
+        workshop = mod_sort.RuleSet(mod_sort.WORKSHOP, "Workshop", "here",
+                                    {"b": {"after": [("a", "")], "before": [], "top": None, "bottom": None}})
+        found = sort(["a", "b"], [mod("a"), mod("b")], [community, workshop])
+        self.assertEqual(found["ids"], ["b", "a"])
+        self.assertEqual(found["set_aside"][0]["source"], "workshop")
 
 
 @unittest.skipUnless(shutil.which("dotnet"), "the .NET SDK builds the reader")
