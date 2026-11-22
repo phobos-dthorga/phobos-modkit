@@ -4,6 +4,29 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.84.0] - 2026-11-23
+
+From the owner's log of 23 Nov 2026: after a full re-sort, I Am Mother's compat code failed to load ("ReflectionTypeLoadException
+... PipeSystem") and a save's mechs went missing. The full re-sort had put Vanilla Expanded Framework 176 places lower (15 to 191),
+with Vehicle Framework, Combat Extended, Fortified Features Framework and HugsLib likewise, below mods that build on them without
+saying so. The owner's choices on question cards: libraries first, and rules read from the mods' assemblies.
+
+### Added
+
+- **The sorter reads what each mod's code builds on** (a new rule source, **code**, ranked under yours only): where a type in one
+  of a mod's loaded assemblies (compat folders by LoadFolders.xml included) has a parent class or an interface from another mod's
+  assembly, the mod loads after that one, since the game needs a type's parents the moment it reads it. A reference used only
+  inside a method does not count: Combat Extended calls into Dubs Rimatomics from far above it without fault. On the owner's
+  list: 139 such rules, 3 s the first read and under a second after (answers kept per file version in the kit's cache); I Am
+  Mother loads after Vanilla Expanded Framework. **mod-list check** flags a mod loading before what its code builds on as a
+  problem. The kit's assembly reader gains `refs` (each assembly's name, what it references, and what its types inherit from),
+  shared as `assembly_refs.read_references`.
+
+### Changed
+
+- **A full re-sort puts libraries first**: after the game's own, a mod others load after goes as early as its rules allow, the
+  most used first, then the rest by name. On the owner's list Vanilla Expanded Framework comes 17th, Vehicle Framework 18th and
+  HugsLib 21st, where the 1.79.0 full re-sort put them 191st, 192nd and 181st. Fewest moves is unchanged.
 ## [1.83.0] - 2026-11-23
 
 The picks page (the owner, 23 Nov 2026: "Go ahead and build the picks page", after answering its design's questions: a file each

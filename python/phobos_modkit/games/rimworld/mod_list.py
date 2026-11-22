@@ -25,9 +25,9 @@ from ...mod_list import Mod, ModList, Need
 from ...installs import game_running
 from ...steam.client import library_path as steam_library_path
 from ...mod_lists import FILE, MANAGER, SAVE, SavedList
-from ...mod_sort import COMMUNITY, WORKSHOP, YOURS, RuleSet
+from ...mod_sort import CODE, COMMUNITY, WORKSHOP, YOURS, RuleSet
 from .installs import PROCESSES
-from .loading import STEAM_SUFFIX, bare_id, read_mods_config
+from .loading import STEAM_SUFFIX, bare_id, load_folders, read_mods_config
 from .mods import _about_root, _child, _text
 from .paths import LOG_NAME, config_path, game_path, logs_path, saves_path, workshop_path
 
@@ -404,10 +404,85 @@ class RimWorld:
                 return found
         return None
 
+    def assemblies_of(self, mods, active):
+        """{mod key: [the .dll files the game loads from it]}: its Assemblies folders, in the folders LoadFolders.xml (or the game's
+        default) chooses for this version with these mods active, compat folders included."""
+        found = {}
+        for mod in mods:
+            files = []
+            for folder in load_folders(mod.folder, self._version_number(), active):
+                assemblies = Path(folder) / "Assemblies"
+                if assemblies.is_dir():
+                    files += sorted(str(p) for p in assemblies.rglob("*.dll"))
+            if files:
+                found[self.key(mod.id)] = files
+        return found
+
+    def _version_number(self):
+        return ".".join(self._version.split(".")[:2]) if self._version else ""
+
+    def code_rules(self, reader=None):
+        """{key: {"after": [(the mod whose assembly its code builds on, note)], ...}} for the active list (1.84.0): where a type in
+        one of its loaded assemblies has a parent class or an interface from another mod's assembly, which the game needs loaded
+        first; a reference used only inside a method does not tie the order (Combat Extended calls into Dubs Rimatomics from
+        far above it without fault). An assembly name
+        shipped by more than one mod counts only when the mod names one of them as a need; the game's own are never mods'."""
+        from ...assembly_refs import read_references
+        found = self.lists()
+        if not found:
+            return {}
+        installed = self.installed()
+        by_key = {}
+        for mod in installed:
+            by_key.setdefault(self.key(mod.id), mod)
+        active_keys = [self.key(i) for i in found[0].ids]
+        mods = [by_key[k] for k in dict.fromkeys(active_keys) if k in by_key and by_key[k].source != "game"]
+        files = self.assemblies_of(mods, set(active_keys))
+        read = read_references([f for fs in files.values() for f in fs], self.environ, reader=reader)
+        providers, owned = {}, {}
+        for key, paths in files.items():
+            for path in paths:
+                record = read.get(path)
+                if record:
+                    providers.setdefault(record["assembly"].lower(), set()).add(key)
+                    owned.setdefault(key, []).append(record)
+        rules = {}
+        for key, records in owned.items():
+            mod = by_key[key]
+            needed = {self.key(i) for n in mod.needs for i in n.ids}
+            mine = {r["assembly"].lower() for r in records}
+            seen = set()
+            for record in records:
+                for reference in record["inherits"]:
+                    name = reference.lower()
+                    if name in mine:
+                        continue
+                    others = providers.get(name, set()) - {key}
+                    if len(others) > 1:
+                        others &= needed
+                    if len(others) != 1:
+                        continue
+                    other = next(iter(others))
+                    if other in seen:
+                        continue
+                    seen.add(other)
+                    entry = rules.setdefault(key, {"after": [], "before": [], "top": None, "bottom": None})
+                    entry["after"].append((by_key[other].id, f"Its code ({record['assembly']}) builds on classes from "
+                                                             f"{reference}, which {by_key[other].name} brings: the game must load that "
+                                                             "first."))
+        return rules
+
     def rule_sets(self):
-        """The rules RimSort keeps on this PC: the owner's own, and the community's, each read as it is (1.74.0)."""
+        """The rules RimSort keeps on this PC: the owner's own, and the community's, each read as it is (1.74.0); and what each active
+        mod's code is built on (1.84.0)."""
         base = rimsort_folder(self.environ)
         found = []
+        try:
+            code = self.code_rules()
+        except Exception:   # the sort still stands without them: the reader may be missing (.NET not installed)
+            code = None
+        if code is not None:
+            found.append(RuleSet(CODE, "What their code is built on (their assemblies)", "the active mods' assemblies", code))
         for source, label, names in ((YOURS, "Your rules in RimSort", RIMSORT_USER),
                                      (WORKSHOP, "The Workshop's required items (RimSort's database)", RIMSORT_WORKSHOP),
                                      (COMMUNITY, "The community rules (RimSort's database)", RIMSORT_COMMUNITY)):

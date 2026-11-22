@@ -265,9 +265,10 @@ def _gone_reason(adapter, remembered, workshop_id, subscribed, steam):
     return "No check has seen it on this PC, so the tools cannot say what it was."
 
 
-def check(adapter, mod_list, installed, memory, steam=None, subscribed=None):
+def check(adapter, mod_list, installed, memory, steam=None, subscribed=None, code_rules=None):
     """Every problem with one list. `steam` is {workshop id: Steam's result} when read online, else None; `subscribed` the
-    Workshop ids Steam keeps for this game, or None when unknown."""
+    Workshop ids Steam keeps for this game, or None when unknown; `code_rules` {key: {"after": [(id, note)]}} what each mod's code
+    builds on (1.84.0), when the adapter can read it."""
     problems = []
     entries = [(position, listed, installed.find(listed)) for position, listed in enumerate(mod_list.ids)]
     active = {}
@@ -317,6 +318,7 @@ def check(adapter, mod_list, installed, memory, steam=None, subscribed=None):
                                 adapter.why_unchecked()))
     problems += _needs(adapter, mod_list, entries, installed, active)
     problems += _order(adapter, mod_list, entries, active, position_of)
+    problems += _code_order(adapter, mod_list, entries, active, position_of, code_rules or {})
     problems += _warnings(adapter, mod_list, entries, steam, subscribed)
     problems += _versions(adapter, mod_list, entries)
     order = {s: i for i, s in enumerate(SEVERITIES)}
@@ -380,6 +382,25 @@ def _order(adapter, mod_list, entries, active, position_of):
                                     "together.", "Switch one of them off.",
                                     fixes=[Fix(REMOVE, mod_list.key, listed, f"Switch {_named(mod)} off"),
                                            Fix(REMOVE, mod_list.key, other.id, f"Switch {_named(other)} off")]))
+    return problems
+
+
+def _code_order(adapter, mod_list, entries, active, position_of, code_rules):
+    """A mod loading before one whose classes its code builds on (1.84.0): the game cannot load that code, and the mod's things
+    lose their parts, though neither mod's files say so."""
+    problems = []
+    for position, listed, mod in entries:
+        if mod is None:
+            continue
+        for other_id, note in code_rules.get(adapter.key(listed), {}).get("after", []):
+            key = adapter.key(other_id)
+            other = active.get(key)
+            if other is None or key not in position_of or position_of[key] < position:
+                continue
+            problems.append(Problem("order", PROBLEM, mod_list.key, listed, _named(mod),
+                                    f"{_named(mod)} loads before {_named(other)}, whose classes its code builds on.",
+                                    f"{note} Neither mod says so in its files, so only its code shows it. Move "
+                                    f"{_named(mod)} after {_named(other)}, or sort the list."))
     return problems
 
 

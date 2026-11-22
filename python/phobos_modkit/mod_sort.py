@@ -10,6 +10,9 @@ Where a rule comes from, strongest first (agent's order, used only to choose whi
 
 - **yours**: the owner's rules, made here or in RimSort;
 - **own**: the mod's own files (load after, load before);
+- **code** (1.84.0; the owner's choice, 23 Nov 2026): a mod loads after any mod whose assembly holds the parent classes or
+  interfaces of its own loaded code (read from the assemblies' metadata, never loaded), which the game needs first and which
+  neither mod may declare; ranked under yours only, since compiled code cannot be wrong about what it builds on;
 - **needs**: a mod loads after the mods it needs (RimSort does the same with "use modDependencies as loadAfter");
 - **workshop** (1.79.0; the owner's choice, 23 Nov 2026): a mod loads after the items its Workshop page lists as required, which
   catches needs a mod never wrote into its own files (RimWorld: RimSort's Steam Workshop Database, read where RimSort keeps it);
@@ -33,10 +36,11 @@ from pathlib import Path
 
 from .mod_list import FixError, Installed, folder
 
-YOURS, OWN, NEEDS, WORKSHOP, COMMUNITY, GAME = "yours", "own", "needs", "workshop", "community", "game"
-STRENGTH = {YOURS: 5, OWN: 4, NEEDS: 3, WORKSHOP: 2, COMMUNITY: 1, GAME: 0}
-RULE_SOURCES = (YOURS, OWN, NEEDS, WORKSHOP, COMMUNITY)
-SOURCE_WORDS = {YOURS: "your rule", OWN: "its own files", NEEDS: "it needs it", WORKSHOP: "its Workshop page requires it",
+YOURS, CODE, OWN, NEEDS, WORKSHOP, COMMUNITY, GAME = "yours", "code", "own", "needs", "workshop", "community", "game"
+STRENGTH = {YOURS: 6, CODE: 5, OWN: 4, NEEDS: 3, WORKSHOP: 2, COMMUNITY: 1, GAME: 0}
+RULE_SOURCES = (YOURS, CODE, OWN, NEEDS, WORKSHOP, COMMUNITY)
+SOURCE_WORDS = {YOURS: "your rule", CODE: "its code builds on it", OWN: "its own files", NEEDS: "it needs it",
+                WORKSHOP: "its Workshop page requires it",
                 COMMUNITY: "the community rules",
                 GAME: "the game's own load first"}
 FEWEST, FULL = "fewest", "full"
@@ -358,7 +362,14 @@ def arrange(adapter, mod_list, installed, rule_sets, how=FEWEST):
         edges.pop((gone["rule"].first, gone["rule"].then), None)
     old_place = {k: n for n, k in enumerate(keys)}
     if how == FULL:
-        priority = {k: (tier[k], 0 if k in game_keys else 1, _name(mods, k).lower(), k) for k in keys}
+        # Libraries first (1.84.0; the owner's choice, 23 Nov 2026, after a full re-sort put Vanilla Expanded Framework 176 places
+        # lower and broke mods that used it without saying so): a mod others load after goes as early as its rules allow, the most
+        # used first, then the rest by name.
+        used = {k: 0 for k in keys}
+        for first, _ in edges:
+            used[first] = used.get(first, 0) + 1
+        priority = {k: (tier[k], 0 if k in game_keys else 1, 0 if used[k] else 1, -used[k], _name(mods, k).lower(), k)
+                    for k in keys}
         order = _kahn(keys, edges, priority)
     else:
         priority = {k: (tier[k], old_place[k]) for k in keys}
@@ -380,7 +391,7 @@ def arrange(adapter, mod_list, installed, rule_sets, how=FEWEST):
 
 
 def _said(rule, mods):
-    who = rule.by if rule.source in (YOURS, WORKSHOP, COMMUNITY, GAME) else f"{rule.by}: {SOURCE_WORDS[rule.source]}"
+    who = rule.by if rule.source in (YOURS, CODE, WORKSHOP, COMMUNITY, GAME) else f"{rule.by}: {SOURCE_WORDS[rule.source]}"
     text = f"{_name(mods, rule.then)} loads after {_name(mods, rule.first)} ({who})"
     return text + (f". {rule.note}" if rule.note else "")
 
@@ -405,7 +416,8 @@ def _explain(key, old_place, new_place, edges, placed_by, mods, kept, how=FEWEST
                 sources.append(rule.source)
                 break
     if not reasons and how == FULL:
-        reasons.append("A full re-sort puts the game's own first, then the mods no rule places in order of their names.")
+        reasons.append("A full re-sort puts the game's own first, then the mods others depend on (the most used first), then the "
+                       "rest in order of their names.")
     if not reasons:
         reasons.append("Moved to make room for the mods around it.")
     return {"key": key, "name": _name(mods, key), "from": old_place[key] + 1, "to": new_place[key] + 1,

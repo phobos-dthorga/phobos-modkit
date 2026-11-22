@@ -8,13 +8,16 @@ using Phobos.ModKit.Assemblies;
 //                                                     name or a dotted suffix of one) found in any FILE, and per base type.
 // PhobosModKit.Assemblies calls FILE...               one JSON object per assembly: its types (kind, base, interfaces) and
 //                                                     each method with what it calls and which fields it uses (CallReader).
+// PhobosModKit.Assemblies refs FILE...                one JSON object per assembly: its own name and the names of the
+//                                                     assemblies it is built on (its AssemblyRef table, 1.84.0).
 // FILE may be @LISTFILE, one path per line. Reads metadata only: an assembly is opened as a file and never loaded or run.
 // A file that is not a readable .NET assembly gives an object with an error instead of stopping the run.
-if (args.Length < 1 || (args[0] != "patches" && args[0] != "members" && args[0] != "calls"))
+if (args.Length < 1 || (args[0] != "patches" && args[0] != "members" && args[0] != "calls" && args[0] != "refs"))
 {
     Console.Error.WriteLine("usage: PhobosModKit.Assemblies patches FILE...   (or patches @LISTFILE, one path per line)");
     Console.Error.WriteLine("       PhobosModKit.Assemblies members @TYPESFILE FILE...");
     Console.Error.WriteLine("       PhobosModKit.Assemblies calls FILE...");
+    Console.Error.WriteLine("       PhobosModKit.Assemblies refs FILE...");
     return 2;
 }
 var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
@@ -46,6 +49,16 @@ foreach (string file in Files(args.Skip(1)))
         {
             result = new { path = file, error = "no .NET metadata (a native DLL)" };
         }
+        else if (args[0] == "refs")
+        {
+            var metadata = System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(pe);
+            string name = metadata.IsAssembly ? metadata.GetString(metadata.GetAssemblyDefinition().Name) : "";
+            var references = metadata.AssemblyReferences
+                .Select(handle => metadata.GetString(metadata.GetAssemblyReference(handle).Name))
+                .Distinct()
+                .ToList();
+            result = new { path = file, assembly = name, references, inherits = Inherited(metadata) };
+        }
         else if (args[0] == "calls")
         {
             var callReader = new CallReader(pe);
@@ -65,6 +78,56 @@ foreach (string file in Files(args.Skip(1)))
     writer.WriteLine(JsonSerializer.Serialize(result, options));
 }
 return 0;
+
+// The assemblies this one's types are built on top of: where each type's parent class and interfaces come from. These must be
+// loaded first, since the runtime needs a type's parents the moment it reads the type; a reference used only inside a method
+// body is looked up when the method first runs, so it does not tie the load order (1.84.0).
+static List<string> Inherited(System.Reflection.Metadata.MetadataReader metadata)
+{
+    var found = new HashSet<string>();
+    void Add(System.Reflection.Metadata.EntityHandle handle, int depth)
+    {
+        if (handle.IsNil || depth > 8) return;
+        if (handle.Kind == System.Reflection.Metadata.HandleKind.TypeReference)
+        {
+            var scope = metadata.GetTypeReference((System.Reflection.Metadata.TypeReferenceHandle)handle).ResolutionScope;
+            while (scope.Kind == System.Reflection.Metadata.HandleKind.TypeReference)
+            {
+                scope = metadata.GetTypeReference((System.Reflection.Metadata.TypeReferenceHandle)scope).ResolutionScope;
+            }
+            if (scope.Kind == System.Reflection.Metadata.HandleKind.AssemblyReference)
+            {
+                found.Add(metadata.GetString(metadata.GetAssemblyReference((System.Reflection.Metadata.AssemblyReferenceHandle)scope).Name));
+            }
+        }
+        else if (handle.Kind == System.Reflection.Metadata.HandleKind.TypeSpecification)
+        {
+            // A generic parent, Parent<Argument>: the generic type itself, and each argument that is a class or a struct.
+            var spec = metadata.GetTypeSpecification((System.Reflection.Metadata.TypeSpecificationHandle)handle);
+            var blob = metadata.GetBlobReader(spec.Signature);
+            if (blob.ReadSignatureTypeCode() != System.Reflection.Metadata.SignatureTypeCode.GenericTypeInstance) return;
+            blob.ReadSignatureTypeCode();
+            Add(blob.ReadTypeHandle(), depth + 1);
+            int count = blob.ReadCompressedInteger();
+            for (int n = 0; n < count && blob.RemainingBytes > 0; n++)
+            {
+                var code = blob.ReadSignatureTypeCode();
+                if (code == System.Reflection.Metadata.SignatureTypeCode.TypeHandle) Add(blob.ReadTypeHandle(), depth + 1);
+                else break;   // a nested generic or an array argument: its own parents load with it, and reading on would need a full decoder
+            }
+        }
+    }
+    foreach (var typeHandle in metadata.TypeDefinitions)
+    {
+        var type = metadata.GetTypeDefinition(typeHandle);
+        Add(type.BaseType, 0);
+        foreach (var implementation in type.GetInterfaceImplementations())
+        {
+            Add(metadata.GetInterfaceImplementation(implementation).Interface, 0);
+        }
+    }
+    return found.OrderBy(name => name, StringComparer.Ordinal).ToList();
+}
 
 static List<string> Files(IEnumerable<string> arguments)
 {
