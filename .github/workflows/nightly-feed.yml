@@ -3,9 +3,9 @@
 # changed, never force-pushed; D'thorga Companion reads it keyless from GitHub's raw files. Nothing here holds a credential: the
 # push uses the run's own token, which the caller grants as contents: write for this job only.
 #
-# The kit runs at this workflow's own version (1.90.1): `kit-ref`, which a caller sets to the same tag it calls this workflow at,
-# else the commit GitHub says this workflow file came from (job.workflow_sha). A caller's own pin of the kit plays no part, so a
-# repository whose pin is older still gets the nightly tools it calls for.
+# The kit runs at this workflow's own version (1.90.1): `kit-ref`, which a caller sets to the same tag it calls this workflow at
+# (required from 1.91.1). A caller's own pin of the kit plays no part, so a repository whose pin is older still gets the nightly
+# tools it calls for.
 #
 # A caller, in the game repository's .github/workflows/:
 #
@@ -16,9 +16,9 @@
 #     watch:
 #       permissions:
 #         contents: write
-#       uses: phobos-dthorga/phobos-modkit/.github/workflows/nightly-feed.yml@v1.90.1
+#       uses: phobos-dthorga/phobos-modkit/.github/workflows/nightly-feed.yml@v1.91.1
 #       with:
-#         kit-ref: v1.90.1
+#         kit-ref: v1.91.1
 #         feed: phobos-rimworld
 #         title: Phobos RimWorld, nightly
 #         command: >-
@@ -49,8 +49,7 @@ on:
       kit-ref:
         description: The kit's tag or commit to run; the same tag this workflow is called at
         type: string
-        required: false
-        default: ""
+        required: true
       kit-repository:
         description: Where the kit lives
         type: string
@@ -69,20 +68,24 @@ jobs:
     concurrency:
       group: nightly-feed-${{ github.repository }}-${{ inputs.branch }}
       cancel-in-progress: false
+    # A job's env may not name the runner context (1.91.1): the folders are named in the first step instead.
     env:
-      FEED: ${{ runner.temp }}/feed
-      KIT: ${{ runner.temp }}/phobos-modkit/python
       BRANCH: ${{ inputs.branch }}
       NAME: ${{ inputs.feed }}
       TITLE: ${{ inputs.title }}
       COMMAND: ${{ inputs.command }}
     steps:
+      - name: Name the folders
+        shell: bash
+        run: |
+          echo "FEED=$RUNNER_TEMP/feed" >> "$GITHUB_ENV"
+          echo "KIT=$RUNNER_TEMP/phobos-modkit/python" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check out the kit at this workflow's own version
         shell: bash
         env:
           KIT_REPOSITORY: ${{ inputs.kit-repository }}
-          KIT_REF: ${{ inputs.kit-ref || job.workflow_sha }}
+          KIT_REF: ${{ inputs.kit-ref }}
         run: |
           set -euo pipefail
           if [ -z "$KIT_REF" ]; then

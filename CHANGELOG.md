@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.91.1] - 2026-11-23
+
+### Fixed
+
+- **The nightly workflow starts on GitHub**: 1.90.1's named the `runner` context in the job's `env`, which GitHub refuses before
+  a run begins (phobos-rimworld's first try, 23 Nov 2026). The folders are now named in the first step. `kit-ref` is required, as
+  the `job.workflow_sha` fallback could not be checked (`actionlint` 1.7.12 does not know it yet); the workflow passes
+  `actionlint`, which the feed guide now asks for before every push of a workflow.
+
 ## [1.91.0] - 2026-11-23
 
 After the owner's full re-sort preview with 1.88.0 (23 Nov 2026: "Thoughts?"): the five "moved into their group" mods on their
