@@ -4,6 +4,25 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.90.0] - 2026-11-23
+
+The second slice of going online (D'thorga Companion's `docs/online.md`, S3 and S5, for O3's nightly watch).
+
+### Added
+
+- **`feeds`: small files of data a repository publishes for D'thorga Companion.** `index --write` writes a feed folder's index
+  (each file's kind, size and SHA-256), `check` says whether the index still matches its files and each file passes its kind's
+  check (for a gate), and `read` fetches feeds keyless from GitHub's raw files, using a file only when its size, hash and kind
+  check pass, and **otherwise keeping the last good copy**, which is also what it gives when GitHub can't be reached. Kinds in
+  format 1: `upstream-watch` (checked here), `theme` and `guide` (checked by the program that uses them). Guide: `docs/feeds.md`.
+- **A reusable nightly workflow**, `.github/workflows/nightly-feed.yml`: a game repository calls it on a schedule with the kit
+  command that writes its feed; it publishes to a results branch (`companion-results`) **only when the answer changed**, never
+  force-pushing, with the run's own token for that job alone.
+- **`rimworld-upstream pending --clone-into DIR`** makes or updates lean clones straight from the source register, with no GitHub
+  API call, and **`--feed FILE`** writes the findings as an `upstream-watch` feed file, left untouched when only its time would
+  change. **`--json` now carries every finding as data**, each pending one with a link to its commit on GitHub. First real run
+  (the owner's clones, 30 days): 14 findings in 23 clones.
+
 ## [1.89.0] - 2026-11-23
 
 The first slice of going online (D'thorga Companion's `docs/online.md`, O4's gate lights; the owner's go-ahead and answers of

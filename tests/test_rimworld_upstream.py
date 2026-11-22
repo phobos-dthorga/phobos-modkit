@@ -92,6 +92,55 @@ class PendingTests(unittest.TestCase):
         self.assertEqual(1, len(fresh))
 
 
+@unittest.skipUnless(HAVE_GIT, "git is not installed")
+class FeedTests(unittest.TestCase):
+    """--json carries each finding as data with a link to its commit, and --clone-into makes the clones from the register (1.90.0)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.upstream = root / "upstream-vf"
+        (self.upstream / "Source").mkdir(parents=True)
+        git(self.upstream, "init", "-q", "-b", "main")
+        for key, value in (("core.fsmonitor", "false"), ("user.email", "t@example.com"), ("user.name", "T")):
+            git(self.upstream, "config", key, value)
+        for text, message in ((UPSTREAM_V1, "start"), (UPSTREAM_V2, "VF-412: research check")):
+            (self.upstream / "Source" / "CompUpgradeTree.cs").write_text(text, encoding="utf-8")
+            git(self.upstream, "add", "-A")
+            git(self.upstream, "commit", "-q", "-m", message)
+        self.project = root / "project"
+        (self.project / "src").mkdir(parents=True)
+        (self.project / "src" / "Patch.cs").write_text(OURS, encoding="utf-8")
+        (self.project / "config").mkdir()
+        self.mods = {"vf": {"name": "Vehicle Framework", "repository": self.upstream.as_uri(), "confirmed": "About/About.xml"},
+                     "no": {"name": "Not Confirmed", "repository": "https://example.com/x"}}
+        (self.project / "config" / "source-repos.json").write_text(json.dumps({"mods": self.mods}), encoding="utf-8")
+
+    def run_json(self, *extra):
+        out = io.StringIO()
+        code = up.main(["pending", "--root", str(self.project), "--json", *extra], environ={}, out=out)
+        self.assertEqual(up.EXIT_OK, code, out.getvalue())
+        return json.loads(out.getvalue())["data"]
+
+    def test_clone_into_makes_the_confirmed_clones_and_reads_them(self):
+        clones = Path(self.tmp.name) / "clones"
+        data = self.run_json("--clone-into", str(clones))
+        self.assertEqual([("Vehicle Framework", "cloned")], [(c["mod"], c["action"]) for c in data["clones"]])
+        subjects = [p["subject"] for p in data["pending"]]
+        self.assertIn("VF-412: research check", subjects)
+        finding = data["pending"][subjects.index("VF-412: research check")]
+        self.assertEqual(("CompUpgradeTree.PrerequisitesMet", "Vehicle Framework"), (finding["member"], finding["mod"]))
+        self.assertIsNone(finding["link"], "a repository not on GitHub has no commit page")
+        again = self.run_json("--clone-into", str(clones))
+        self.assertEqual(["unchanged"], [c["action"] for c in again["clones"]])
+
+    def test_a_github_repository_gets_a_link_to_the_commit(self):
+        self.assertEqual("https://github.com/me/vf/commit/abc1234", up._commit_link("https://github.com/me/vf.git", "abc1234"))
+        self.assertEqual("https://github.com/me/vf/commit/abc1234", up._commit_link("https://github.com/me/vf", "abc1234"))
+        self.assertIsNone(up._commit_link("https://example.com/me/vf", "abc1234"))
+
+
 class Item:
     def __init__(self, full):
         self.full = full

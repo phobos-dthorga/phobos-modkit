@@ -13,12 +13,19 @@ depends on; Steam then installs it without asking. This lists those changes on p
 - **pending reads the clones as they are**: bring them up to date with rimworld-sources first. The report names the clone whose
   newest commit is oldest. A commit listed may not be in the Workshop build yet; that is the point.
 - It reads only: assemblies through the decompiler, which reads a file without loading it, and the clones through `git log`.
+  **`--clone-into DIR`** (1.90.0) is the exception: it makes or updates lean clones of the source register's confirmed
+  repositories in that folder first, with no GitHub API call, for a machine that has none yet (D'thorga Companion's nightly watch).
+- **`--json` carries every finding as data** (1.90.0): `data.pending` (each with `mod`, `date`, `commit`, `subject`, `member`,
+  `ours`, `repository` and `link`, the commit's page on GitHub), `data.updates`, `data.clonesRead`, `data.skipped`, `data.clones`.
+  **`--feed FILE`** writes the pending findings as an `upstream-watch` feed file ([feeds](feeds.md)), left as it is when nothing but
+  its time changed.
 
 ```text
 python -m phobos_modkit rimworld-upstream --root REPO --clones DIR             both, for the last 30 days
 python -m phobos_modkit rimworld-upstream updates --root REPO --days 90        only the archive's updates
 python -m phobos_modkit rimworld-upstream updates --root REPO --file Vehicles.dll
 python -m phobos_modkit rimworld-upstream pending --root REPO --clones DIR --days 14
+python -m phobos_modkit rimworld-upstream pending --root REPO --clone-into DIR --feed FEED/upstream-watch.json
 ```
 
 ## What counts as ours

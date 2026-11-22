@@ -3,6 +3,7 @@
     rimworld-upstream updates --root REPO        each archived file's last update: members our C# names that it changed or removed
     rimworld-upstream pending --root REPO --clones FOLDER [--days 30]   commits in the mods' public source since: the same members
     rimworld-upstream --root REPO --clones FOLDER   both
+    rimworld-upstream pending --root REPO --clone-into FOLDER   pending, making or updating lean clones from the source register
 
 Our side is every member our C# names by string or nameof on another assembly's type (the scan rimworld-targets checks:
 Harmony patches, AccessTools, reflection). `updates` compares the newest two versions rimworld-archive kept of each file updated in
@@ -10,7 +11,12 @@ the last --days, member by member, with the code tool's compare (ilspycmd decomp
 rimworld-sources made: for each file that declares one of our target types, the commits since --days ago whose changed lines or
 hunk headers name one of our members. It is a warning ahead of an update: the Workshop build may not hold those commits yet.
 
-Reads only. Matching is by type and member name: a common name (Tick) in a big file can be named by a change that is not to our
+`--clone-into` (1.90.0) makes the lean clones itself, straight from the source register's confirmed repositories, and brings
+existing ones up to date: no GitHub API call, so it suits a machine that is not the owner's, such as D'thorga Companion's nightly
+watch on GitHub's own (phobos-companion docs/online.md, O3). `--json` carries every finding as data (`data.pending`,
+`data.updates`), each pending one with a link to its commit.
+
+Reads, except that --clone-into writes clones into the folder named. Matching is by type and member name: a common name (Tick) in a big file can be named by a change that is not to our
 member, and a member another type inherits is matched only on the type that declares it.
 """
 from __future__ import annotations
@@ -29,7 +35,8 @@ import tempfile
 from ... import cache as derived
 from ...assembly_archive import Archive, ArchiveError, archive_root
 from ...code import compare as code_compare, index as code_index
-from ...manifest import READS
+from ... import feeds, source_clones
+from ...manifest import ONLINE, READS
 from ...report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
 from ...source_clones import folder_name
 from ...targets import scan_tree
@@ -245,6 +252,9 @@ def _parser():
     p.add_argument("--days", type=int, default=DEFAULT_DAYS, help=f"how far back to look (default {DEFAULT_DAYS})")
     p.add_argument("--file", help="updates: only this archived file (Vehicles.dll)")
     p.add_argument("--clones", help="pending: the folder rimworld-sources cloned into")
+    p.add_argument("--clone-into", metavar="FOLDER",
+                   help="pending: make or update lean clones of the register's confirmed repositories here, then read them")
+    p.add_argument("--feed", metavar="FILE", help="pending: also write the findings as an upstream-watch feed file")
     p.add_argument("--register", default=REGISTER, help=f"pending: the source register, relative to the root (default {REGISTER})")
     p.add_argument("--archive", help="the assembly archive (else PHOBOS_ASSEMBLY_ARCHIVE, the settings file, the default)")
     p.add_argument("--decompiler", help="ilspycmd (else PHOBOS_MODKIT_ILSPYCMD, ilspycmdPath in the settings file, the PATH)")
@@ -256,10 +266,27 @@ def _parser():
     return p
 
 
+def _register(root, name):
+    register_file = Path(root) / name
+    try:
+        register = json.loads(register_file.read_text(encoding="utf-8")).get("mods", {})
+    except (OSError, ValueError) as error:
+        raise UpstreamError(f"Cannot read the source register {register_file}: {error}") from error
+    return list(register.values()) if isinstance(register, dict) else list(register)
+
+
+def _commit_link(repository, commit):
+    """The commit's page, for a repository on GitHub; None elsewhere."""
+    found = re.match(r"https?://github\.com/([^/]+/[^/#?]+?)(?:\.git)?/?$", repository or "")
+    return f"https://github.com/{found.group(1)}/commit/{commit}" if found else None
+
+
 def build_report(args, wanted, environ, settings_file, run, now):
+    """(report, whether anything was found, data): the data carries every finding, for a program or a feed."""
     report = Report("rimworld-upstream")
     report.lines.append(f"{len(wanted)} members on other authors' types are named by our C# under {args.root}; changes in the last "
                         f"{args.days} days are looked for.")
+    data = {"days": args.days, "members": len(wanted), "updates": [], "pending": [], "clonesRead": [], "skipped": [], "clones": []}
     found_any = False
     if args.report in ("updates", "both"):
         archive = Archive(archive_root(args.archive, environ, settings_file))
@@ -268,6 +295,8 @@ def build_report(args, wanted, environ, settings_file, run, now):
         rows, skipped, compared = update_rows(archive, wanted, args.days, now, decompiled, code_cache,
                                     lambda: code_compare._find_decompiler(args.decompiler, environ, settings_file), args.file)
         found_any |= bool(rows)
+        data["updates"] = [{"mod": m, "file": f, "versions": v, "member": member, "change": change, "ours": ours}
+                           for m, f, v, member, change, ours in rows]
         if rows:
             report.section("Updates that changed members we name", "The newest two versions the archive kept of each file updated in "
                            "the window. **Check each against our code before the owner plays**: a new signature or a removed member "
@@ -280,17 +309,26 @@ def build_report(args, wanted, environ, settings_file, run, now):
         if skipped:
             report.section("Updates not compared", Bullets([f"{f}: {why}" for f, why in skipped[:args.top]]))
     if args.report in ("pending", "both"):
-        if not args.clones:
-            report.section("Commits in the public source", "Not looked for: name the clones folder with --clones.")
+        clones = args.clone_into or args.clones
+        if not clones:
+            report.section("Commits in the public source", "Not looked for: name the clones folder with --clones, or --clone-into.")
         else:
-            register_file = Path(args.root) / args.register
-            try:
-                register = json.loads(register_file.read_text(encoding="utf-8")).get("mods", {})
-                register = list(register.values()) if isinstance(register, dict) else list(register)
-            except (OSError, ValueError) as error:
-                raise UpstreamError(f"Cannot read the source register {register_file}: {error}") from error
-            rows, fresh, skipped = pending_rows(register, args.clones, wanted, args.days, run)
+            register = _register(args.root, args.register)
+            if args.clone_into:
+                wanted_repos = [(m["name"], m["repository"]) for m in register if m.get("confirmed") and m.get("repository")]
+                outcomes = source_clones.ensure(wanted_repos, args.clone_into, refresh=True, run=run)
+                data["clones"] = [{"mod": o.name, "action": o.action, "detail": o.detail} for o in outcomes]
+                failed = [o for o in outcomes if o.action in ("failed", "refused")]
+                if failed:
+                    report.section("Clones not made or updated", Bullets([f"{o.name}: {o.action}, {o.detail}" for o in failed]))
+            rows, fresh, skipped = pending_rows(register, clones, wanted, args.days, run)
             found_any |= bool(rows)
+            where = {m.get("name"): m.get("repository") for m in register}
+            data["pending"] = [{"mod": m, "date": d, "commit": c, "subject": s, "member": member, "ours": ours,
+                                "repository": where.get(m), "link": _commit_link(where.get(m), c)}
+                               for m, d, c, s, member, ours, _ in rows]
+            data["clonesRead"] = [{"mod": m, "newest": newest} for m, newest in fresh]
+            data["skipped"] = [{"mod": m, "why": why} for m, why in skipped]
             table = [(m, d, c, s, member, ours) for m, d, c, s, member, ours, _ in rows]
             if table:
                 report.section("Commits since that touch members we name", "In the authors' public source, not necessarily in "
@@ -305,7 +343,7 @@ def build_report(args, wanted, environ, settings_file, run, now):
             if skipped:
                 report.section("Clones not read", Bullets([f"{m}: {why}" for m, why in skipped[:args.top]]))
     report.lines.append(LIMITS)
-    return report, found_any
+    return report, found_any, data
 
 
 def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.run, now=None):
@@ -318,18 +356,25 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
         return EXIT_USAGE if stop.code else EXIT_OK
     settings_file = args.settings or settings_file
     redact = keep if args.no_redact else home_redactor()
-    code = EXIT_OK
+    code, data = EXIT_OK, None
     try:
         wanted = wanted_members(args.root)
         if not wanted:
             raise UpstreamError(f"No member on another assembly's type is named by the C# under {args.root}.")
-        report, _ = build_report(args, wanted, environ, settings_file, run, now or datetime.now(timezone.utc))
-    except (UpstreamError, ArchiveError, code_index.CodeError) as error:
+        moment = now or datetime.now(timezone.utc)
+        report, _, data = build_report(args, wanted, environ, settings_file, run, moment)
+        if args.feed:
+            feeds.write_file(args.feed, "upstream-watch", {
+                "game": "rimworld", "checked": moment.strftime("%Y-%m-%dT%H:%M:%SZ"), "days": args.days,
+                "findings": data["pending"], "clonesRead": len(data["clonesRead"]), "skipped": data["skipped"]},
+                volatile=("checked",))
+    except (UpstreamError, ArchiveError, code_index.CodeError, feeds.FeedError) as error:
         report, code = Report("rimworld-upstream: error", [str(error)]), EXIT_FAILED
-    print(envelope_text("rimworld-upstream", report, redact) if args.json else render_markdown(report, redact), file=out)
+    print(envelope_text("rimworld-upstream", report, redact, data) if args.json else render_markdown(report, redact), file=out)
     return code
 
 
 MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
+            "reports": {None: {"effect": ONLINE, "when": "--clone-into"}},
             "note": "Runs ilspycmd on archived assemblies (reading them, never loading them) and git log on the source clones.",
             "question": "Did another author change a method we patch?"}

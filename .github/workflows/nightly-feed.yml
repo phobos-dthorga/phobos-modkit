@@ -1,0 +1,105 @@
+# A nightly feed (1.90.0; D'thorga Companion's docs/online.md, S5): a game repository calls this on a schedule with the kit command
+# that writes its feed files into $FEED. The answer goes to a results branch of the calling repository, committed only when it
+# changed, never force-pushed; D'thorga Companion reads it keyless from GitHub's raw files. Nothing here holds a credential: the
+# push uses the run's own token, which the caller grants as contents: write for this job only.
+#
+# A caller, in the game repository's .github/workflows/ (the kit pinned as the submodule external/phobos-modkit):
+#
+#   on:
+#     schedule: [{cron: "17 16 * * *"}]
+#     workflow_dispatch:
+#   jobs:
+#     watch:
+#       permissions:
+#         contents: write
+#       uses: phobos-dthorga/phobos-modkit/.github/workflows/nightly-feed.yml@v1.90.0
+#       with:
+#         feed: phobos-rimworld
+#         title: Phobos RimWorld, nightly
+#         command: python3 -m phobos_modkit rimworld-upstream pending --root "$GITHUB_WORKSPACE" --clone-into "$RUNNER_TEMP/clones" --feed "$FEED/upstream-watch.json"
+name: Nightly feed
+on:
+  workflow_call:
+    inputs:
+      feed:
+        description: The feed's short name (the repository's, usually)
+        type: string
+        required: true
+      title:
+        description: The feed's title for people
+        type: string
+        required: false
+        default: ""
+      command:
+        description: The kit command that writes the feed files into $FEED; run from the kit's python folder
+        type: string
+        required: true
+      branch:
+        description: The results branch, written only by this run
+        type: string
+        required: false
+        default: companion-results
+      kit:
+        description: Where the calling repository keeps the kit
+        type: string
+        required: false
+        default: external/phobos-modkit
+
+permissions:
+  contents: read
+
+jobs:
+  feed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    concurrency:
+      group: nightly-feed-${{ github.repository }}-${{ inputs.branch }}
+      cancel-in-progress: false
+    env:
+      FEED: ${{ runner.temp }}/feed
+      BRANCH: ${{ inputs.branch }}
+      NAME: ${{ inputs.feed }}
+      TITLE: ${{ inputs.title }}
+      COMMAND: ${{ inputs.command }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+      - name: Check out the results branch, or start it
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+            git fetch --quiet --depth=1 origin "$BRANCH"
+            git worktree add --quiet -B "$BRANCH" "$FEED" FETCH_HEAD
+          else
+            git worktree add --quiet --detach "$FEED"
+            git -C "$FEED" switch --quiet --orphan "$BRANCH"
+          fi
+      - name: Write the feed
+        shell: bash
+        working-directory: ${{ inputs.kit }}/python
+        run: bash -c "$COMMAND"
+      - name: Write the index, kept as it was when no file changed
+        shell: bash
+        working-directory: ${{ inputs.kit }}/python
+        run: python3 -m phobos_modkit feeds index --folder "$FEED" --name "$NAME" --title "${TITLE:-$NAME}" --write
+      - name: Check the feed before it is published
+        shell: bash
+        working-directory: ${{ inputs.kit }}/python
+        run: python3 -m phobos_modkit feeds check --folder "$FEED"
+      - name: Commit and push, only when the answer changed
+        shell: bash
+        working-directory: ${{ runner.temp }}/feed
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet; then
+            echo "The answer is unchanged: nothing to commit."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -m "Nightly feed: $NAME"
+          git push --quiet origin "HEAD:refs/heads/$BRANCH"
