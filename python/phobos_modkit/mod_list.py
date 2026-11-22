@@ -15,6 +15,7 @@ The checks, each a problem, a warning or a note:
   or one mod is listed twice.
 - **Early warnings**: a mod on this PC that the Workshop no longer has, or that Steam no longer keeps up to date for you.
 - **Game version**: a mod that does not say it works with this version of the game.
+- **Known problems** (1.93.0): mods that go wrong together, from the known-problems feeds the kit last read (`--known`).
 
 Changes are made only by `apply_fix` and `undo`, each after a backup of the list as it stood, and both refuse while the game or a
 program that rewrites the list is running. Nothing here deletes a backup.
@@ -99,7 +100,7 @@ class Fix:
 
 @dataclass
 class Problem:
-    kind: str                    # missing, needs, order, clash, twice, removed, unsubscribed, version
+    kind: str                    # missing, needs, order, clash, twice, removed, unsubscribed, version, known
     severity: str
     list_key: str
     id: str
@@ -265,8 +266,32 @@ def _gone_reason(adapter, remembered, workshop_id, subscribed, steam):
     return "No check has seen it on this PC, so the tools cannot say what it was."
 
 
+def known_problems(adapter, mod_list, active, known, version=""):
+    """Known problems from feeds (1.93.0, `feeds` kind known-problems) that this list has: every mod each names is active, the
+    game is this one, and the game version is one it holds for. One warning each, with what goes wrong and what to do, and when
+    and where it was checked. A problem marked fixed is left out."""
+    problems = []
+    for source, content in known or []:
+        for item in content.get("problems", []):
+            if item.get("game") != adapter.game or item.get("fixed"):
+                continue
+            versions = item.get("gameVersions") or []
+            if versions and version and not any(str(version).startswith(v) for v in versions):
+                continue
+            mods = [active.get(adapter.key(m["id"])) for m in item["mods"]]
+            if not all(mods):
+                continue
+            names = [m["name"] for m in item["mods"]]
+            first = mods[0]
+            why = f"{item['do']} (Checked {item['checked']}, from {source}"
+            why += f"; reported at {item['link']})" if item.get("link") else ".)"
+            problems.append(Problem("known", WARNING, mod_list.key, first.id, " and ".join(names),
+                                    item["what"], why, workshop_id=first.workshop_id))
+    return problems
+
+
 def check(adapter, mod_list, installed, memory, steam=None, subscribed=None, code_rules=None, library_copies=None,
-          last_run=None):
+          last_run=None, known=None):
     """Every problem with one list. `steam` is {workshop id: Steam's result} when read online, else None; `subscribed` the
     Workshop ids Steam keeps for this game, or None when unknown; `code_rules` {key: {"after": [(id, note)]}} what each mod's code
     builds on (1.84.0), when the adapter can read it; `library_copies` the libraries several mods carry, where an older copy
@@ -326,6 +351,7 @@ def check(adapter, mod_list, installed, memory, steam=None, subscribed=None, cod
     problems += _warnings(adapter, mod_list, entries, steam, subscribed)
     problems += _versions(adapter, mod_list, entries, last_run)
     problems += _replacements(adapter, mod_list, entries, memory)
+    problems += known_problems(adapter, mod_list, active, known, adapter.game_version())
     order = {s: i for i, s in enumerate(SEVERITIES)}
     return sorted(problems, key=lambda p: (order[p.severity], p.kind, p.name.lower()))
 

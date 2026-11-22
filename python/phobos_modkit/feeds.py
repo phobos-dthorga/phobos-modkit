@@ -9,9 +9,10 @@ for each file its kind, path, size and SHA-256) beside its files. People write t
 default branch; a nightly run writes its own at the top of a results branch (`companion-results`). Game-free: what a game knows
 reaches a feed through the kind of file it writes.
 
-Kinds of file in format 1, and who checks them: `upstream-watch` (a nightly watch's findings, checked here), `theme` (in a
-`theme` folder) and `guide` (Markdown, in a `guide` folder), checked by the program that uses them. A file of a kind this kit
-does not know is skipped and said, never used. `known-problems` and `sort-rules` come with their own checks in a later version.
+Kinds of file in format 1, and who checks them: `upstream-watch` (a nightly watch's findings) and `known-problems` (1.93.0: mods
+that go wrong together, which `mod-list check --known` reads), checked here; `theme` (in a `theme` folder) and `guide` (Markdown,
+in a `guide` folder), checked by the program that uses them. A file of a kind this kit does not know is skipped and said, never
+used. `sort-rules` comes with its own check in a later version.
 
 Reading is keyless, from raw.githubusercontent.com (outside GitHub's hourly API count), cached for six hours. Each file's size and
 hash must match its index, and its kind's check must pass, **or the last good copy is kept** and the report says what failed. When
@@ -48,6 +49,10 @@ SOURCE = re.compile(r"^(?P<repo>[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100})"
                     r"(?:@(?P<ref>[A-Za-z0-9._/-]{1,100}))?(?::(?P<path>[A-Za-z0-9._/-]{0,200}))?$")
 SAFE_PATH = re.compile(r"^(?!/)(?!.*\.\.)[A-Za-z0-9._/-]{1,200}$")
 FINDING_FIELDS = ("mod", "commit", "member")
+PUBLISHED_FOLDER = "feeds"            # where people write a repository's own feed, on its default branch
+PROBLEM_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,80}$")
+DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+MAX_WORDS = 800                       # characters in a known problem's what or do (agent default)
 
 
 class FeedError(ValueError):
@@ -92,7 +97,62 @@ def _check_upstream_watch(value):
             raise FeedError("a finding's link must be a GitHub page")
 
 
-CHECKS = {"upstream-watch": _check_upstream_watch}
+def _check_known_problems(value):
+    """A list of problems, each: an id, the game, the mods (each with its id and name) that must all be active, what goes wrong,
+    what to do, when it was checked, and optionally the game versions it holds for, the author's report and the day it was fixed."""
+    if not isinstance(value, dict) or value.get("format") != FORMAT or not isinstance(value.get("problems"), list):
+        raise FeedError("known problems must be an object of format 1 with its problems as a list")
+    seen = set()
+    for problem in value["problems"]:
+        if not isinstance(problem, dict) or not PROBLEM_ID.match(str(problem.get("id", ""))):
+            raise FeedError("each known problem needs an id of small letters, digits and hyphens")
+        name = problem["id"]
+        if name in seen:
+            raise FeedError(f"{name}: two problems share this id")
+        seen.add(name)
+        if not isinstance(problem.get("game"), str):
+            raise FeedError(f"{name}: needs its game")
+        mods = problem.get("mods")
+        if not isinstance(mods, list) or not mods or not all(
+                isinstance(m, dict) and isinstance(m.get("id"), str) and isinstance(m.get("name"), str) for m in mods):
+            raise FeedError(f"{name}: needs its mods, each with an id and a name")
+        for field in ("what", "do"):
+            text = problem.get(field)
+            if not isinstance(text, str) or not text.strip() or len(text) > MAX_WORDS:
+                raise FeedError(f"{name}: needs its {field} as text of at most {MAX_WORDS} characters")
+        if not DAY.match(str(problem.get("checked", ""))):
+            raise FeedError(f"{name}: needs the day it was checked, as YYYY-MM-DD")
+        if problem.get("fixed") is not None and not DAY.match(str(problem["fixed"])):
+            raise FeedError(f"{name}: its fixed day must be YYYY-MM-DD")
+        versions = problem.get("gameVersions", [])
+        if not isinstance(versions, list) or not all(isinstance(v, str) for v in versions):
+            raise FeedError(f"{name}: its game versions must be a list of text")
+        link = problem.get("link")
+        if link is not None and not (isinstance(link, str) and link.startswith("https://")):
+            raise FeedError(f"{name}: its link must be an https address")
+
+
+CHECKS = {"upstream-watch": _check_upstream_watch, "known-problems": _check_known_problems}
+
+
+def kept_contents(cache, kind):
+    """Every last good copy of a kind the kit keeps, from any feed read before: [(where it came from, its content)]. Reads only
+    the kit's own cache, never the network, so a check can use what the feeds last gave while offline."""
+    found = []
+    root = Path(cache) / "kept"
+    if not root.is_dir():
+        return found
+    for marker in sorted(root.rglob("*.kept.json")):
+        file = Path(str(marker)[: -len(".kept.json")])
+        try:
+            data = file.read_bytes()
+            relative = file.relative_to(root).as_posix().split("/", 3)[-1]
+            if kind_of(relative, data) != kind:
+                continue
+            found.append((file.relative_to(root).parts[0].replace("--", "/"), check_file(kind, data)))
+        except (OSError, ValueError, FeedError):
+            continue
+    return found
 
 
 def check_file(kind, data):
@@ -306,6 +366,9 @@ def _parser():
     r.add_argument("--root", action="append", default=[],
                    help="a repository on this PC: its nightly results, found from its own GitHub remote (repeatable)")
     r.add_argument("--results", default=RESULTS_BRANCH, help="with --root, the results branch (default %(default)s)")
+    r.add_argument("--from", dest="side", choices=("results", "published"), default="results",
+                   help="with --root: the nightly results branch (default), or the feeds/ folder people publish on the "
+                        "default branch")
     r.add_argument("--refresh", action="store_true", help="ask GitHub again even when the last answer is under six hours old")
     r.add_argument("--cache", help="the kit's cache folder (default: the setting, then the temporary folder)")
     for sub_parser in (i, c, r):
@@ -358,7 +421,7 @@ def main(argv=None, out=None, environ=None, get=None, clock=time.time, settings_
     for root in args.root:
         name = repos.github_name(root)
         if name:
-            sources.append(f"{name}@{args.results}:")
+            sources.append(f"{name}@{args.results}:" if args.side == "results" else f"{name}:{PUBLISHED_FOLDER}")
         else:
             off_github.append(Path(root).resolve().name)
     if not sources and not off_github:

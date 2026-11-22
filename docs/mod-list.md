@@ -25,7 +25,7 @@ mod" for a patch whose author had taken it off the Workshop). The Companion's Mo
 
 | Command | What it does | Effect |
 | --- | --- | --- |
-| `mod-list check --name GAME [--online] [--list KEY]` | Every problem, warning and note with each list, with the changes offered | reads (online with `--online`) |
+| `mod-list check --name GAME [--online] [--known] [--list KEY]` | Every problem, warning and note with each list, with the changes offered; `--known` adds the known problems the kit's feeds last gave (1.93.0, no network) | reads (online with `--online`) |
 | `mod-list fix --name GAME --list KEY --remove ID [--apply]` | Takes a mod off a list; `--remove-extra ID` keeps its first entry; `--enable ID` switches it on just before the first mod that needs it | writes with `--apply` |
 | `mod-list fix --name GAME --list KEY --move ID --to PLACE [--apply]` | Moves a mod to a place (1 is first); `--enable ID --to PLACE` switches one on there (1.73.0) | writes with `--apply` |
 | `mod-list sort --name GAME --list KEY [--full] [--apply]` | The list sorted from every rule, each move explained; `--full` rebuilds the whole order (1.74.0) | writes with `--apply` |
@@ -57,6 +57,7 @@ mod" for a patch whose author had taken it off the Workshop). The Companion's Mo
 | `order` | warning | A mod loads before one it must load after, or the reverse | None here: `sort` puts it right |
 | `removed` | warning | A mod on this PC that the Workshop no longer has (with `--online`) | None |
 | `unsubscribed` | warning | A Workshop mod on this PC that Steam no longer keeps for you | None |
+| `known` | warning | Every mod a known problem names is active, on a game version it holds for (with `--known`, from a known-problems feed; 1.93.0) | None: its words say what to do |
 | `library` | note | Several active mods carry the same library and an older copy loads first (1.85.0) | None: load the newer above, or ask for an update |
 | `version-likely` | note | Mods that do not say they work with this version but are known or likely to, and why (1.85.0) | None |
 | `replacement` | note | A missing or out-of-date mod has a continued version for this game version (1.85.0) | Subscribe to it |

@@ -146,6 +146,22 @@ class RimWorldChecks(unittest.TestCase):
         found = core.check(adapter, adapter.lists()[0], installed, {}, None, adapter.subscribed())
         self.assertEqual([p.kind for p in found], ["unsubscribed"])
 
+    def test_a_known_problem_is_warned_of_only_when_every_mod_it_names_is_active(self):
+        problem = {"id": "market-hostel", "game": "rimworld", "checked": "2026-11-23", "what": "Market and Hostel clash.",
+                   "do": "Switch one off.", "mods": [{"id": "Example.Market", "name": "Market"},
+                                                     {"id": "example.hostel", "name": "Hostel"}]}
+        absent = dict(problem, id="market-library", mods=[{"id": "example.market", "name": "Market"},
+                                                          {"id": "example.library", "name": "Library"}])
+        fixed = dict(problem, id="fixed-one", fixed="2026-11-20")
+        other_game = dict(problem, id="other-game", game="project-zomboid")
+        old_version = dict(problem, id="old-version", gameVersions=["1.5"])
+        known = [("me/game:feeds", {"problems": [problem, absent, fixed, other_game, old_version]})]
+        found = core.check(self.adapter, self.adapter.lists()[0], self.installed, {}, None, None, known=known)
+        warned = [p for p in found if p.kind == "known"]
+        self.assertEqual(["Market and Hostel"], [p.name for p in warned])
+        self.assertEqual("warning", warned[0].severity)
+        self.assertIn("Switch one off. (Checked 2026-11-23, from me/game:feeds.)", warned[0].why)
+
     def test_problems_come_before_warnings_and_notes(self):
         order = [p.severity for p in self.problems]
         self.assertEqual(order, sorted(order, key=core.SEVERITIES.index))

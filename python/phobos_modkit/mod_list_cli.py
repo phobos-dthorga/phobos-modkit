@@ -1,6 +1,6 @@
 """mod-list: what is wrong with a game's list of active mods, why, and safe changes that put it right (1.72.0).
 
-    mod-list check --name GAME [--online] [--list KEY]     every problem, warning and note, with the changes offered
+    mod-list check --name GAME [--online] [--known] [--list KEY]   every problem, warning and note, with the changes offered
     mod-list mods --name GAME                                          every mod on this PC, and where each list has it (1.73.0)
     mod-list fix --name GAME --list KEY --remove ID [--apply]          take a mod off a list (also --remove-extra, --enable)
     mod-list fix --name GAME --list KEY --move ID --to PLACE [--apply] move a mod to a place, 1 first (1.73.0)
@@ -34,6 +34,8 @@ import os
 from pathlib import Path
 import sys
 
+from . import cache as derived
+from . import feeds
 from . import history
 from . import mod_list as core
 from . import mod_lists
@@ -69,6 +71,8 @@ def _parser():
     check = sub.add_parser("check", help="every problem with the game's lists of active mods, why, and the changes offered")
     _common(check)
     check.add_argument("--online", action="store_true", help="ask Steam which Workshop items still exist")
+    check.add_argument("--known", action="store_true",
+                       help="also warn of known problems, from the known-problems feeds the kit last read (no network)")
     fix = sub.add_parser("fix", help="one change to a list, after a backup; only with --apply")
     _common(fix)
     change = fix.add_mutually_exclusive_group(required=True)
@@ -156,8 +160,8 @@ def _steam_results(ids, post=None):
     return {item.id: item.result for item in items}
 
 
-def survey(adapter, environ=None, settings=None, online=False, list_key=None, post=None, progress=None, now=None):
-    """Everything a check finds, as plain data."""
+def survey(adapter, environ=None, settings=None, online=False, list_key=None, post=None, progress=None, now=None, known=False):
+    """Everything a check finds, as plain data. `known` adds the known problems the kit's feeds last gave (1.93.0)."""
     progress = progress or (lambda *a, **k: None)
     progress("Reading your mods", 1, 4)
     mods = adapter.installed()
@@ -191,9 +195,14 @@ def survey(adapter, environ=None, settings=None, online=False, list_key=None, po
             library_copies = adapter.library_copies() if hasattr(adapter, "library_copies") else None
         except Exception as error:   # the check stands without them: the reader may be missing (.NET not installed)
             notes.append(f"What each mod's code builds on could not be read ({error}).")
+    known_lists = None
+    if known:
+        known_lists = feeds.kept_contents(derived.folder(feeds.CACHE_FOLDER, None, environ, settings), "known-problems")
+        if not known_lists:
+            notes.append("No known-problems feed has been read on this PC yet, so none were checked for.")
     for mod_list in lists:
         problems += core.check(adapter, mod_list, installed, memory, steam, subscribed, code_rules, library_copies,
-                               last_run)
+                               last_run, known_lists)
     progress("Done", 4, 4)
     counts = {s: sum(1 for p in problems if p.severity == s) for s in core.SEVERITIES}
     return {"game": adapter.game, "name": adapter.name, "supported": True, "version": adapter.game_version(),
@@ -712,7 +721,8 @@ def main(argv=None, environ=None, out=None, post=None, running=None, now=None, s
     adapter = mod_list_adapter(row, environ, args.settings, args.data)
     try:
         if args.report == "check":
-            data = survey(adapter, environ, args.settings, args.online, args.list_key, post, Progress(environ), now)
+            data = survey(adapter, environ, args.settings, args.online, args.list_key, post, Progress(environ), now,
+                          args.known)
             report = check_report(data)
         elif args.report == "mods":
             data = mods_data(adapter, environ, args.settings, now, Progress(environ))

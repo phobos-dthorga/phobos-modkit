@@ -4,6 +4,21 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.93.0] - 2026-11-23
+
+The third slice of going online (D'thorga Companion's `docs/online.md`, O2: known problems, the owner's choice of "public, facts
+and links").
+
+### Added
+
+- **Known problems, a feed kind**: mods that go wrong together, each with the mods that must all be active, what goes wrong,
+  what to do, the day it was checked and what it was checked against, and optionally the game versions it holds for, the author's
+  report and the day it was fixed. `feeds` checks every entry before it is used or published. Guide: `docs/feeds.md`.
+- **`mod-list check --known`** warns of each known problem the list has (every mod it names active, on a game version it holds
+  for, not marked fixed), from the last good copies the kit keeps, with no network. Without a feed read yet, it says so.
+- **`feeds read --root REPO --from published`** reads a repository's own `feeds/` folder on its default branch, as `--from
+  results` (the default) reads its nightly results.
+
 ## [1.92.0] - 2026-11-23
 
 ### Added

@@ -98,6 +98,25 @@ class FolderTests(unittest.TestCase):
         changed = {**later, "findings": []}
         self.assertTrue(feeds.write_file(self.folder / "upstream-watch.json", "upstream-watch", changed, volatile=("checked",)))
 
+    def test_known_problems_are_checked_and_kept_copies_found_offline(self):
+        good = {"problems": [{"id": "a-and-b", "game": "rimworld", "checked": "2026-11-23", "what": "A and B clash.",
+                              "do": "Switch B off.", "mods": [{"id": "a.mod", "name": "A"}, {"id": "b.mod", "name": "B"}],
+                              "link": "https://github.com/a/b/issues/1"}]}
+        self.assertTrue(feeds.write_file(self.folder / "known-problems.json", "known-problems", good))
+        for broken in ({"problems": [{**good["problems"][0], "checked": "23 Nov"}]},
+                       {"problems": [{**good["problems"][0], "mods": []}]},
+                       {"problems": [{**good["problems"][0], "link": "http://plain.example"}]},
+                       {"problems": [good["problems"][0], good["problems"][0]]}):
+            with self.subTest(broken=broken), self.assertRaises(feeds.FeedError):
+                feeds.write_file(self.folder / "bad.json", "known-problems", broken)
+        cache = Path(self.tmp.name) / "cache"
+        kept = feeds._kept_folder(cache, "me/game", "HEAD", "feeds")
+        feeds._keep(kept, "known-problems.json", (self.folder / "known-problems.json").read_bytes(), "x")
+        feeds._keep(kept, "upstream-watch.json", (self.folder / "upstream-watch.json").read_bytes(), "y")
+        found = feeds.kept_contents(cache, "known-problems")
+        self.assertEqual(["me/game"], [where for where, _ in found])
+        self.assertEqual("a-and-b", found[0][1]["problems"][0]["id"])
+
     def test_a_kind_this_kit_does_not_know_is_refused(self):
         with self.assertRaises(feeds.FeedError):
             feeds.check_file("telemetry", b"{}")

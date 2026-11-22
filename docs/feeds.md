@@ -39,10 +39,17 @@ keyless from `companion-results`.
 | Kind | Where | Checked by |
 | --- | --- | --- |
 | `upstream-watch` | A JSON file naming its kind: `game`, `checked`, `days`, `findings` (each with `mod`, `commit`, `member`, and `date`, `subject`, `ours`, `repository`, `link` to the commit on GitHub), `clonesRead`, `skipped` | This kit |
+| `known-problems` (1.93.0) | A JSON file naming its kind: `game`, `problems` (each with an `id`, its `game`, the `mods` that must all be active, each with `id` and `name`, `what` goes wrong, what to `do`, the day it was `checked`; optionally `gameVersions`, `versions` in words, a `link` to the author's report, and `fixed`, the day it was fixed, after which it is no longer shown) | This kit; `mod-list check --known` reads it |
 | `theme` | A JSON file in a `theme` folder | The program that uses it (D'thorga Companion's theme checks) |
 | `guide` | A Markdown file in a `guide` folder | The program that uses it (the Companion's Guide checks) |
 
-`known-problems` and `sort-rules` come in a later version, each with its own check.
+`sort-rules` comes in a later version, with its own check.
+
+**Known problems are public statements about other authors' mods** (the owner's choice, 23 Nov 2026: "public, facts and links"),
+so each one is checked as a report would be before it is published (phobos-modkit `rules/reports.md`): against the author's
+newest public source, or the Workshop build where there is none, and its `versions` says what it was checked against and what
+was not. Plain facts and what to do; no blame. A repository publishes its own in `feeds/` on its default branch; `feeds read
+--root REPO --from published` reads it, and `mod-list check --known` uses the last good copy the kit keeps, with no network.
 
 ## The nightly watch
 
