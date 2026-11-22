@@ -209,7 +209,8 @@ def mods_data(adapter, environ=None, settings=None, now=None, progress=None):
             continue
         seen.add(key)
         rows.append({"key": key, "id": mod.id, "name": mod.name, "source": mod.source, "workshop_id": mod.workshop_id,
-                     "authors": mod.authors, "versions": list(mod.versions), "needs": [n.name or n.ids[0] for n in mod.needs]})
+                     "authors": mod.authors, "versions": list(mod.versions), "needs": [n.name or n.ids[0] for n in mod.needs],
+                     "preview": mod.preview or None})
     lists = []
     for mod_list in adapter.lists():
         lists.append({"key": mod_list.key, "label": mod_list.label, "writable": mod_list.writable, "count": len(mod_list.ids),

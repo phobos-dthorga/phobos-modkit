@@ -9,8 +9,8 @@ import support
 from phobos_modkit import mod_list as core
 from phobos_modkit import mod_list_cli as cli
 from phobos_modkit.games import mod_list_game
-from phobos_modkit.games.rimworld.mod_list import RimWorld, read_about
-from phobos_modkit.games.zomboid.mod_list import Zomboid as ZomboidAdapter, info_file, read_list
+from phobos_modkit.games.rimworld.mod_list import RimWorld, _preview, read_about
+from phobos_modkit.games.zomboid.mod_list import Zomboid as ZomboidAdapter, _poster, info_file, read_list
 from phobos_modkit.manifest import describe
 
 
@@ -278,6 +278,15 @@ class ZomboidLists(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_a_mod_names_the_poster_its_mod_info_names(self):
+        # 1.82.0: the Mod list shows each mod's own picture.
+        mod_info(self.data / "mods" / "Lib", ["id=Lib", "name=Library", "versionMin=42.0.0", "poster=poster.png"])
+        (self.data / "mods" / "Lib" / "poster.png").write_bytes(b"png")
+        mods = {m.id: m for m in self.adapter.installed()}
+        self.assertEqual(Path(mods["Lib"].preview).name, "poster.png")
+        self.assertEqual(mods["Chem"].preview, "")
+        self.assertEqual(_poster(self.data, "../outside.png"), "")
+
     def test_lists_ids_with_spaces_and_apostrophes(self):
         self.assertEqual(read_list(self.data / "mods" / "default.txt"), ["Chem", "Lib", "Some Workshop Mod's Name"])
         self.assertEqual([m.key for m in self.adapter.lists()], ["default", "save:Sandbox/Run 1"])
@@ -384,3 +393,13 @@ class Command(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Previews(unittest.TestCase):
+    def test_a_rimworld_mod_names_its_about_preview_when_it_has_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            about(Path(tmp) / "Boats", "a.boats", "Boats")
+            about(Path(tmp) / "Oars", "a.oars", "Oars")
+            (Path(tmp) / "Boats" / "About" / "Preview.png").write_bytes(b"png")
+            self.assertEqual(Path(_preview(Path(tmp) / "Boats")).name, "Preview.png")
+            self.assertEqual(_preview(Path(tmp) / "Oars"), "")

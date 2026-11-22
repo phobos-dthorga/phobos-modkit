@@ -198,6 +198,8 @@ class StatusTests(unittest.TestCase):
             mod = answer["data"]["mods"][0]
             self.assertEqual((mod["state"], mod["installed"]["version"], mod["repository"]["version"]), ("behind", "0.2.0", "0.3.0"))
             self.assertEqual(mod["installed"]["record"]["version"], "0.2.0")
+            # 1.82.0: each copy names its folder, so a program can show a changed picture from both copies.
+            self.assertTrue(all(Path(c["folder"]).is_dir() for c in [mod["installed"], mod["repository"], *mod["backups"]]))
             self.assertEqual(mod["changelog"], "mods/Thing/CHANGELOG.md")
             self.assertEqual([e["lead"] for e in mod["update"]["gain"]], ["Sails.", "Not safe to remove: saves hold the sails."])
             self.assertEqual(mod["update"]["summaries"], {"0.3.0": "Third release"})

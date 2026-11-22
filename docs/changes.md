@@ -59,6 +59,10 @@ Files come code first, then data (XML, JSON), then words (Markdown, text), then 
 file is (csharp, lua, xml, python, rust...) so a program can colour it; it is never a colour. At most 600 diff lines are kept for
 a file and 8,000 for an answer; a file cut short says `truncated`, and its `additions` and `deletions` still count every line.
 
+`changes commits --root REPO [--top N] [--skip N]` (1.82.0) lists a repository's newest commits for one with no changelog: each
+`hash`, `time`, `author`, `subject`, `files` (how many it changed) and `binary` (how many of those aren't text), with `total`, the
+count of every commit. `changes entry --commit HASH` then shows one without `--changelog`, naming no entries.
+
 A file that isn't text has no lines to show, so it says what it is instead (1.78.0): `media` is `picture`, `texture`, `sound`,
 `video`, `model`, `font`, `document`, `archive`, `program` or `other`, by its extension, and null for a text file. `sizeBefore` and
 `sizeAfter` are its bytes in the commit's parent and the commit (for changes in no commit yet, the last commit and the file on

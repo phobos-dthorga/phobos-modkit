@@ -40,7 +40,8 @@ def _parser():
                                 formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__.split("\n\n", 1)[1])
     sub = p.add_subparsers(dest="report", required=True)
     for name, helptext in (("status", "active mods whose encoded textures are stale, missing or left over"),
-                           ("encode", "re-encode named mods' textures with RimSort's todds preset")):
+                           ("encode", "re-encode named mods' textures with RimSort's todds preset"),
+                           ("pairs", "one active mod's pictures, each beside the encoded texture the game loads (1.82.0)")):
         s = sub.add_parser(name, help=helptext)
         s.add_argument("--settings", help="a JSON settings file naming the game, Workshop, Config and todds paths")
         s.add_argument("--game", help="the RimWorld folder")
@@ -48,6 +49,9 @@ def _parser():
         if name == "status":
             s.add_argument("--all", action="store_true", help="list every active mod, not only those needing attention")
             s.add_argument("--top", type=int, default=40, help="mods per table (default 40)")
+        elif name == "pairs":
+            s.add_argument("--mod", required=True, help="a package ID or folder name")
+            s.add_argument("--top", type=int, default=2000, help="pairs listed at most (default 2,000)")
         else:
             s.add_argument("--mod", action="append", required=True, help="a package ID or folder name (repeatable)")
         s.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
@@ -147,6 +151,18 @@ def _pick(mods, wanted):
     return picked
 
 
+def pairs_report(mod, top, progress):
+    progress(f"Pairing the pictures of {mod.name} with their encoded textures")
+    found = textures.pairs(mod.folder)
+    counts = {state: sum(1 for p in found if p["state"] == state) for state in ("fresh", "stale", "missing", "left-over")}
+    report = Report(f"Textures of {mod.name}: {len(found):,} pictures and encoded textures")
+    report.lines.append(", ".join(f"{n:,} {state}" for state, n in counts.items() if n) or "No textures.")
+    report.section("Pairs", Table(["Picture", "Encoded texture", "State"],
+                                  [[p["picture"] or "-", p["encoded"] or "-", p["state"]] for p in found[:40]], total=len(found)))
+    return report, {"name": mod.name, "packageId": mod.package_id, "folder": str(mod.folder), "flipped": True, "counts": counts,
+                    "total": len(found), "pairs": found[:max(1, top)]}
+
+
 def main(argv=None, environ=None, out=None, running=None, run=None, mods=None, now=None):
     out = out or sys.stdout
     environ = os.environ if environ is None else environ
@@ -165,6 +181,8 @@ def main(argv=None, environ=None, out=None, running=None, run=None, mods=None, n
         if args.report == "status":
             report, data = status(found, running, todds, args.all, args.top, now, progress,
                                   textures.HeaderCache.default(environ, args.settings))
+        elif args.report == "pairs":
+            report, data = pairs_report(_pick(found, [args.mod])[0], args.top, progress)
         else:
             picked = _pick(found, args.mod)
             if running:
@@ -211,5 +229,6 @@ def main(argv=None, environ=None, out=None, running=None, run=None, mods=None, n
 
 MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
             "reports": {"status": {"question": "Do any mods' textures need encoding before my next launch?", "surface": "textures"},
+                        "pairs": {"surface": "texture-pairs"},
                         "encode": {"effect": WRITES, "note": "writes .dds files into the named mods' folders, Workshop ones included, "
                                                              "and shortens the mip chains of those Waylith would unpack"}}}

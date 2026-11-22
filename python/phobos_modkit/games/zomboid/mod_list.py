@@ -94,7 +94,16 @@ def read_mod(mod_folder, source, workshop_id, version):
     return Mod(mod_id, first("name") or mod_id, source, str(mod_folder), workshop_id or (url_id.group(1) if url_id else ""),
                first("authors") or first("author"), [Need((i,)) for i in _ids(first("require"))],
                _ids(first("loadmodafter")), _ids(first("loadmodbefore")), _ids(first("incompatible")), [],
-               first("versionmin"), first("versionmax"))
+               first("versionmin"), first("versionmax"), preview=_poster(path.parent, first("poster")))
+
+
+def _poster(info_folder, poster):
+    """The picture mod.info names as its poster, beside that mod.info (1.82.0); "" when it names none or the file is not there."""
+    name = poster.strip().replace("\\", "/")
+    if not name or name.startswith("/") or ".." in name.split("/"):
+        return ""
+    path = Path(info_folder) / name
+    return str(path) if path.is_file() else ""
 
 
 def read_list(path):

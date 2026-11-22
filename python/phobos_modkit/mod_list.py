@@ -76,6 +76,7 @@ class Mod:
     versions: list = field(default_factory=list)       # the game versions it says it works with; empty when it says none
     version_min: str = ""
     version_max: str = ""
+    preview: str = ""            # its own picture, as the game's mod menu or the Workshop shows it; "" when it has none (1.82.0)
 
 
 @dataclass

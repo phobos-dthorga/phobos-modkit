@@ -403,7 +403,8 @@ class EntryCode:
 
 def commit_code(root, changelog, commit_hash):
     """What one commit changed, as entry_code gives it, with every entry it wrote into the changelog: for a fact on the timeline,
-    whose entries may since have been reworded or removed. changelog may be one the repository no longer has."""
+    whose entries may since have been reworded or removed. changelog may be one the repository no longer has, or None for a
+    repository that keeps none (1.82.0): then no entries are named and no file is left out as the changelog."""
     if not re.fullmatch(r"[0-9a-f]{7,40}", commit_hash or ""):
         raise ChangesError(f"{commit_hash!r} is not a commit.")
     commit = describe(root, commit_hash)
@@ -411,10 +412,38 @@ def commit_code(root, changelog, commit_hash):
         raise ChangesError(f"{commit_hash[:12]} is not a commit of this repository.")
     diff = git(root, "show", commit.hash, "--format=", "--find-renames", "--unified=3", "--no-color", "--no-ext-diff")
     written = entries_written(git(root, "show", commit.hash, "--format=", "--unified=0", "--no-color", "--no-ext-diff", "--",
-                                  changelog))
+                                  changelog)) if changelog else []
     files = ordered(parse_diff(diff), changelog)
     add_sizes(root, commit, files[:MAX_FILES])
     return EntryCode(commit, files[:MAX_FILES], written, max(0, len(files) - MAX_FILES))
+
+
+# ---------------------------------------------------------------- commits, for a repository with no changelog
+
+MAX_COMMITS = 200                # commits listed at once
+
+
+def commits(root, top=40, skip=0):
+    """A repository's newest commits, newest first, from `skip` on, with how many files each changed and how many of those are
+    not text, and how many commits the repository has in all (1.82.0). Any repository: one with no changelog has no entry to lead
+    to its code, so a program lists its commits instead (the owner's choice of 22 Nov 2026, for Workers & Resources' textures)."""
+    top = max(1, min(int(top), MAX_COMMITS))
+    skip = max(0, int(skip))
+    counted = git(root, "rev-list", "--count", "HEAD", check=False).strip()
+    total = int(counted) if counted.isdigit() else 0
+    if total == 0:
+        return {"total": 0, "commits": []}
+    out = git(root, "log", f"-n{top}", f"--skip={skip}", "--format=%x1e%H%x1f%at%x1f%an%x1f%s", "--numstat", "--no-color")
+    found = []
+    for record in out.split("\x1e"):
+        lines = record.strip("\n").split("\n")
+        head = lines[0].split("\x1f") if lines and lines[0] else []
+        if len(head) != 4:
+            continue
+        stats = [line.split("\t") for line in lines[1:] if line.count("\t") >= 2]
+        found.append({"hash": head[0], "time": int(head[1] or 0), "author": head[2], "subject": head[3],
+                      "files": len(stats), "binary": sum(1 for s in stats if s[0] == "-" and s[1] == "-")})
+    return {"total": total, "commits": found}
 
 
 def new_files_diff(root):

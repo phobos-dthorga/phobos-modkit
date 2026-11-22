@@ -293,7 +293,13 @@ def read_about(folder, source, workshop_id, version):
                _items(_versioned(root, "loadAfter", version)) + _items(_child(root, "forceLoadAfter")),
                _items(_versioned(root, "loadBefore", version)) + _items(_child(root, "forceLoadBefore")),
                _items(_versioned(root, "incompatibleWith", version)),
-               _items(_child(root, "supportedVersions")))
+               _items(_child(root, "supportedVersions")), preview=_preview(folder))
+
+
+def _preview(folder):
+    """About/Preview.png, the picture the game's mod menu and the Workshop show (1.82.0); "" when the mod has none."""
+    path = Path(folder) / "About" / "Preview.png"
+    return str(path) if path.is_file() else ""
 
 
 class RimWorld:

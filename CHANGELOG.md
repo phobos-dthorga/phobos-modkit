@@ -4,6 +4,27 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.82.0] - 2026-11-23
+
+Pictures and sounds beyond the code viewer (the owner, 23 Nov 2026: "Can we introduce these new features anywhere else?", choosing
+on question cards the Mods page, repositories with no changelog, the Mod list's previews, screenshots and encoded textures). Each
+tool now names the files a program can show; none of them decodes anything.
+
+### Added
+
+- **changes commits**: a repository's newest commits, newest first (`--top`, `--skip`), each with how many files it changed and
+  how many of them aren't text, and the count of every commit. For a repository with no changelog, where no entry leads to its code:
+  Workers & Resources' buildings repository lists 45 commits, one of them changing 142 textures and models.
+- **changes entry --commit no longer needs --changelog**: it names the entries the commit wrote only when given one.
+- **installs: each copy names its folder** (`folder` on the installed copy, the repository's and each backup), so a program can
+  show a changed picture or sound from two copies.
+- **mod-list mods: each mod's own picture** (`preview`): RimWorld's `About/Preview.png` (399 of the owner's 407 mods have one);
+  Project Zomboid's `poster` from the `mod.info` the game reads, beside it (checked with made-up files only: the game is not
+  installed here).
+- **rimworld-textures pairs --mod NAME**: each of a mod's pictures beside the encoded texture the game loads in its place, with its
+  state (fresh, stale, missing, left over) and sizes, and `flipped`, since RimSort's preset stores the texture upside down (checked
+  on the owner's armour kits: turned over, it matches its picture). Found by the manifest's `texture-pairs` surface. 563 pairs for
+  D'thorga Vehicles.
 ## [1.81.0] - 2026-11-23
 
 ### Added

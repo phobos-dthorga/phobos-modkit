@@ -58,12 +58,11 @@ class Freshness:
         return bool(self.stale or self.missing or self.unpacked)
 
 
-def check_folder(folder, slack=SLACK_SECONDS, headers=None):
-    """How a mod folder's encoded textures stand against its pictures. Reads file names and dates only, and with headers (a
-    HeaderCache) each .dds file's first 148 bytes, once per size and date, for the textures Waylith would unpack."""
+def texture_files(folder):
+    """Every picture and encoded texture under a mod folder's Textures paths: (path, relative path, stat), from the listing itself
+    on Windows. Shared by the check and by pairs (1.82.0)."""
     folder = Path(folder)
     base = len(str(folder)) + 1
-    pictures, encoded, unpacked = {}, {}, []
     stack = [str(folder)]
     while stack:
         try:
@@ -76,16 +75,24 @@ def check_folder(folder, slack=SLACK_SECONDS, headers=None):
                         lower = entry.name.lower()
                         if not (lower.endswith(SOURCE_SUFFIX) or lower.endswith(DDS_SUFFIX)) or PATH_SEGMENT not in entry.path:
                             continue
-                        info = entry.stat(follow_symlinks=False)    # from the listing itself on Windows
+                        info = entry.stat(follow_symlinks=False)
                     except OSError:
                         continue
-                    relative = entry.path[base:].replace("\\", "/")
-                    (pictures if lower.endswith(SOURCE_SUFFIX) else encoded)[entry.path[:-4].lower()] = (info.st_mtime, relative)
-                    if headers is not None and lower.endswith(DDS_SUFFIX) and \
-                            headers.verdict(entry.path, info.st_size, info.st_mtime_ns) == FIXABLE:
-                        unpacked.append(relative)
+                    yield entry.path, entry.path[base:].replace("\\", "/"), info
         except OSError:
             continue
+
+
+def check_folder(folder, slack=SLACK_SECONDS, headers=None):
+    """How a mod folder's encoded textures stand against its pictures. Reads file names and dates only, and with headers (a
+    HeaderCache) each .dds file's first 148 bytes, once per size and date, for the textures Waylith would unpack."""
+    pictures, encoded, unpacked = {}, {}, []
+    for path, relative, info in texture_files(folder):
+        lower = path.lower()
+        (pictures if lower.endswith(SOURCE_SUFFIX) else encoded)[path[:-4].lower()] = (info.st_mtime, relative)
+        if headers is not None and lower.endswith(DDS_SUFFIX) and \
+                headers.verdict(path, info.st_size, info.st_mtime_ns) == FIXABLE:
+            unpacked.append(relative)
     found = Freshness(pictures=len(pictures), unpacked=sorted(unpacked))
     for stem, (mtime, relative) in sorted(pictures.items(), key=lambda item: item[1][1]):
         if stem not in encoded:
@@ -93,6 +100,26 @@ def check_folder(folder, slack=SLACK_SECONDS, headers=None):
         elif mtime > encoded[stem][0] + slack:
             found.stale.append(relative)
     found.left_over = sorted(relative for stem, (_, relative) in encoded.items() if stem not in pictures)
+    return found
+
+
+def pairs(folder, slack=SLACK_SECONDS):
+    """Each picture of a mod beside the encoded texture the game loads in its place (1.82.0), for a program to compare them: the
+    relative paths, sizes and a state, "fresh", "stale" (the picture is newer: the game shows the old one), "missing" (no encoded
+    texture: the picture itself is loaded) or "left-over" (an encoded texture with no picture). Sorted by the picture's path.
+    RimSort's preset stores the encoded texture upside down, as the game reads DDS, so a program turns it over to compare."""
+    pictures, encoded = {}, {}
+    for path, relative, info in texture_files(folder):
+        (pictures if path.lower().endswith(SOURCE_SUFFIX) else encoded)[path[:-4].lower()] = (relative, info.st_size, info.st_mtime)
+    found = []
+    for stem in sorted(set(pictures) | set(encoded), key=lambda s: (pictures.get(s) or encoded.get(s))[0].lower()):
+        picture, texture = pictures.get(stem), encoded.get(stem)
+        if picture and texture:
+            state = "stale" if picture[2] > texture[2] + slack else "fresh"
+        else:
+            state = "missing" if picture else "left-over"
+        found.append({"picture": picture[0] if picture else None, "encoded": texture[0] if texture else None, "state": state,
+                      "pictureSize": picture[1] if picture else None, "encodedSize": texture[1] if texture else None})
     return found
 
 

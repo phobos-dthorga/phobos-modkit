@@ -44,6 +44,19 @@ class CheckTests(unittest.TestCase):
             self.assertEqual(found.left_over, ["Textures/Gone.dds"])
             self.assertTrue(found.needs_encoding)
 
+    def test_pairs_set_each_picture_beside_its_encoded_texture(self):
+        # 1.82.0: the Mods page compares a picture with the encoded texture the game loads in its place.
+        with tempfile.TemporaryDirectory() as tmp:
+            sample_mod(Path(tmp))
+            found = {(p["picture"], p["encoded"]): p["state"] for p in textures.pairs(tmp)}
+            self.assertEqual(found, {
+                ("Textures/Fresh.png", "Textures/Fresh.dds"): "fresh",
+                ("Textures/Changed.png", "Textures/Changed.dds"): "stale",
+                ("Textures/Close.png", "Textures/Close.dds"): "fresh",
+                ("1.7/Textures/Things/New.png", None): "missing",
+                (None, "Textures/Gone.dds"): "left-over",
+            })
+
     def test_letter_case_does_not_split_a_picture_from_its_encoding(self):
         with tempfile.TemporaryDirectory() as tmp:
             write(Path(tmp) / "Textures" / "Boat.PNG", time.time() - 600)

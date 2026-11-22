@@ -94,7 +94,8 @@ def _delta(delta, *logs, commits=None):
 
 
 def _copy(copy, against=None):
-    return {"kind": copy.kind, "name": copy.name, "version": copy.version, "record": copy.record, "backup": copy.backup or None,
+    return {"kind": copy.kind, "name": copy.name, "version": copy.version, "folder": str(copy.folder),
+            "record": copy.record, "backup": copy.backup or None,
             "taken": copy.taken or None, "size": copy.size, "sameAs": copy.same_as or None, "sameKind": copy.same_kind or None,
             "hasChangelog": copy.changelog is not None,
             "direction": installs.direction(against.version, copy.version) if against is not None else None}

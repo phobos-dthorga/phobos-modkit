@@ -4,6 +4,8 @@
     changes list --root REPO --versions 10           more versions of each
     changes entry --root REPO --changelog mods/Thing/CHANGELOG.md --text "A slung vehicle could be set down"
                                                      the commit that wrote that entry, and what it changed, file by file
+    changes commits --root REPO [--top 40] [--skip 0]  the newest commits, for a repository with no changelog (1.82.0)
+    changes entry --root REPO --commit HASH           what one commit changed; --changelog only names the entries it wrote
     changes pending --root REPO [--root REPO ...]    what each changelog has not released yet: entries with no version, drafts
 
 The code behind an entry is the commit that first wrote it into its changelog, found by git; an entry no commit holds yet shows the
@@ -34,6 +36,7 @@ def _parser():
     sub = p.add_subparsers(dest="report", required=True)
     for name, helptext in (("list", "every changelog in the repository, its newest versions and their entries"),
                            ("entry", "the commit that wrote one changelog entry, and what it changed"),
+                           ("commits", "the newest commits, for a repository with no changelog (1.82.0)"),
                            ("pending", "what each changelog has not released yet, for one or more repositories")):
         s = sub.add_parser(name, help=helptext)
         if name == "pending":
@@ -45,8 +48,10 @@ def _parser():
         elif name == "list":
             s.add_argument("--versions", type=int, default=5,
                            help="versions of each changelog to list, newest first (default 5; 0 for every version)")
+        elif name == "commits":
+            s.add_argument("--skip", type=int, default=0, help="newer commits to pass over first (default 0)")
         else:
-            s.add_argument("--changelog", required=True, help="the changelog's path in the repository, as list gives it")
+            s.add_argument("--changelog", help="the changelog's path in the repository, as list gives it; needed with --text")
             s.add_argument("--text", help="the entry's text, or its bold opening")
             s.add_argument("--commit", help="instead of an entry, a commit: what it changed, with every entry it wrote")
         s.add_argument("--top", type=int, default=40, help="rows per table (default 40)")
@@ -143,6 +148,20 @@ def entry_report(root, changelog, text, top, progress, commit=None):
     return report, data
 
 
+def commits_report(root, top, skip, progress):
+    progress("Reading the commits", 1, 1)
+    found = changes.commits(root, top, skip)
+    listed = found["commits"]
+    report = Report(f"Changes: {found['total']:,} commit{'' if found['total'] == 1 else 's'}, the newest {len(listed):,} listed"
+                    if not skip else f"Changes: commits {skip + 1:,} to {skip + len(listed):,} of {found['total']:,}")
+    report.lines.append("Each commit's code: changes entry --commit HASH (no changelog needed).")
+    report.section("Commits", Table(["Commit", "When", "Subject", "Files", "Not text"],
+                                    [[c["hash"][:8], _when(c["time"]), c["subject"][:100], f"{c['files']:,}", f"{c['binary']:,}"]
+                                     for c in listed[:top]], total=len(listed)))
+    return report, {"repository": Path(root).name, "total": found["total"], "skip": skip,
+                    "commits": [{**c, "time": _when(c["time"])} for c in listed]}
+
+
 def main(argv=None, environ=None, out=None):
     out = out or sys.stdout
     environ = os.environ if environ is None else environ
@@ -159,12 +178,17 @@ def main(argv=None, environ=None, out=None):
             report, data = pending_report([Path(r).resolve() for r in (args.root or ["."])], args.top, progress)
         elif args.report == "list":
             report, data = list_report(root, args.versions, args.top, progress)
+        elif args.report == "commits":
+            report, data = commits_report(root, args.top, args.skip, progress)
         else:
             if not args.text and not args.commit:
                 raise changes.ChangesError("Name an entry (--text) or a commit (--commit).")
+            if args.text and not args.changelog:
+                raise changes.ChangesError("An entry is looked for in a changelog: name it with --changelog.")
             if args.text and len(args.text) > MAX_TEXT:
                 raise changes.ChangesError("That entry's text is too long to look for.")
-            report, data = entry_report(root, args.changelog.replace("\\", "/"), args.text, args.top, progress, args.commit)
+            changelog = args.changelog.replace("\\", "/") if args.changelog else None
+            report, data = entry_report(root, changelog, args.text, args.top, progress, args.commit)
     except (changes.ChangesError, OSError) as error:
         if not args.json:
             print(redact(str(error)), file=sys.stderr)

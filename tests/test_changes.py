@@ -237,6 +237,34 @@ class EntryTests(unittest.TestCase):
             uncommitted = {f.path: f for f in changes.entry_code(root, "mods/Thing/CHANGELOG.md", "Oars.").files}
             self.assertEqual((uncommitted["mods/Thing/Boat.png"].size_before, uncommitted["mods/Thing/Boat.png"].size_after), (18, 14))
 
+    def test_a_repository_lists_its_newest_commits_with_their_files(self):
+        # 1.82.0: a repository with no changelog has no entry to lead to its code, so its commits are listed instead.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = repository(tmp)
+            found = changes.commits(root, top=1)
+            self.assertEqual(found["total"], 2)
+            newest = found["commits"][0]
+            self.assertEqual((newest["subject"], newest["files"], newest["binary"]), ("Thing 0.2.0: boats", 5, 1))
+            self.assertEqual(changes.commits(root, top=5, skip=1)["commits"][0]["subject"], "Thing 0.1.0: wheels")
+            out = io.StringIO()
+            changes_cli.main(["commits", "--root", str(root), "--top", "5", "--json"], environ={}, out=out)
+            data = json.loads(out.getvalue())["data"]
+            self.assertEqual((data["total"], len(data["commits"])), (2, 2))
+
+    def test_a_commit_is_shown_without_a_changelog(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = repository(tmp)
+            newest = changes.commits(root, top=1)["commits"][0]["hash"]
+            out = io.StringIO()
+            changes_cli.main(["entry", "--root", str(root), "--commit", newest, "--json"], environ={}, out=out)
+            data = json.loads(out.getvalue())["data"]
+            self.assertIsNone(data["changelog"])
+            self.assertEqual(data["writtenWith"], [])
+            self.assertIn("mods/Thing/CHANGELOG.md", [f["path"] for f in data["files"]])
+            out = io.StringIO()
+            code = changes_cli.main(["entry", "--root", str(root), "--text", "Sails.", "--json"], environ={}, out=out)
+            self.assertEqual((code, json.loads(out.getvalue())["data"]["ok"]), (1, False))
+
     def test_the_entry_answer_carries_each_files_media_and_sizes(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = io.StringIO()
