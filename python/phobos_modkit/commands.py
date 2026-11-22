@@ -42,6 +42,7 @@ COMMANDS = {
     "screen-notes": (".screen_notes", "what the owner flagged as looking wrong in D'thorga Companion; marks a note dealt with"),
     "claims": (".claims", "who is working on what: agent sessions take and release version numbers, test rows and files"),
     "decisions": (".decisions", "the questions waiting for the owner, with options and the agent's lean; records answers"),
+    "picks": (".picks", "the pictures and sounds waiting for the owner to pick one, with their tries; records picks"),
     "game-files": (".game_files", "what a game writes and what Steam records: what changed since you last played, saves, screenshots, space"),
     "mod-list": (".mod_list_cli", "what is wrong with a game's list of active mods and why; safe changes, each after a backup"),
     "programs": (".programs", "which other programs the tools use, whether each is on this PC, and where to get it"),

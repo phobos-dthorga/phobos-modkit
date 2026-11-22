@@ -4,6 +4,18 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.83.0] - 2026-11-23
+
+The picks page (the owner, 23 Nov 2026: "Go ahead and build the picks page", after answering its design's questions: a file each
+repository keeps, a pick kept as an answer).
+
+### Added
+
+- **picks**: the pictures and sounds waiting for the owner to pick one (`docs/picks.md`). A repository's art tools offer a pick
+  (`picks offer`) into its `config/picks.json`: a title, picture or sound, the file in use and each try's file, anywhere on this PC,
+  with the grounds its game's pictures are seen on. `picks list` names every pick, waiting ones first, each file checked;
+  `picks answer` keeps the owner's pick (a try, or none with words) in the Companion's folder, one line each, the last deciding;
+  `picks settle` removes a pick once applied. Game-free; the manifest's `picks` surface finds it.
 ## [1.82.0] - 2026-11-23
 
 Pictures and sounds beyond the code viewer (the owner, 23 Nov 2026: "Can we introduce these new features anywhere else?", choosing
