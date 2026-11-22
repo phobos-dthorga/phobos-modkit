@@ -4,6 +4,30 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.89.0] - 2026-11-23
+
+The first slice of going online (D'thorga Companion's `docs/online.md`, O4's gate lights; the owner's go-ahead and answers of
+23 Nov 2026).
+
+### Added
+
+- **`repos status`: where each repository stands with its remote.** For each repository named: its branch, commits not pushed,
+  tracked files changed, and with `--online` whether GitHub's checks passed for its last push (passed, failed and which, running,
+  no run yet for the last push, no checks), and each nightly run's last result, marked late after two days (GitHub switches a
+  schedule off after 60 days without activity). One keyless call a repository, and one more only where its own workflow files hold
+  a schedule. `--automatic` (a look nobody pressed for) asks again only when the pushed commit moved, a run was going five minutes
+  ago, or a day has passed. Game-free; manifest surface `repo-status`. Guide: `docs/repos.md`.
+- **One hourly GitHub allowance for every tool.** The GitHub reader keeps the calls left this hour from each answer, so every tool
+  sees the same figure; it stops asking at none, and an automatic look stops at 15, keeping them for a press.
+- **The last answer when GitHub cannot be asked.** A reader made to keep it gives its last answer with its age, instead of failing,
+  when GitHub cannot be reached or the allowance is spent. Used by `repos status`; `rimworld-sources` is unchanged.
+
+### Changed
+
+- **A stale cached GitHub answer is asked for again with its ETag**, and "not modified" keeps the cached one. **Measured: for a
+  keyless client GitHub still counts it as a call** (two such answers and one new one took the allowance from 57 to 54), so it
+  saves the download, not the call.
+
 ## [1.88.0] - 2026-11-23
 
 After the owner's first full re-sort preview with 1.86.0 (23 Nov 2026): all 146 moves on their list were group or name-order

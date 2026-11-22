@@ -80,7 +80,7 @@ and `reports`. Each report has:
 | `when` | The flag that brings the effect on; null when it always applies |
 | `note` | Anything else a caller should know, or null |
 | `question` | The report as a person would ask for it, or null |
-| `surface` | What the report mostly is, when a program should give it a page of its own: `globe` (1.7.0), `textures` (1.21.0), `changes` (1.24.0), `timeline` and `settings` (1.30.0), `connections` (1.33.0), `log` (1.35.0), `patch-targets` (1.37.1), `memory-watch` (1.47.0), `other-code` and `updates` (1.49.0; rimworld-archive's `snapshot` joins `updates` in 1.51.0), `mod-list` (1.72.0), or null |
+| `surface` | What the report mostly is, when a program should give it a page of its own: `globe` (1.7.0), `textures` (1.21.0), `changes` (1.24.0), `timeline` and `settings` (1.30.0), `connections` (1.33.0), `log` (1.35.0), `patch-targets` (1.37.1), `memory-watch` (1.47.0), `other-code` and `updates` (1.49.0; rimworld-archive's `snapshot` joins `updates` in 1.51.0), `mod-list` (1.72.0), `repo-status` (1.89.0), or null |
 | `options` | `name`, `positional`, `kind` (`flag`, `integer`, `number` or `text`), `required`, `repeatable`, `choices`, `default` and `help`, read from the command's own parser |
 | `exclusive` | Groups of options that cannot be used together |
 
