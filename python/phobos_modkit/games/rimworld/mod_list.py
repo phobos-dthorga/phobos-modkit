@@ -47,6 +47,13 @@ RIMSORT_USER = ("dbs/userRules.json", "userRules.json")
 # 57,679 entries on 23 Nov 2026, read in a quarter of a second. Read once per file version and kept while the tools run.
 RIMSORT_WORKSHOP = ("dbs/Steam-Workshop-Database/steamDB.json", "steamDB.json")
 _WORKSHOP_CACHE = {}
+_VERSIONS_CACHE = {}
+# The community's two lists RimSort also keeps (1.85.0), both Mlie's, MIT: No Version Warning (`<version>/ModIdsToFix.xml`, the
+# package ids known to work on a version though they do not say so) and Use This Instead (`replacements.json`: {"rules": [{
+# "oldWorkshopId", "oldName", "oldPackageId", "newWorkshopId", "newName", "newAuthor", "newPackageId", "newVersions", ...}]}).
+# Seen 23 Nov 2026: 1 id for 1.7, and 2,846 replacements.
+RIMSORT_NO_VERSION_WARNING = "dbs/NoVersionWarning"
+RIMSORT_USE_THIS_INSTEAD = "dbs/UseThisInstead/replacements.json"
 # Lists the game and RimSort keep (1.75.0). A save (.rws) starts with <meta>: gameVersion, then modIds, modSteamIds and modNames
 # in load order (Verse.ScribeMetaHeaderUtility.WriteMetaHeader); the game's own saved list (.rml, ModLists folder) is that header
 # and a <modList> of <ids> and <names> (Verse.GameDataSaveLoader.SaveModList). RimSort keeps a history of lists as JSON
@@ -276,6 +283,52 @@ def read_workshop_rules(path):
 
 def _version_tuple(text):
     return tuple(int(p) for p in re.findall(r"\d+", text or ""))
+
+
+def read_workshop_versions(path):
+    """{Workshop number: {the game versions its Workshop page names}} from RimSort's Steam Workshop Database, or None."""
+    path = Path(path)
+    try:
+        stamp = path.stat().st_mtime_ns
+    except OSError:
+        return None
+    cached = _VERSIONS_CACHE.get(str(path))
+    if cached and cached[0] == stamp:
+        return cached[1]
+    try:
+        database = json.loads(path.read_text(encoding="utf-8-sig")).get("database")
+    except (OSError, ValueError, AttributeError):
+        return None
+    versions = {}
+    for number, entry in (database or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        found = {str(v) for v in entry.get("gameVersions") or []}
+        found |= {str(tag.get("tag")) for tag in entry.get("tags") or [] if isinstance(tag, dict)}
+        if found:
+            versions[str(number)] = found
+    _VERSIONS_CACHE[str(path)] = (stamp, versions)
+    return versions
+
+
+def read_known_working(folder, version):
+    """The package ids (bare) the No Version Warning list says work on this version, from its `<version>/ModIdsToFix.xml`."""
+    path = Path(folder) / version / "ModIdsToFix.xml"
+    try:
+        root = ElementTree.fromstring(path.read_bytes().decode("utf-8-sig"))
+    except (OSError, ElementTree.ParseError):
+        return set()
+    return {bare_id((li.text or "").strip()) for li in root.iter("li") if (li.text or "").strip()}
+
+
+def read_replacements(path):
+    """The Use This Instead rules, as given, or [] when the file is missing or not as expected."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return []
+    rules = data.get("rules") if isinstance(data, dict) else None
+    return [r for r in rules or [] if isinstance(r, dict) and r.get("newWorkshopId")]
 
 
 def read_about(folder, source, workshop_id, version):
@@ -515,6 +568,41 @@ class RimWorld:
                                                              f"{reference}, which {by_key[other].name} brings: the game must load that "
                                                              "first."))
         return rules
+
+    def works_anyway(self, mod, version):
+        """Why a mod that does not say it works with this version likely does, in words, or "" (1.85.0): it has a folder for the
+        version (or a LoadFolders block), its Workshop page names the version, or the community's No Version Warning list names
+        it."""
+        folder = Path(mod.folder)
+        if (folder / version).is_dir():
+            return f"it has a {version} folder"
+        load_file = folder / "LoadFolders.xml"
+        try:
+            if load_file.is_file() and f"<v{version}>" in load_file.read_text(encoding="utf-8-sig", errors="replace"):
+                return f"its LoadFolders.xml has a {version} section"
+        except OSError:
+            pass
+        base = rimsort_folder(self.environ)
+        if mod.workshop_id:
+            for name in RIMSORT_WORKSHOP:
+                versions = read_workshop_versions(base / name)
+                if versions is not None:
+                    if version in versions.get(mod.workshop_id, set()):
+                        return f"its Workshop page names {version}"
+                    break
+        if not hasattr(self, "_known_working"):
+            self._known_working = {}
+        if version not in self._known_working:
+            self._known_working[version] = read_known_working(base / RIMSORT_NO_VERSION_WARNING, version)
+        if self.key(mod.id) in self._known_working[version]:
+            return "the community's No Version Warning list says it works"
+        return ""
+
+    def replacements(self):
+        """The community's Use This Instead rules (1.85.0), read where RimSort keeps them."""
+        if not hasattr(self, "_replacements"):
+            self._replacements = read_replacements(rimsort_folder(self.environ) / RIMSORT_USE_THIS_INSTEAD)
+        return self._replacements
 
     def rule_sets(self):
         """The rules RimSort keeps on this PC: the owner's own, and the community's, each read as it is (1.74.0); and what each active

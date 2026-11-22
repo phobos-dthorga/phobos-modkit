@@ -323,6 +323,7 @@ def check(adapter, mod_list, installed, memory, steam=None, subscribed=None, cod
     problems += _library_clashes(mod_list, library_copies or [])
     problems += _warnings(adapter, mod_list, entries, steam, subscribed)
     problems += _versions(adapter, mod_list, entries)
+    problems += _replacements(adapter, mod_list, entries, memory)
     order = {s: i for i, s in enumerate(SEVERITIES)}
     return sorted(problems, key=lambda p: (order[p.severity], p.kind, p.name.lower()))
 
@@ -447,7 +448,9 @@ def _warnings(adapter, mod_list, entries, steam, subscribed):
 
 
 def _versions(adapter, mod_list, entries):
-    problems = []
+    """Mods that do not say they work with this version: one note each, except those known or likely to work anyway (1.85.0),
+    which share one note saying why."""
+    problems, likely = [], []
     version = adapter.game_version()
     if not version:
         return problems
@@ -455,10 +458,51 @@ def _versions(adapter, mod_list, entries):
         if mod is None or mod.source == "game":
             continue
         reason = adapter.version_misfit(mod, version)
-        if reason:
-            problems.append(Problem("version", NOTE, mod_list.key, listed, _named(mod), reason,
-                                    "Many such mods still work; it is worth a look if the game reports errors from it.",
-                                    workshop_id=mod.workshop_id))
+        if not reason:
+            continue
+        anyway = adapter.works_anyway(mod, version) if hasattr(adapter, "works_anyway") else ""
+        if anyway:
+            likely.append((_named(mod), anyway))
+            continue
+        problems.append(Problem("version", NOTE, mod_list.key, listed, _named(mod), reason,
+                                "Many such mods still work; it is worth a look if the game reports errors from it.",
+                                workshop_id=mod.workshop_id))
+    if likely:
+        by_reason = {}
+        for name, why in likely:
+            by_reason.setdefault(why, []).append(name)
+        problems.append(Problem("version-likely", NOTE, mod_list.key, "", "",
+                                f"{len(likely)} more mods do not say they work with {version}, but are known or likely to.",
+                                " ".join(f"Because {why}: {', '.join(sorted(names, key=str.lower))}."
+                                         for why, names in sorted(by_reason.items(), key=lambda item: -len(item[1])))))
+    return problems
+
+
+def _replacements(adapter, mod_list, entries, memory):
+    """A mod with a continued version for this game version, when the one on the list is missing or does not say it works with
+    it (1.85.0), from the community's Use This Instead list. The continued version is offered by its Workshop number."""
+    problems = []
+    version = adapter.game_version()
+    rules = adapter.replacements() if hasattr(adapter, "replacements") else []
+    if not version or not rules:
+        return problems
+    by_number = {str(r.get("oldWorkshopId")): r for r in rules if r.get("oldWorkshopId")}
+    active_numbers = {mod.workshop_id for _, _, mod in entries if mod is not None and mod.workshop_id}
+    for _, listed, mod in entries:
+        number = mod.workshop_id if mod is not None else (memory.get(adapter.key(listed)) or {}).get("workshop_id", "")
+        rule = by_number.get(str(number)) if number else None
+        if rule is None or str(rule["newWorkshopId"]) in active_numbers or version not in (rule.get("newVersions") or []):
+            continue
+        if mod is not None and not adapter.version_misfit(mod, version):
+            continue
+        old = _named(mod) if mod is not None else (rule.get("oldName") or listed)
+        problems.append(Problem(
+            "replacement", NOTE, mod_list.key, listed, old,
+            f"{old} has a continued version for {version}: {rule.get('newName') or 'unnamed'}"
+            + (f" by {rule['newAuthor']}." if rule.get("newAuthor") else "."),
+            f"From the community's Use This Instead list. Subscribe to it, then switch {old} off and the continued version on "
+            "(Edit the list); read its page first, since a continuation can change things.",
+            workshop_id=str(rule["newWorkshopId"])))
     return problems
 
 

@@ -57,6 +57,8 @@ mod" for a patch whose author had taken it off the Workshop). The Companion's Mo
 | `removed` | warning | A mod on this PC that the Workshop no longer has (with `--online`) | None |
 | `unsubscribed` | warning | A Workshop mod on this PC that Steam no longer keeps for you | None |
 | `library` | note | Several active mods carry the same library and an older copy loads first (1.85.0) | None: load the newer above, or ask for an update |
+| `version-likely` | note | Mods that do not say they work with this version but are known or likely to, and why (1.85.0) | None |
+| `replacement` | note | A missing or out-of-date mod has a continued version for this game version (1.85.0) | Subscribe to it |
 | `version` | note | A mod that does not say it works with this game version | None |
 | `unchecked` | note | Mods a list names that could not be looked for (the game not installed) | None |
 

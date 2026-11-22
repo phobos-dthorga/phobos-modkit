@@ -17,6 +17,13 @@ player?"; their choices on a question card: all four offered). Each came in its 
   are often stubs that do nothing until their own mod runs, and whether a newer copy's mods need what it adds cannot be read from
   outside. The assembly reader's `refs` now also gives each assembly's version. On the owner's list: one, 0MultiplayerAPI, carried
   by 16 mods (0.5.0.0 from Adaptive Storage Framework first, 0.6.0.0 from Exosuit Framework).
+- **Version notes name only the mods really in doubt**: a mod that does not say it works with the game's version, but has a folder
+  for it (or a LoadFolders section), a Workshop page naming it (RimSort's Steam Workshop Database), or a place on the community's
+  No Version Warning list, joins one note saying why each is likely to work. On the owner's list none yet: the Workshop database
+  copy predates 1.7, and the No Version Warning list names one mod for 1.7.
+- **A continued version is offered** for a mod that is missing, or does not say it works with the game's version, when the
+  community's Use This Instead list (2,846 rules, MIT, read where RimSort keeps it) names a continuation that does: a note with
+  the continuation's name, author and Workshop number. None on the owner's list, which already uses the continuations.
 ## [1.84.0] - 2026-11-23
 
 From the owner's log of 23 Nov 2026: after a full re-sort, I Am Mother's compat code failed to load ("ReflectionTypeLoadException
