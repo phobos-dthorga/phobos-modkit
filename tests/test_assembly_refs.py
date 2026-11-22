@@ -188,7 +188,28 @@ class Groups(unittest.TestCase):
         self.assertEqual(found["ids"], ["core", "bg", "vef", "apple", "mid", "zed"])
         why = {m["key"]: m["why"][0] for m in found["moves"] if m["kind"] == mod_sort.GROUP_MOVE}
         self.assertIn("Vanilla Expanded Framework: it is a known framework, so it goes in the frameworks' group", why["vef"])
-        self.assertIn("Backgrounds: Vanilla Expanded Framework loads after it", why["bg"])
+        self.assertIn("Backgrounds: Vanilla Expanded Framework loads after it (Vanilla Expanded Framework: it is a known "
+                      "framework)", why["bg"])
+
+    def test_a_reason_follows_the_links_back_to_the_framework(self):
+        mods = [mod("core", source="game", name="Core"), mod("apple", name="Apple"), mod("mid", name="Mid"),
+                mod("zed", name="Zed"), mod("des", before=["ce"], name="Deserters"),
+                mod("ce", before=["vef"], name="Combat Extended"), mod("vef", name="Vanilla Expanded Framework")]
+        found = sort(["core", "apple", "mid", "zed", "des", "ce", "vef"], mods, how=mod_sort.FULL)
+        self.assertEqual(found["ids"], ["core", "des", "ce", "vef", "apple", "mid", "zed"])
+        why = {m["key"]: m["why"][0] for m in found["moves"]}
+        self.assertIn("Deserters: Combat Extended loads after it, and Vanilla Expanded Framework after Combat Extended "
+                      "(Vanilla Expanded Framework: it is a known framework)", why["des"])
+
+    def test_mods_already_in_their_group_that_only_change_places_inside_it_are_a_names_move(self):
+        from test_mod_sort import Plain
+        Plain.known_frameworks = ("vef", "hugs")
+        mods = [mod("core", source="game", name="Core"), mod("vef", name="Vanilla Expanded Framework"),
+                mod("hugs", name="HugsLib"), mod("apple", name="Apple")]
+        found = sort(["core", "vef", "hugs", "apple"], mods, how=mod_sort.FULL)
+        self.assertEqual(found["ids"], ["core", "hugs", "vef", "apple"])
+        self.assertTrue(found["moves"])
+        self.assertEqual({m["kind"] for m in found["moves"]}, {mod_sort.ORDER_MOVE})
 
     def test_a_mod_others_code_builds_on_is_not_pulled_up_with_the_frameworks(self):
         code = mod_sort.RuleSet(mod_sort.CODE, "Code", "here",

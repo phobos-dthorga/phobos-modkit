@@ -404,12 +404,13 @@ def arrange(adapter, mod_list, installed, rule_sets, how=FEWEST):
     kept = kept_run(old_place, order)
     new_place = {k: n for n, k in enumerate(order)}
     moves = []
+    passing = _out_of_group(keys, group)
     for key in order:
         # A mod whose place number does not change is not listed, though the mods around it moved (1.88.0).
         if key in kept or old_place[key] == new_place[key]:
             continue
         moves.append(_explain(key, old_place, new_place, edges, placed_by, mods, kept, how, group,
-                              _group_reason(key, group, via, based, mods)))
+                              _group_reason(key, group, via, based, mods) if key in passing else None))
     return {"how": how, "ids": [listed[k] for k in order], "keys": order, "moves": moves,
             "set_aside": [_aside(gone, mods) for gone in set_aside],
             "rules": {source: sum(1 for r in best.values() if r.source == source) for source in RULE_SOURCES},
@@ -434,39 +435,79 @@ def _groups(keys, edges, game_base, top_base, bottom_base):
         before.setdefault(then, set()).add(first)
         after.setdefault(first, set()).add(then)
 
-    via = {}
-
     def reach(start, links):
-        found, waiting = set(start), list(start)
+        found, waiting, came = set(start), list(start), {}
         while waiting:
             member = waiting.pop()
             for other in links.get(member, ()):
                 if other not in found:
                     found.add(other)
-                    via.setdefault(other, member)
+                    came[other] = member
                     waiting.append(other)
-        return found
+        return found, came
 
-    game = reach(game_base, before)
-    top = reach(top_base, before) - game
-    bottom = reach(bottom_base, after) - game - top
+    game, via_game = reach(game_base, before)
+    top, via_top = reach(top_base, before)
+    top -= game
+    bottom, via_bottom = reach(bottom_base, after)
+    bottom -= game | top
     group = {k: GAME_GROUP if k in game else TOP_GROUP if k in top else BOTTOM_GROUP if k in bottom else MIDDLE_GROUP
              for k in keys}
+    via = {k: (via_game if group[k] == GAME_GROUP else via_top if group[k] == TOP_GROUP else via_bottom)[k]
+           for k in keys if group[k] != MIDDLE_GROUP
+           and k in (via_game if group[k] == GAME_GROUP else via_top if group[k] == TOP_GROUP else via_bottom)}
     return group, via
 
 
+def _out_of_group(keys, group):
+    """The mods that pass a mod of another group as they move: one of a later group stands before them, or one of an earlier
+    group after them (1.91.0). Only these are moved into their group; the rest of a group only change places inside it."""
+    passing, highest, lowest = set(), MIDDLE_GROUP - 99, BOTTOM_GROUP + 99
+    for key in keys:
+        if highest > group[key]:
+            passing.add(key)
+        highest = max(highest, group[key])
+    for key in reversed(keys):
+        if lowest < group[key]:
+            passing.add(key)
+        lowest = min(lowest, group[key])
+    return passing
+
+
+LINKS_SHOWN = 4
+
+
 def _group_reason(key, group, via, based, mods):
-    """Why this mod is in its group, in words: its own reason, or the member it must load before (or after, at the bottom)."""
+    """Why this mod is in its group, in words: its own reason, or the links back to the member that has one (1.91.0), as
+    "Combat Extended loads after it, and Vehicle Framework after Combat Extended (Vehicle Framework: it is a known framework)"."""
     level = group.get(key, MIDDLE_GROUP)
+    name = _name(mods, key)
     if level == MIDDLE_GROUP:
-        return None
+        return (f"{name}: no group claims it, so it goes among the other mods, after the frameworks' group and before the "
+                "bottom group.")
     if key in based:
-        why = based[key]
-    elif level == BOTTOM_GROUP:
-        why = f"it loads after {_name(mods, via[key])}, which goes at the bottom"
+        return f"{name}: {based[key]}, so it goes in {GROUP_PLACES[level]}."
+    links, seen, here = [], {key}, key
+    while here not in based and here in via and len(links) < LINKS_SHOWN:
+        here = via[here]
+        if here in seen:
+            break
+        links.append(here)
+        seen.add(here)
+    if not links:
+        return f"{name}: it goes in {GROUP_PLACES[level]}."
+    if level == BOTTOM_GROUP:
+        parts = [f"it loads after {_name(mods, links[0])}"] + [f"{_name(mods, a)} after {_name(mods, b)}"
+                                                              for a, b in zip(links, links[1:])]
     else:
-        why = f"{_name(mods, via[key])} loads after it"
-    return f"{_name(mods, key)}: {why}, so it goes in {GROUP_PLACES[level]}."
+        parts = [f"{_name(mods, links[0])} loads after it"] + [f"{_name(mods, b)} after {_name(mods, a)}"
+                                                              for a, b in zip(links, links[1:])]
+    why = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + ", and " + parts[-1]
+    if here in based:
+        why += f" ({_name(mods, here)}: {based[here]})"
+    else:
+        why += ", and so on"
+    return f"{name}: {why}, so it goes in {GROUP_PLACES[level]}."
 
 
 def _explain(key, old_place, new_place, edges, placed_by, mods, kept, how=FEWEST, group=None, group_reason=None):
@@ -487,7 +528,8 @@ def _explain(key, old_place, new_place, edges, placed_by, mods, kept, how=FEWEST
                 break
     kind = RULE_MOVE if reasons else ROOM_MOVE
     level = (group or {}).get(key, MIDDLE_GROUP)
-    if not reasons and level != MIDDLE_GROUP and group_reason:
+    # A group move only when the mod passes a mod of another group (1.91.0); within its group it is a names move.
+    if not reasons and group_reason:
         kind = GROUP_MOVE
         if placing is not None:
             sources.append(placing.source)

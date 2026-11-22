@@ -4,6 +4,21 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.91.0] - 2026-11-23
+
+After the owner's full re-sort preview with 1.88.0 (23 Nov 2026: "Thoughts?"): the five "moved into their group" mods on their
+list were already in their group. The owner chose all three fixes on a question card.
+
+### Changed
+
+- **A move counts as into its group only when the mod passes a mod of another group** (`kind` `group`); one that only changes
+  places inside its group is a names move (`order`), or in fewest moves a room move. A mod no group claims that passes a group's
+  mod is a group move too, with its reason. On the owner's list a full re-sort's 134 moves are now all names moves; fewest moves
+  still finds none.
+- **A group move's reason follows the links back to the member that has its own reason**, up to four links: "Deserters: Combat
+  Extended loads after it, and Vanilla Expanded Framework after Combat Extended (Vanilla Expanded Framework: it is a known
+  framework)". Each group keeps its own links, so a chain never runs through another group.
+
 ## [1.90.1] - 2026-11-23
 
 ### Fixed
