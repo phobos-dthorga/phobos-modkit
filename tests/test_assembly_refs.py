@@ -114,6 +114,58 @@ class RimWorldRules(unittest.TestCase):
         self.assertIn("Neither mod says so", found[0].why)
 
 
+class LibraryCopies(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.fake = FakeRimWorld(self.tmp.name, ["ludeon.rimworld", "example.hostel", "example.market", "example.library"])
+        self.environ = self.fake.environ(self.tmp.name)
+        self.environ["PHOBOS_MODKIT_CACHE"] = str(Path(self.tmp.name) / "cache")
+        for folder in ("1000000002/Assemblies", "1000000001/Assemblies", "1000000004/Assemblies"):
+            (self.fake.workshop / folder).mkdir(parents=True, exist_ok=True)
+        (self.fake.workshop / "1000000002/Assemblies/Shared.dll").write_bytes(b"MZ old")
+        (self.fake.workshop / "1000000001/Assemblies/Shared.dll").write_bytes(b"MZ new copy")
+        (self.fake.workshop / "1000000004/Assemblies/Library.dll").write_bytes(b"MZ")
+        self.versions = {"1000000002": "1.0.0.0", "1000000001": "2.0.0.0"}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_reader(self, command, capture_output=True, check=False):
+        listing = Path(command[2][1:]).read_text(encoding="utf-8").splitlines()
+        lines = []
+        for path in listing:
+            item = Path(path).parent.parent.name
+            name = Path(path).stem
+            lines.append(json.dumps({"path": path, "assembly": name, "version": self.versions.get(item, "1.0.0.0"),
+                                     "references": [], "inherits": []}))
+        return subprocess.CompletedProcess(command, 0, "\n".join(lines).encode("utf-8"), b"")
+
+    def copies(self):
+        from phobos_modkit import assembly_refs as refs
+        original = refs.read_references
+        try:
+            refs.read_references = lambda paths, environ=None, run=None, reader=None: original(paths, environ, self.run_reader,
+                                                                                               "reader")
+            return RimWorld(self.environ).library_copies()
+        finally:
+            refs.read_references = original
+
+    def test_an_older_copy_loading_first_is_found_and_noted(self):
+        found = self.copies()
+        self.assertEqual(len(found), 1)
+        self.assertEqual((found[0]["first"]["name"], found[0]["newest"]["name"]), ("Hostel", "Market"))
+        adapter = RimWorld(self.environ)
+        problems = core.check(adapter, adapter.lists()[0], core.Installed(adapter, adapter.installed()), {},
+                              library_copies=found)
+        noted = [p for p in problems if p.kind == "library"]
+        self.assertEqual(noted[0].severity, core.NOTE)
+        self.assertIn("older Shared (1.0.0.0)", noted[0].title)
+
+    def test_the_newest_loading_first_is_no_clash(self):
+        self.versions = {"1000000002": "3.0.0.0", "1000000001": "2.0.0.0"}
+        self.assertEqual(self.copies(), [])
+
+
 class LibrariesFirst(unittest.TestCase):
     def test_a_full_resort_puts_the_most_used_library_first_after_the_game(self):
         mods = [mod("core", source="game", name="Core"), mod("apple", needs=["zlib"], name="Apple"),

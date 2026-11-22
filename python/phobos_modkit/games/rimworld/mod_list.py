@@ -274,6 +274,10 @@ def read_workshop_rules(path):
     return rules
 
 
+def _version_tuple(text):
+    return tuple(int(p) for p in re.findall(r"\d+", text or ""))
+
+
 def read_about(folder, source, workshop_id, version):
     root = _about_root(Path(folder))
     if root is None:
@@ -420,6 +424,46 @@ class RimWorld:
 
     def _version_number(self):
         return ".".join(self._version.split(".")[:2]) if self._version else ""
+
+    def _active_assemblies(self, reader=None):
+        """(the active mods in load order, {key: [their loaded .dll files]}, {path: what the reader says of it})."""
+        from ...assembly_refs import read_references
+        found = self.lists()
+        if not found:
+            return [], {}, {}
+        by_key = {}
+        for mod in self.installed():
+            by_key.setdefault(self.key(mod.id), mod)
+        active_keys = [self.key(i) for i in found[0].ids]
+        mods = [by_key[k] for k in dict.fromkeys(active_keys) if k in by_key and by_key[k].source != "game"]
+        files = self.assemblies_of(mods, set(active_keys))
+        read = read_references([f for fs in files.values() for f in fs], self.environ, reader=reader)
+        return mods, files, read
+
+    def library_copies(self, reader=None):
+        """Libraries several active mods carry their own copy of, where the copy loaded first is older than another (1.85.0):
+        [{"assembly", "first": {...}, "newest": {...}, "copies": [{"key", "name", "version", "path"}]}]. RimWorld loads every
+        copy (Verse.ModAssemblyHandler, Assembly.LoadFrom, no check for a name already loaded); the rest of the game's code most
+        likely binds to the first one loaded."""
+        mods, files, read = self._active_assemblies(reader)
+        copies = {}
+        for mod in mods:
+            key = self.key(mod.id)
+            for path in files.get(key, []):
+                record = read.get(path)
+                if record and record.get("version"):
+                    copies.setdefault(record["assembly"].lower(), []).append(
+                        {"key": key, "id": mod.id, "name": mod.name, "version": record["version"], "path": path,
+                         "assembly": record["assembly"], "workshop_id": mod.workshop_id})
+        found = []
+        for items in copies.values():
+            if len({c["key"] for c in items}) < 2:
+                continue
+            first = items[0]
+            newest = max(items, key=lambda c: _version_tuple(c["version"]))
+            if _version_tuple(first["version"]) < _version_tuple(newest["version"]):
+                found.append({"assembly": first["assembly"], "first": first, "newest": newest, "copies": items})
+        return found
 
     def code_rules(self, reader=None):
         """{key: {"after": [(the mod whose assembly its code builds on, note)], ...}} for the active list (1.84.0): where a type in

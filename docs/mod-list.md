@@ -56,6 +56,7 @@ mod" for a patch whose author had taken it off the Workshop). The Companion's Mo
 | `order` | warning | A mod loads before one it must load after, or the reverse | None here: `sort` puts it right |
 | `removed` | warning | A mod on this PC that the Workshop no longer has (with `--online`) | None |
 | `unsubscribed` | warning | A Workshop mod on this PC that Steam no longer keeps for you | None |
+| `library` | note | Several active mods carry the same library and an older copy loads first (1.85.0) | None: load the newer above, or ask for an update |
 | `version` | note | A mod that does not say it works with this game version | None |
 | `unchecked` | note | Mods a list names that could not be looked for (the game not installed) | None |
 

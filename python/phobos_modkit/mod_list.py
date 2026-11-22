@@ -265,10 +265,11 @@ def _gone_reason(adapter, remembered, workshop_id, subscribed, steam):
     return "No check has seen it on this PC, so the tools cannot say what it was."
 
 
-def check(adapter, mod_list, installed, memory, steam=None, subscribed=None, code_rules=None):
+def check(adapter, mod_list, installed, memory, steam=None, subscribed=None, code_rules=None, library_copies=None):
     """Every problem with one list. `steam` is {workshop id: Steam's result} when read online, else None; `subscribed` the
     Workshop ids Steam keeps for this game, or None when unknown; `code_rules` {key: {"after": [(id, note)]}} what each mod's code
-    builds on (1.84.0), when the adapter can read it."""
+    builds on (1.84.0), when the adapter can read it; `library_copies` the libraries several mods carry, where an older copy
+    loads first (1.85.0)."""
     problems = []
     entries = [(position, listed, installed.find(listed)) for position, listed in enumerate(mod_list.ids)]
     active = {}
@@ -319,6 +320,7 @@ def check(adapter, mod_list, installed, memory, steam=None, subscribed=None, cod
     problems += _needs(adapter, mod_list, entries, installed, active)
     problems += _order(adapter, mod_list, entries, active, position_of)
     problems += _code_order(adapter, mod_list, entries, active, position_of, code_rules or {})
+    problems += _library_clashes(mod_list, library_copies or [])
     problems += _warnings(adapter, mod_list, entries, steam, subscribed)
     problems += _versions(adapter, mod_list, entries)
     order = {s: i for i, s in enumerate(SEVERITIES)}
@@ -401,6 +403,25 @@ def _code_order(adapter, mod_list, entries, active, position_of, code_rules):
                                     f"{_named(mod)} loads before {_named(other)}, whose classes its code builds on.",
                                     f"{note} Neither mod says so in its files, so only its code shows it. Move "
                                     f"{_named(mod)} after {_named(other)}, or sort the list."))
+    return problems
+
+
+def _library_clashes(mod_list, library_copies):
+    """An older copy of a library loading before a newer copy another mod carries (1.85.0). A note, not a warning: often the
+    copies are stubs that do nothing until their own mod runs (the owner's list, 23 Nov 2026: 16 copies of 0MultiplayerAPI), and
+    whether a newer copy's mods need what it adds cannot be read from outside."""
+    problems = []
+    for clash in library_copies:
+        first, newest = clash["first"], clash["newest"]
+        others = sorted({c["name"] for c in clash["copies"]} - {first["name"]})
+        problems.append(Problem(
+            "library", NOTE, mod_list.key, first["id"], first["name"],
+            f"{first['name']} brings an older {clash['assembly']} ({first['version']}) that loads before {newest['name']}'s "
+            f"newer copy ({newest['version']}).",
+            f"The game loads every copy, and the rest of its code most likely uses the first one loaded, so mods built for "
+            f"{clash['assembly']} {newest['version']} may fail. Other copies: {', '.join(others)}. Load {newest['name']} "
+            f"above {first['name']}, or ask {first['name']}'s author to update their copy. How your game's runtime chooses "
+            "between copies is not confirmed.", workshop_id=first.get("workshop_id", "")))
     return problems
 
 

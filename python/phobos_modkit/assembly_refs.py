@@ -16,7 +16,7 @@ import tempfile
 from . import assemblies
 from .paths import cache_root
 
-CACHE_FORMAT = 2              # 2 (1.84.0): each entry also says which assemblies its types inherit from
+CACHE_FORMAT = 3              # 2 (1.84.0): which assemblies its types inherit from; 3 (1.85.0): its version
 CACHE_NAME = "assembly-refs.json"
 
 
@@ -51,7 +51,8 @@ def _save(path, files):
 
 
 def read_references(paths, environ=None, run=subprocess.run, reader=None):
-    """{path: {"assembly": name, "references": [names], "inherits": [names its types' parents come from]}} for each readable .NET assembly among the paths (native DLLs and unreadable
+    """{path: {"assembly": name, "version": "1.2.3.4", "references": [names], "inherits": [names its types' parents come
+    from]}} for each readable .NET assembly among the paths (native DLLs and unreadable
     files are left out). Builds the reader first when it is missing; raises assemblies.ReaderError when it cannot be built."""
     cache_file = _cache_file(environ)
     cached = _load(cache_file)
@@ -82,7 +83,8 @@ def read_references(paths, environ=None, run=subprocess.run, reader=None):
         for path, stamp in wanted:
             record = answers.get(os.path.normcase(path), {})
             entry = {"stamp": stamp, "assembly": record.get("assembly", "") if "error" not in record else "",
-                     "references": list(record.get("references") or []), "inherits": list(record.get("inherits") or [])}
+                     "version": record.get("version", ""), "references": list(record.get("references") or []),
+                     "inherits": list(record.get("inherits") or [])}
             cached[path] = entry
             if entry["assembly"]:
                 found[path] = entry

@@ -8,8 +8,9 @@ using Phobos.ModKit.Assemblies;
 //                                                     name or a dotted suffix of one) found in any FILE, and per base type.
 // PhobosModKit.Assemblies calls FILE...               one JSON object per assembly: its types (kind, base, interfaces) and
 //                                                     each method with what it calls and which fields it uses (CallReader).
-// PhobosModKit.Assemblies refs FILE...                one JSON object per assembly: its own name and the names of the
-//                                                     assemblies it is built on (its AssemblyRef table, 1.84.0).
+// PhobosModKit.Assemblies refs FILE...                one JSON object per assembly: its own name and version, the names of
+//                                                     the assemblies it is built on (its AssemblyRef table, 1.84.0), and
+//                                                     those its types inherit from.
 // FILE may be @LISTFILE, one path per line. Reads metadata only: an assembly is opened as a file and never loaded or run.
 // A file that is not a readable .NET assembly gives an object with an error instead of stopping the run.
 if (args.Length < 1 || (args[0] != "patches" && args[0] != "members" && args[0] != "calls" && args[0] != "refs"))
@@ -57,7 +58,8 @@ foreach (string file in Files(args.Skip(1)))
                 .Select(handle => metadata.GetString(metadata.GetAssemblyReference(handle).Name))
                 .Distinct()
                 .ToList();
-            result = new { path = file, assembly = name, references, inherits = Inherited(metadata) };
+            string version = metadata.IsAssembly ? metadata.GetAssemblyDefinition().Version.ToString() : "";
+            result = new { path = file, assembly = name, version, references, inherits = Inherited(metadata) };
         }
         else if (args[0] == "calls")
         {

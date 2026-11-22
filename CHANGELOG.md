@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.85.0] - 2026-11-23
+
+Helpers for the player in the mod manager (the owner, 23 Nov 2026: "Is there anything more we can do, especially to help the
+player?"; their choices on a question card: all four offered). Each came in its own commit.
+
+### Added
+
+- **mod-list check names libraries carried in several copies, where an older copy loads first**: when two or more active mods
+  carry their own copy of the same assembly and the one loaded first (load order decides: RimWorld loads every copy, with no check
+  for a name already loaded) is older than another, a note names both mods and both versions. A note, not a warning: such copies
+  are often stubs that do nothing until their own mod runs, and whether a newer copy's mods need what it adds cannot be read from
+  outside. The assembly reader's `refs` now also gives each assembly's version. On the owner's list: one, 0MultiplayerAPI, carried
+  by 16 mods (0.5.0.0 from Adaptive Storage Framework first, 0.6.0.0 from Exosuit Framework).
 ## [1.84.0] - 2026-11-23
 
 From the owner's log of 23 Nov 2026: after a full re-sort, I Am Mother's compat code failed to load ("ReflectionTypeLoadException

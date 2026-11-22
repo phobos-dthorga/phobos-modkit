@@ -176,14 +176,15 @@ def survey(adapter, environ=None, settings=None, online=False, list_key=None, po
             notes.append(f"Steam could not be asked which Workshop items still exist ({error}); read again later.")
     progress("Checking each list", 3, 4)
     problems = []
-    code_rules = None
+    code_rules = library_copies = None
     if hasattr(adapter, "code_rules"):
         try:
             code_rules = adapter.code_rules()
+            library_copies = adapter.library_copies() if hasattr(adapter, "library_copies") else None
         except Exception as error:   # the check stands without them: the reader may be missing (.NET not installed)
             notes.append(f"What each mod's code builds on could not be read ({error}).")
     for mod_list in lists:
-        problems += core.check(adapter, mod_list, installed, memory, steam, subscribed, code_rules)
+        problems += core.check(adapter, mod_list, installed, memory, steam, subscribed, code_rules, library_copies)
     progress("Done", 4, 4)
     counts = {s: sum(1 for p in problems if p.severity == s) for s in core.SEVERITIES}
     return {"game": adapter.game, "name": adapter.name, "supported": True, "version": adapter.game_version(),
