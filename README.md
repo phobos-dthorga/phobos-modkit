@@ -185,6 +185,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/pins.md](docs/pins.md) | Pins: which kit version each repository records, and what a move would bring |
 | [docs/picks.md](docs/picks.md) | Picks: the file, offering and settling, and the answers file |
 | [docs/zeroed.md](docs/zeroed.md) | Zeroed: finding files a crash left filled with zeros, and what puts each right |
+| [docs/research/rimsort-sorting.md](docs/research/rimsort-sorting.md) | RimSort's sorting studied: its tiers, rule merge and sorts, compared with ours, with proposals |
 | [docs/mod-list.md](docs/mod-list.md) | Mod list: the checks, why a mod is missing, each game's lists, and the backups behind every change |
 | [docs/game-files.md](docs/game-files.md) | Game files: where each part comes from, how places are guessed, and what the report holds |
 | [docs/decisions.md](docs/decisions.md) | Decisions: the config, the answers file, and acting on an answer |

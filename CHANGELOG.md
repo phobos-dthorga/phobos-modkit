@@ -4,6 +4,12 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+### Docs
+
+- **RimSort's sorting studied** (`docs/research/rimsort-sorting.md`; the owner, 23 Nov 2026: study it "before any further
+  changes"): its four tiers, each pulling in what its mods depend on (what our full re-sort lacked), its rule merge, its sorts and
+  its handling of loops, compared with ours, with proposals. Read from its public GPL-3.0 source and summarised, nothing copied.
+
 ## [1.85.0] - 2026-11-23
 
 Helpers for the player in the mod manager (the owner, 23 Nov 2026: "Is there anything more we can do, especially to help the
