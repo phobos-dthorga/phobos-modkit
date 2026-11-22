@@ -22,9 +22,13 @@ atexit.register(shutil.rmtree, _RUN_FOLDER, ignore_errors=True)
 
 
 def isolated_environ(tmp=None, **extra):
-    """An environment for a test that points the history log and the central settings file into tmp (or the run's folder)."""
+    """An environment for a test that points the history log, the central settings file and D'thorga Companion's own data folder
+    into tmp (or the run's folder). Without LOCALAPPDATA and XDG_DATA_HOME, `paths.companion_data` falls back to the home folder,
+    so a test reaching the Companion's folder wrote there (seen 23 Nov 2026: safe-copies' run-all record, where two runs at once
+    collided)."""
     folder = Path(tmp) if tmp else _RUN_FOLDER
-    return {"PHOBOS_HISTORY": str(folder / "history"), "PHOBOS_SETTINGS": str(folder / "settings.json"), **extra}
+    return {"PHOBOS_HISTORY": str(folder / "history"), "PHOBOS_SETTINGS": str(folder / "settings.json"),
+            "LOCALAPPDATA": str(folder / "local-app-data"), "XDG_DATA_HOME": str(folder / "data-home"), **extra}
 
 
 def fixture_text(relative):

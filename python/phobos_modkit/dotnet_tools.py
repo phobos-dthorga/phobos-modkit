@@ -36,7 +36,10 @@ class DotnetTool:
         return native.KIT_ROOT / "dotnet" / self.project / f"{self.project}.csproj"
 
     def build_folder(self, environ=None):
-        return native.build_dir(environ) / "dotnet" / "tool" / self.folder
+        """Its build, one folder per version of the kit (1.79.1): repositories pin different versions, and with one shared
+        folder each rebuilt the tool over the other's whenever their versions differed, so a run could find it half written or
+        built from other source (seen 23 Nov 2026: phobos-rimworld's pinned 1.75.0 and the kit's own tests)."""
+        return native.build_dir(environ) / "dotnet" / "tool" / self.folder / __version__
 
     def built_path(self, environ=None):
         return self.build_folder(environ) / native.program_name(self.project)

@@ -4,6 +4,21 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.79.1] - 2026-11-23
+
+### Fixed
+
+- **Tests no longer write into the home folder.** The tests' shared environment (`isolated_environ`) now points D'thorga
+  Companion's own data folder into the test's folder too (`LOCALAPPDATA`, `XDG_DATA_HOME`). Without them `paths.companion_data`
+  fell back to `~/.local/share`, so safe-copies' run-all test wrote its record there, and two runs at once collided (the gate
+  failed once on 23 Nov 2026 with "being used by another process"). A full test run now leaves that folder untouched.
+- **The kit's C# tools are built into a folder of their own for each kit version** (`<build>/dotnet/tool/<tool>/<version>`).
+  Repositories pin different versions of the kit, and with one shared folder each rebuilt the assembly reader over the other's
+  whenever their versions differed, so a run could find it half written (Windows: "not compatible with the version of Windows")
+  or built from other source; on 23 Nov 2026 phobos-rimworld's pinned 1.75.0 and the kit's own tests did so in turns and eight
+  reader tests failed. Each version now keeps its own build (about 250 KB each; older ones are left in place, never deleted
+  here). This and the entry above are one commit: both were in the tree when the gate first failed.
+
 ## [1.79.0] - 2026-11-23
 
 ### Added
