@@ -25,7 +25,7 @@ from ...mod_list import Mod, ModList, Need
 from ...installs import game_running
 from ...steam.client import library_path as steam_library_path
 from ...mod_lists import FILE, MANAGER, SAVE, SavedList
-from ...mod_sort import COMMUNITY, YOURS, RuleSet
+from ...mod_sort import COMMUNITY, WORKSHOP, YOURS, RuleSet
 from .installs import PROCESSES
 from .loading import STEAM_SUFFIX, bare_id, read_mods_config
 from .mods import _about_root, _child, _text
@@ -42,6 +42,11 @@ CLUE_TOTAL_BYTES = 64 * 1024 * 1024     # and the look stops after this much of 
 # "loadTop": {"value": true}, "loadBottom": {"value": true}}}}; seen in RimSort 1.17.4 on 22 Nov 2026.
 RIMSORT_COMMUNITY = ("dbs/Community-Rules-Database/communityRules.json", "communityRules.json")
 RIMSORT_USER = ("dbs/userRules.json", "userRules.json")
+# RimSort's Steam Workshop Database (1.79.0): {"version": time, "database": {Workshop number or app id: {"packageId", "name",
+# "dependencies": {Workshop number: [name, url]}}}}, the items each mod's Workshop page lists as required. CC0; about 50 MB and
+# 57,679 entries on 23 Nov 2026, read in a quarter of a second. Read once per file version and kept while the tools run.
+RIMSORT_WORKSHOP = ("dbs/Steam-Workshop-Database/steamDB.json", "steamDB.json")
+_WORKSHOP_CACHE = {}
 # Lists the game and RimSort keep (1.75.0). A save (.rws) starts with <meta>: gameVersion, then modIds, modSteamIds and modNames
 # in load order (Verse.ScribeMetaHeaderUtility.WriteMetaHeader); the game's own saved list (.rml, ModLists folder) is that header
 # and a <modList> of <ids> and <names> (Verse.GameDataSaveLoader.SaveModList). RimSort keeps a history of lists as JSON
@@ -233,6 +238,42 @@ def render_list_file(saved, newline="\r\n"):
             + block("names", names, "\t\t") + newline + "\t</modList>" + newline + "</savedModList>" + newline)
 
 
+def read_workshop_rules(path):
+    """{packageId: {"after": [(the required mod's packageId, note)], ...}} from RimSort's Steam Workshop Database, or None."""
+    path = Path(path)
+    try:
+        stamp = path.stat().st_mtime_ns
+    except OSError:
+        return None
+    cached = _WORKSHOP_CACHE.get(str(path))
+    if cached and cached[0] == stamp:
+        return cached[1]
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return None
+    database = data.get("database") if isinstance(data, dict) else None
+    if not isinstance(database, dict):
+        return None
+    package_of = {number: (entry.get("packageId") or entry.get("packageid") or "").lower()
+                  for number, entry in database.items() if isinstance(entry, dict)}
+    rules = {}
+    for number, entry in database.items():
+        if not isinstance(entry, dict) or not package_of.get(number) or not isinstance(entry.get("dependencies"), dict):
+            continue
+        needed = []
+        for required, info in entry["dependencies"].items():
+            other = package_of.get(str(required))
+            if other and other != package_of[number]:
+                name = info[0] if isinstance(info, list) and info else other
+                needed.append((other, f"Its Workshop page lists {name} as required."))
+        if needed:
+            found = rules.setdefault(package_of[number], {"after": [], "before": [], "top": None, "bottom": None})
+            found["after"].extend(needed)
+    _WORKSHOP_CACHE[str(path)] = (stamp, rules)
+    return rules
+
+
 def read_about(folder, source, workshop_id, version):
     root = _about_root(Path(folder))
     if root is None:
@@ -362,9 +403,11 @@ class RimWorld:
         base = rimsort_folder(self.environ)
         found = []
         for source, label, names in ((YOURS, "Your rules in RimSort", RIMSORT_USER),
+                                     (WORKSHOP, "The Workshop's required items (RimSort's database)", RIMSORT_WORKSHOP),
                                      (COMMUNITY, "The community rules (RimSort's database)", RIMSORT_COMMUNITY)):
+            reader = read_workshop_rules if source == WORKSHOP else read_rimsort_rules
             for name in names:
-                rules = read_rimsort_rules(base / name)
+                rules = reader(base / name)
                 if rules is not None:
                     found.append(RuleSet(source, label, str(base / name), rules))
                     break

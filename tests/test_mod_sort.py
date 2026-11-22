@@ -8,7 +8,7 @@ import unittest
 from phobos_modkit import mod_list as core
 from phobos_modkit import mod_list_cli as cli
 from phobos_modkit import mod_sort
-from phobos_modkit.games.rimworld.mod_list import RimWorld, read_rimsort_rules
+from phobos_modkit.games.rimworld.mod_list import RimWorld, read_rimsort_rules, read_workshop_rules
 from phobos_modkit.mod_list import Mod, ModList, Need
 
 from test_mod_list import FakeRimWorld, about
@@ -100,6 +100,16 @@ class Fewest(unittest.TestCase):
         self.assertEqual(found["ids"], ["b", "a"])
         self.assertEqual(found["set_aside"][0]["source"], "own")
 
+    def test_a_workshop_requirement_orders_mods_and_yields_to_a_mods_own_rule(self):
+        workshop = rule_set(mod_sort.WORKSHOP, {"a": {"after": [("lib", "listed")], "before": [], "top": None, "bottom": None}})
+        found = sort(["a", "lib"], [mod("a"), mod("lib")], [workshop])
+        self.assertEqual(found["ids"], ["lib", "a"])
+        self.assertEqual(found["rules"]["workshop"], 1)
+        self.assertEqual(found["moves"][0]["sources"], ["workshop"])
+        looped = sort(["a", "lib"], [mod("a"), mod("lib", after=["a"])], [workshop])
+        self.assertEqual(looped["ids"], ["a", "lib"])
+        self.assertEqual(looped["set_aside"][0]["source"], "workshop")
+
     def test_a_mod_listed_twice_is_refused(self):
         with self.assertRaises(core.FixError):
             sort(["a", "b", "a"], [mod("a"), mod("b")])
@@ -145,6 +155,20 @@ class OwnRules(unittest.TestCase):
         self.assertEqual(len(mod_sort.load_own_rules(self.path)), 1)
         with self.assertRaises(core.FixError):
             mod_sort.drop_rule(self.path, 5)
+
+    def test_rimsorts_workshop_database_gives_each_mod_its_required_items_by_package_id(self):
+        self.path.write_text(json.dumps({"version": 1, "database": {
+            "1000": {"packageId": "X.One", "name": "One", "dependencies": {
+                "2000": ["Two", "url"], "1826140": ["Biotech", "url"], "9999": ["Unknown", "url"], "1000": ["Itself", "url"]}},
+            "2000": {"packageId": "x.two", "name": "Two"},
+            "1826140": {"appid": True, "packageid": "ludeon.rimworld.biotech", "name": "RimWorld - Biotech"}}}),
+            encoding="utf-8")
+        rules = read_workshop_rules(self.path)
+        self.assertEqual([other for other, _ in rules["x.one"]["after"]], ["x.two", "ludeon.rimworld.biotech"])
+        self.assertIn("lists Two as required", rules["x.one"]["after"][0][1])
+        self.assertNotIn("x.two", rules)
+        self.assertIs(read_workshop_rules(self.path), rules)
+        self.assertIsNone(read_workshop_rules(Path(self.tmp.name) / "none.json"))
 
     def test_rimsorts_files_are_read_with_their_notes_and_only_true_placings(self):
         self.path.write_text(json.dumps({"rules": {"x.one": {

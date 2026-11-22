@@ -11,6 +11,8 @@ Where a rule comes from, strongest first (agent's order, used only to choose whi
 - **yours**: the owner's rules, made here or in RimSort;
 - **own**: the mod's own files (load after, load before);
 - **needs**: a mod loads after the mods it needs (RimSort does the same with "use modDependencies as loadAfter");
+- **workshop** (1.79.0; the owner's choice, 23 Nov 2026): a mod loads after the items its Workshop page lists as required, which
+  catches needs a mod never wrote into its own files (RimWorld: RimSort's Steam Workshop Database, read where RimSort keeps it);
 - **community**: the community rules a game's mod managers share (RimWorld: RimSort's Community Rules database, read where RimSort
   keeps it and never copied into our repositories).
 
@@ -31,9 +33,11 @@ from pathlib import Path
 
 from .mod_list import FixError, Installed, folder
 
-YOURS, OWN, NEEDS, COMMUNITY, GAME = "yours", "own", "needs", "community", "game"
-STRENGTH = {YOURS: 4, OWN: 3, NEEDS: 2, COMMUNITY: 1, GAME: 0}
-SOURCE_WORDS = {YOURS: "your rule", OWN: "its own files", NEEDS: "it needs it", COMMUNITY: "the community rules",
+YOURS, OWN, NEEDS, WORKSHOP, COMMUNITY, GAME = "yours", "own", "needs", "workshop", "community", "game"
+STRENGTH = {YOURS: 5, OWN: 4, NEEDS: 3, WORKSHOP: 2, COMMUNITY: 1, GAME: 0}
+RULE_SOURCES = (YOURS, OWN, NEEDS, WORKSHOP, COMMUNITY)
+SOURCE_WORDS = {YOURS: "your rule", OWN: "its own files", NEEDS: "it needs it", WORKSHOP: "its Workshop page requires it",
+                COMMUNITY: "the community rules",
                 GAME: "the game's own load first"}
 FEWEST, FULL = "fewest", "full"
 TOP, NORMAL, BOTTOM = 0, 1, 2
@@ -370,13 +374,13 @@ def arrange(adapter, mod_list, installed, rule_sets, how=FEWEST):
         moves.append(_explain(key, old_place, new_place, edges, placed_by, mods, kept, how))
     return {"how": how, "ids": [listed[k] for k in order], "keys": order, "moves": moves,
             "set_aside": [_aside(gone, mods) for gone in set_aside],
-            "rules": {source: sum(1 for r in best.values() if r.source == source) for source in (YOURS, OWN, NEEDS, COMMUNITY)},
+            "rules": {source: sum(1 for r in best.values() if r.source == source) for source in RULE_SOURCES},
             "placings": {"top": sum(1 for t in tier.values() if t == TOP), "bottom": sum(1 for t in tier.values() if t == BOTTOM)},
             "count": len(keys)}
 
 
 def _said(rule, mods):
-    who = rule.by if rule.source in (YOURS, COMMUNITY, GAME) else f"{rule.by}: {SOURCE_WORDS[rule.source]}"
+    who = rule.by if rule.source in (YOURS, WORKSHOP, COMMUNITY, GAME) else f"{rule.by}: {SOURCE_WORDS[rule.source]}"
     text = f"{_name(mods, rule.then)} loads after {_name(mods, rule.first)} ({who})"
     return text + (f". {rule.note}" if rule.note else "")
 

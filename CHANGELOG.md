@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.79.0] - 2026-11-23
+
+### Added
+
+- **The sorter reads the Workshop's required items** (the owner, 23 Nov 2026: "add RimSort's Workshop database as a source"): a
+  mod loads after each item its Workshop page lists as required, which catches needs a mod never wrote into its own files.
+  RimWorld reads RimSort's Steam Workshop Database (`steamDB.json`, CC0) where RimSort keeps it, never copied; about 50 MB and
+  57,679 items, read once per file version (0.6 s the first sort, 0.2 s after). A new rule source, **workshop**, ranks between a
+  mod's needs and the community rules when a loop is broken (agent's order). On the owner's list it adds 19 rules the mods' own
+  files do not state; the list already kept all of them.
 ## [1.78.0] - 2026-11-22
 
 Pictures and sounds in the code behind an entry (the owner, 22 Nov 2026: "We should support the ability to display multimedia in

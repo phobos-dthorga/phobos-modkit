@@ -340,7 +340,7 @@ def sort(adapter, args, environ=None, running=game_running, now=None, progress=N
     report = Report(f"Mod list: {words}" + ("" if args.apply else " (preview)"))
     used = data["rules"]
     report.lines.append(f"Rules read: {used['own']} from mods' own files, {used['needs']} from what mods need, "
-                        f"{used['community']} community, {used['yours']} yours.")
+                        f"{used['workshop']} from Workshop pages, {used['community']} community, {used['yours']} yours.")
     if data["moves"]:
         rows = [[str(m["from"]), str(m["to"]), m["name"], " ".join(m["why"])] for m in data["moves"][:SORT_SHOWN]]
         report.section("Moves", Table(["From", "To", "Mod", "Why"], rows))

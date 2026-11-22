@@ -307,7 +307,7 @@ dependencies = [
 
 [[package]]
 name = "xml-index"
-version = "1.78.0"
+version = "1.79.0"
 dependencies = [
  "quick-xml",
  "rusqlite",
