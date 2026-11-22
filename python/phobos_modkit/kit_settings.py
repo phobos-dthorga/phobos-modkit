@@ -38,9 +38,52 @@ class Setting:
     game: str = None                  # None for a setting of every game
     default: object = None            # a function of environ giving the default path, or None when there is none
     declared_by: str = "phobos-modkit"
+    name: str = ""                    # a few words for one line of a list (1.95.0); "" when there is none
+
+
+# The few words each of the kit's settings is listed by on one line (1.95.0; D'thorga Companion 0.66.0's one-line rows, the
+# owner's choice of 23 Nov 2026). Agent-written; the description stays the full sentence.
+NAMES = {
+    "historyPath": "Record of what happened on this PC",
+    "recordsBackupPath": "Copies of the Companion's records",
+    "safeCopiesPath": "Safe copies, as plain files",
+    "safeCopiesRepositoryPath": "Safe copies repository",
+    "claudeHomePath": "Claude Code's own folder",
+    "modListPath": "Mod-list memory and list backups",
+    "claimsPath": "Agent sessions' claims board",
+    "companionDecisionsPath": "Your answers to decisions",
+    "steamPath": "Steam's own folder",
+    "modkitCachePath": "What the tools work out (cache)",
+    "companionTestVerdictsPath": "Your test verdicts",
+    "companionTestKeyDecisionsPath": "Your word on notes no test names",
+    "assemblyArchivePath": "Kept versions of assemblies",
+    "ilspycmdPath": "The decompiler (ilspycmd)",
+    "rimworldPath": "The RimWorld folder",
+    "workshopPath": "RimWorld's Workshop folder",
+    "rimworldLogsPath": "Where Player.log is written",
+    "rimworldSavesPath": "RimWorld's saves",
+    "rimworldConfigPath": "RimWorld's config and mod settings",
+    "rimworldPatchedDefsPath": "Patched-Defs file",
+    "rimworldColonyMoodPath": "Colony mood file",
+    "rimworldSeenInPlayPath": "Seen-in-play notes",
+    "toddsPath": "Texture encoder (todds.exe)",
+    "rimsortPath": "RimSort's own folder",
+    "ostranautsDataPath": "Ostranauts' data folder",
+    "kenshiDataPath": "Kenshi's saves",
+    "zomboidDataPath": "Project Zomboid's data folder",
+    "companionGamesPath": "Your games list",
+}
 
 
 def _known():
+    """The settings the kit itself reads, each with its few words from NAMES."""
+    found = _declared_by_kit()
+    for setting in found:
+        setting.name = NAMES.get(setting.key, "")
+    return found
+
+
+def _declared_by_kit():
     """The settings the kit itself reads, each from the module that owns it."""
     from . import assembly_archive, claims, decisions, game_files, game_folders, history, mod_list, records, safe_copies
     from . import safe_copies_daily
@@ -111,7 +154,7 @@ def declared(root):
         if not item.get("key") or item.get("kind", "folder") not in KINDS:
             raise SettingsError(f"{path} has a setting with no key or an unknown kind: {item}")
         found.append(Setting(item["key"], item.get("env", ""), item.get("description", ""), item.get("kind", "folder"),
-                             item.get("game"), declared_by=Path(root).resolve().name))
+                             item.get("game"), declared_by=Path(root).resolve().name, name=item.get("name", "")))
     return found
 
 

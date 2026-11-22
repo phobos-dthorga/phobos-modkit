@@ -47,7 +47,8 @@ def _parser():
 
 def _data(reading):
     s = reading.setting
-    return {"key": s.key, "env": s.env or None, "description": s.description, "kind": s.kind, "game": s.game,
+    return {"key": s.key, "env": s.env or None, "name": s.name or None, "description": s.description, "kind": s.kind,
+            "game": s.game,
             "declaredBy": s.declared_by, "value": reading.value, "layer": reading.layer, "repository": reading.repository,
             "central": reading.central, "default": reading.default, "exists": reading.exists, "overridden": reading.overridden}
 

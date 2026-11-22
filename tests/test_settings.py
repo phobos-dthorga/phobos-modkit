@@ -45,7 +45,8 @@ class ListTests(unittest.TestCase):
             (repo / ".local").mkdir()
             (repo / ".local" / "install-settings.json").write_text(json.dumps({"artWorkPath": "K:/art"}), encoding="utf-8")
             (repo / "config" / "settings.json").write_text(json.dumps({"schemaVersion": 1, "settings": [
-                {"key": "artWorkPath", "env": "PHOBOS_ART_WORK", "description": "Art work files"}]}), encoding="utf-8")
+                {"key": "artWorkPath", "env": "PHOBOS_ART_WORK", "name": "Art", "description": "Art work files"}]}),
+                encoding="utf-8")
             out = io.StringIO()
             code = settings_cli.main(["list", "--root", str(repo), "--json", "--no-redact"], environ=env, out=out)
             data = json.loads(out.getvalue())["data"]
@@ -57,6 +58,14 @@ class ListTests(unittest.TestCase):
                              ("repository", "repo", "repo"))
             self.assertEqual(found["modkitCachePath"]["layer"], "default")
             self.assertTrue(data["centralExists"])
+            self.assertEqual((found["historyPath"]["name"], found["artWorkPath"]["name"]),
+                             ("Record of what happened on this PC", "Art"))
+
+    def test_every_kit_setting_has_a_few_words_to_list_it_by(self):
+        known = kit_settings._known()
+        self.assertEqual({s.key for s in known} - set(kit_settings.NAMES), set())
+        self.assertEqual(set(kit_settings.NAMES) - {s.key for s in known}, set())
+        self.assertTrue(all(0 < len(name) <= 40 for name in kit_settings.NAMES.values()))
 
     def test_a_malformed_repository_declaration_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:

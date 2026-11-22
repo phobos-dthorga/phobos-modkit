@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.95.0] - 2026-11-23
+
+### Added
+
+- **`settings list` gives each setting a few words to list it by**, `name` (D'thorga Companion 0.66.0 shows the settings one line
+  each, the owner's choice of 23 Nov 2026). Every setting the kit reads has one; a repository's own `config/settings.json` may give
+  one too, and without it `name` is null and the description stands. Guide: `docs/settings.md`.
+
 ## [1.94.0] - 2026-11-23
 
 The fourth slice of going online (D'thorga Companion's `docs/online.md`, O4: report links; the owner's choice of the Logs page).

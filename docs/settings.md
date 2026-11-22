@@ -29,6 +29,7 @@ python -m phobos_modkit settings set --key historyPath --clear
 | Field | What it holds |
 | --- | --- |
 | `key`, `env` | The setting's name in a settings file, and its environment variable |
+| `name` | A few words to list it by on one line (1.95.0), or null when it has none: then show the description |
 | `description`, `kind` (folder or file), `game` | What it is for; `game` is null for a setting of every game |
 | `declaredBy` | `phobos-modkit`, or the repository that declares it for its own scripts |
 | `value`, `layer` | The value in force, and where it comes from: `environment`, `repository`, `central` or `default` |
@@ -43,9 +44,11 @@ A repository declares the settings its own scripts read in `config/settings.json
 
 ```json
 {"schemaVersion": 1, "settings": [
-  {"key": "artWorkPath", "env": "PHOBOS_ART_WORK", "kind": "folder",
+  {"key": "artWorkPath", "env": "PHOBOS_ART_WORK", "kind": "folder", "name": "Art work files",
    "description": "Where the art tools keep their masks, parts and staging"}]}
 ```
+
+`name` is optional: a few words a list shows on one line, with the description as the full sentence beside it.
 
 Its own values live in the file its `config/installs.json` names (`settings`), else `.local/install-settings.json`. Its scripts
 read a value through `phobos_modkit.paths.resolve`, which applies the order above.
