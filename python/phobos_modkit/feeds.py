@@ -397,7 +397,8 @@ def main(argv=None, out=None, environ=None, get=None, clock=time.time, settings_
         except (OSError, ValueError, AttributeError):
             pass
         if args.write:
-            (Path(args.folder) / INDEX).write_text(json.dumps(index, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+            (Path(args.folder) / INDEX).write_text(json.dumps(index, indent=1, ensure_ascii=False) + "\n", encoding="utf-8",
+                                                   newline="\n")
         report = Report(f"Feed {args.name}: {len(index['files'])} files" + (", index written" if args.write else ""))
         report.section("Files", Table(["Path", "Kind", "Bytes"], [[f["path"], f["kind"] or "none", str(f["bytes"])]
                                                                    for f in index["files"]]))

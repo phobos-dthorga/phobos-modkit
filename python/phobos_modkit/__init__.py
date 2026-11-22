@@ -1,3 +1,3 @@
 """Phobos ModKit: out-of-game tools for game modders. Standard library only, Python 3.10 or newer."""
 
-__version__ = "1.93.0"
+__version__ = "1.94.0"

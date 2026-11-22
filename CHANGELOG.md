@@ -4,6 +4,22 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.94.0] - 2026-11-23
+
+The fourth slice of going online (D'thorga Companion's `docs/online.md`, O4: report links; the owner's choice of the Logs page).
+
+### Added
+
+- **`issue-links`: where a fault in a mod is reported, and the new-issue form filled in.** `where` says for each mod a fault names
+  whether it is ours (installed from one of a listed repository's own mod folders, on GitHub), theirs (its public source
+  confirmed in a source register) or unknown; `new` builds the address of GitHub's new-issue form with a title, text and label,
+  putting a text too long for an address on the clipboard instead; `issues` lists a repository's issues, open and closed, those
+  naming every word of the fault first, keyless. **Nothing is ever posted.** Guide: `docs/issue-links.md`.
+
+### Fixed
+
+- **A feed's `index.json` is written with plain line ends** on Windows too, so git no longer warns of changing them.
+
 ## [1.93.0] - 2026-11-23
 
 The third slice of going online (D'thorga Companion's `docs/online.md`, O2: known problems, the owner's choice of "public, facts
