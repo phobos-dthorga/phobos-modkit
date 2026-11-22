@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.80.0] - 2026-11-23
+
+### Added
+
+- **A cleanup rule can name its folder by a path setting: `{setting:KEY}`** (the owner's go, 23 Nov 2026). It is read as every
+  path is: the repository's local settings file that `--settings` names, then the central settings file. A rule whose setting is
+  unset is skipped, as one naming an unset environment variable is. phobos-rimworld's art tools moved their working files to a
+  folder chosen by a setting (`artWorkPath`, on another drive), which no rule could name until now, so their staging folders and
+  the owner's review cards were never offered for clearing.
+
 ## [1.79.1] - 2026-11-23
 
 ### Fixed

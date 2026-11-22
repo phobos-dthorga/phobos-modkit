@@ -53,7 +53,7 @@ A folder with no policy follows the age rule alone.
 | Field | Meaning |
 | --- | --- |
 | `name`, `why` | Shown in the report. Required |
-| `folder` | Relative to the repository, or absolute; `{temp}` is the system's temporary folder and `{env:NAME}` an environment variable. A rule naming an unset variable is skipped. A drive or the home folder itself is refused |
+| `folder` | Relative to the repository, or absolute; `{temp}` is the system's temporary folder, `{env:NAME}` an environment variable and `{setting:KEY}` a path setting, read as every path is (the repository's local settings file that `--settings` names, then the central settings file; 1.80.0). A rule naming an unset variable or setting is skipped. A drive or the home folder itself is refused |
 | `match` | Name patterns (`*` and `?`). Only direct children of the folder are matched, never anything deeper. A pattern of only wildcards is refused |
 | `kinds` | `files`, `folders` or `any` (the default) |
 | `olderThanDays` | Leave anything younger than this |

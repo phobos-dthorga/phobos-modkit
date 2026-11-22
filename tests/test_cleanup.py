@@ -95,6 +95,19 @@ class Rules(unittest.TestCase):
         self.assertEqual([], names)
         self.assertIn("unset", notes[0])
 
+    def test_a_setting_names_the_folder_and_an_unset_one_skips_the_rule(self):
+        work = self.root / "art-work"
+        folder(work / "cards", 30)
+        settings = self.root / "install-settings.json"
+        settings.write_text(json.dumps({"artWorkPath": str(work)}), encoding="utf-8")
+        environ = {"PHOBOS_SETTINGS": str(self.root / "no-central.json")}  # never the owner's own central file
+        rule = {"name": "Cards", "folder": "{setting:artWorkPath}", "match": ["cards"], "why": "w"}
+        items, notes = cleanup.rule_items(rule, self.root, environ, NOW, settings)
+        self.assertEqual(["cards"], [i.path.name for i in items])
+        items, notes = cleanup.rule_items(rule, self.root, environ, NOW, None)
+        self.assertEqual([], items)
+        self.assertIn("unset", notes[0])
+
     def test_bad_rules_are_refused(self):
         for rule in ({"name": "All", "folder": "x", "match": ["*"], "why": "w"},
                      {"name": "No why", "folder": "x", "match": ["a*"]},

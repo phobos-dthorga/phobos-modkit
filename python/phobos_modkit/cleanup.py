@@ -33,7 +33,7 @@ import time
 
 from . import cache as derived
 from .native import build_dir
-from .paths import cache_root
+from .paths import cache_root, resolve
 
 CONFIG = Path("config") / "cleanup.json"
 SCHEMA_VERSION = 1
@@ -42,7 +42,7 @@ FROZEN_MARK = ".frozen"
 FROZEN_GRACE_SECONDS = 60 * 60
 BUILD_PROFILES = ("debug",)          # cargo profiles only development uses; "release" holds the programs the tools run
 BUILDERS = ("cargo", "rustc", "cargo-clippy", "clippy-driver")
-_TOKEN = re.compile(r"\{(temp|env:[A-Za-z_][A-Za-z0-9_]*)\}")
+_TOKEN = re.compile(r"\{(temp|env:[A-Za-z_][A-Za-z0-9_]*|setting:[A-Za-z_][A-Za-z0-9_]*)\}")
 
 
 class CleanupError(RuntimeError):
@@ -220,17 +220,22 @@ def load_rules(root, config=None):
     return rules
 
 
-def expand(folder, root, environ):
-    """A rule's folder as a path: {temp}, {env:NAME}, and paths relative to the repository. None when a variable is unset."""
+def expand(folder, root, environ, settings_file=None):
+    """A rule's folder as a path: {temp}, {env:NAME}, {setting:KEY} (a path setting, through the one resolver: the repository's
+    local settings file, then the central one; 1.80.0), and paths relative to the repository. None when one is unset."""
     missing = []
 
     def token(match):
         name = match.group(1)
         if name == "temp":
             return tempfile.gettempdir()
-        value = environ.get(name[4:])
+        if name.startswith("setting:"):
+            found = resolve(name[8:], None, None, environ=environ, settings_file=settings_file)
+            value = str(found) if found is not None else ""
+        else:
+            value = environ.get(name[4:])
         if not value:
-            missing.append(name[4:])
+            missing.append(name.split(":", 1)[1])
         return value or ""
 
     text = _TOKEN.sub(token, folder)
@@ -244,11 +249,11 @@ def _matches(name, patterns):
     return any(fnmatch.fnmatch(name, p) for p in patterns)
 
 
-def rule_items(rule, root, environ, now):
+def rule_items(rule, root, environ, now, settings_file=None):
     """(items, notes) for one rule: direct children of its folder that match, past keep-newest and the minimum age."""
-    folder = expand(rule["folder"], root, environ)
+    folder = expand(rule["folder"], root, environ, settings_file)
     if folder is None:
-        return [], [f"{rule['name']}: skipped, its folder names an unset environment variable."]
+        return [], [f"{rule['name']}: skipped, its folder names an unset environment variable or setting."]
     if not folder.is_dir():
         return [], []
     if folder.parent == folder or folder == Path.home():
@@ -332,7 +337,7 @@ def survey(root, older_than_days=14, config=None, environ=None, settings_file=No
         found.items += items
         found.notes += notes
     for rule in rules:
-        items, notes = rule_items(rule, root, environ, now)
+        items, notes = rule_items(rule, root, environ, now, settings_file)
         found.items += items
         found.notes += notes
     found.daemons = watcher_daemons() if daemons is None else daemons
