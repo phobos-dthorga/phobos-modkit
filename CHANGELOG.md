@@ -4,6 +4,24 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.88.0] - 2026-11-23
+
+After the owner's first full re-sort preview with 1.86.0 (23 Nov 2026): all 146 moves on their list were group or name-order
+moves, with no rule broken, and the owner chose on a question card to drop the one group rule RimSort does not have.
+
+### Changed
+
+- **A mod others' code builds on no longer joins the frameworks' group** in a full re-sort (the owner's choice): its code rules
+  still order each pair, but it is not pulled up, so the groups are RimSort's tiers and no more. On the owner's list 1.86.0 lifted
+  Vanilla Vehicles Expanded 198 places, Dubs Bad Hygiene 62, Rimefeller 149 and D'thorga Framework 310 this way. Now a full
+  re-sort of that list moves 134 mods (5 into their group, 129 only to put names in order, none for a rule), with Vanilla
+  Expanded Framework 13th, Combat Extended 18th and Vehicle Framework 21st; fewest moves still finds none. 1.87.0 is unused
+  (another session's claim, released).
+- **Each group move names its own reason**: "a known framework", "loads at the top (whose rule)", "a loader that goes with the
+  game's own", or which member loads after it ("Vanilla Expanded Framework loads after it"), instead of every reason a group has.
+- **A mod whose place number stays the same is not listed as moved**, though the mods around it moved (Adaptive Storage Framework,
+  "12 → 12", on the owner's list).
+
 ## [1.86.0] - 2026-11-23
 
 The sorter after the RimSort study (`docs/research/rimsort-sorting.md`; the owner's choices on question cards of 23 Nov 2026:
@@ -30,7 +48,9 @@ and a full re-sort's moves told apart by kind).
 ### Removed
 
 - **"Libraries first, the most used first" (1.84.0)**, which counted any mod others load after: it lifted big content mods such as
-  Vanilla Vehicles Expanded 214 places, and narrowed, let the frameworks sink again. The groups replace it.
+  Vanilla Vehicles Expanded 214 places, and narrowed, let the frameworks sink again. The groups replace it. (Not wholly: in a
+  full re-sort a mod others' code builds on still joined the frameworks' group, lifting Vanilla Vehicles Expanded 198 places;
+  1.88.0 ends that.)
 
 ### Docs
 

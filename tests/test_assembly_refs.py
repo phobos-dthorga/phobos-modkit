@@ -181,6 +181,24 @@ class Groups(unittest.TestCase):
         found = sort(["apple", "zed", "core", "bg", "vef"], mods, how=mod_sort.FULL)
         self.assertEqual(found["ids"], ["core", "bg", "vef", "apple", "zed"])
 
+    def test_each_group_move_names_its_own_reason(self):
+        mods = [mod("core", source="game", name="Core"), mod("apple", name="Apple"), mod("mid", name="Mid"),
+                mod("zed", name="Zed"), mod("vef", name="Vanilla Expanded Framework"), mod("bg", before=["vef"], name="Backgrounds")]
+        found = sort(["core", "apple", "mid", "zed", "bg", "vef"], mods, how=mod_sort.FULL)
+        self.assertEqual(found["ids"], ["core", "bg", "vef", "apple", "mid", "zed"])
+        why = {m["key"]: m["why"][0] for m in found["moves"] if m["kind"] == mod_sort.GROUP_MOVE}
+        self.assertIn("Vanilla Expanded Framework: it is a known framework, so it goes in the frameworks' group", why["vef"])
+        self.assertIn("Backgrounds: Vanilla Expanded Framework loads after it", why["bg"])
+
+    def test_a_mod_others_code_builds_on_is_not_pulled_up_with_the_frameworks(self):
+        code = mod_sort.RuleSet(mod_sort.CODE, "Code", "here",
+                                {"addon": {"after": [("bigmod", "")], "before": [], "top": None, "bottom": None}})
+        mods = [mod("core", source="game", name="Core"), mod("apple", name="Apple"), mod("bigmod", name="Big Mod"),
+                mod("addon", name="Addon")]
+        found = sort(["core", "apple", "bigmod", "addon"], mods, [code], how=mod_sort.FULL)
+        self.assertEqual(found["ids"], ["core", "apple", "bigmod", "addon"])
+        self.assertEqual(found["moves"], [])
+
     def test_a_frameworks_needs_make_no_order_rule(self):
         mods = [mod("vef", needs=["apple"], name="Vanilla Expanded Framework"), mod("apple", name="Apple")]
         found = sort(["vef", "apple"], mods)

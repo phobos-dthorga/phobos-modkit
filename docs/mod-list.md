@@ -125,7 +125,7 @@ person's own press does, so the Steamworks calls had not met a real client when 
 ### Groups (1.86.0)
 
 From the RimSort study (`docs/research/rimsort-sorting.md`): the game's own and its loaders first; then frameworks (the RimWorld
-adapter's `known_frameworks`) and "top" mods, with, in a full re-sort, the mods others' code builds on; then the rest; then
+adapter's `known_frameworks`) and "top" mods (from 1.88.0 no longer the mods others' code builds on); then the rest; then
 "bottom" mods. The first two groups take in every mod their members must load after, the last every mod that must load after
 its members. Every rule still counts across groups. Needs make no order rule for frameworks and "top" or "bottom" mods. Each
 move carries a `kind`: `rule`, `group`, `order` (full re-sort only) or `room`.

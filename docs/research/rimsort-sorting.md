@@ -82,6 +82,10 @@ The owner's choices of 23 Nov 2026: proposals 1, 3 and 5; proposal 6 as "weakest
 them (group membership), which also ended two moves fewest moves had always flagged on the owner's list. "Libraries first, the
 most used first" (1.84.0) was removed.
 
+In 1.88.0 (the owner's choice, after the first preview with 1.86.0) the mods others' code builds on stopped joining the
+frameworks' group in a full re-sort: that was ours alone, not RimSort's, and lifted big content mods. The groups are now
+RimSort's tiers, with every rule still kept across them.
+
 ## For a next game
 
 The tiers are game-free; what each game gives is data: its tier-0 ids (the game's own and its loader, such as Harmony), its known

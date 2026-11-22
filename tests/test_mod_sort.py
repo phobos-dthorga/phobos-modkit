@@ -126,6 +126,14 @@ class Full(unittest.TestCase):
         self.assertEqual(found["ids"], ["core", "apple", "zed"])
         self.assertTrue(any("game's own first" in w for m in found["moves"] for w in m["why"]))
 
+    def test_a_mod_whose_place_number_stays_is_not_listed(self):
+        # Zed and Apple swap round Mid, whose place stays second: Mid is not listed, though it is outside the kept run.
+        mods = [mod("zed", name="Zed"), mod("mid", name="Mid"), mod("apple", name="Apple")]
+        found = sort(["zed", "mid", "apple"], mods, how=mod_sort.FULL)
+        self.assertEqual(found["ids"], ["apple", "mid", "zed"])
+        self.assertIn("apple", [m["key"] for m in found["moves"]])
+        self.assertNotIn("mid", [m["key"] for m in found["moves"]])
+
     def test_mods_no_rule_places_go_in_order_of_their_names_and_say_so(self):
         found = sort(["zed", "apple"], [mod("zed", name="Zed"), mod("apple", name="Apple")], how=mod_sort.FULL)
         self.assertEqual(found["ids"], ["apple", "zed"])

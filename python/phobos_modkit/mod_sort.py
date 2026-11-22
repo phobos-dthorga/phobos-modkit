@@ -55,10 +55,10 @@ TOP, NORMAL, BOTTOM = 0, 1, 2
 # still counts across groups: the group is only the first thing chosen by.
 GAME_GROUP, TOP_GROUP, MIDDLE_GROUP, BOTTOM_GROUP = 0, 1, 2, 3
 RULE_MOVE, GROUP_MOVE, ORDER_MOVE, ROOM_MOVE = "rule", "group", "order", "room"
-GROUP_WORDS = {GAME_GROUP: "it loads with the game's own and its loaders, or one of them needs it first",
-               TOP_GROUP: "it is a framework or loads at the top, or one of those needs it first: that group loads before "
-                          "the other mods",
-               BOTTOM_GROUP: "it loads at the bottom, or after a mod that does: that group loads after the other mods"}
+# Where each group goes, for a group move's reason (1.88.0: each move names its own reason, not every reason a group has).
+GROUP_PLACES = {GAME_GROUP: "the game's own group, which loads first",
+                TOP_GROUP: "the frameworks' group, which loads before the other mods",
+                BOTTOM_GROUP: "the bottom group, which loads after the other mods"}
 RULES_FORMAT = 1
 RULE_KINDS = ("after", "before", "top", "bottom")
 
@@ -365,11 +365,20 @@ def arrange(adapter, mod_list, installed, rule_sets, how=FEWEST):
     # Needs make no order rule for frameworks and "top" or "bottom" mods (as RimSort): their needs usually mean "install this".
     rules = [r for r in rules if not (r.source == NEEDS and r.then in top_base | bottom_base)]
     best = _strongest(rules)
-    if how == FULL:
-        # In a full re-sort, a mod others' code builds on joins the frameworks.
-        top_base |= {r.first for r in best.values() if r.source == CODE}
+    # A mod others' code builds on no longer joins the frameworks (1.88.0; the owner's choice of 23 Nov 2026): its code rules
+    # still order each pair, but it is not pulled up with the frameworks, so the groups are RimSort's tiers and no more.
     game_base = (game_keys | {adapter.key(i) for i in getattr(adapter, "tier_zero", ())}) & on
-    group = _groups(keys, list(best), game_base, top_base, bottom_base)
+    group, via = _groups(keys, list(best), game_base, top_base, bottom_base)
+    based = {}
+    for k in game_base:
+        based[k] = "it is one of the game's own" if k in game_keys else "it is a loader that goes with the game's own"
+    for k in top_base - game_base:
+        placing = placed_by.get(k)
+        based[k] = ("it is a known framework" if k in frameworks
+                    else f"it loads at the top ({placing.by}" + (f": {placing.note}" if placing.note else "") + ")")
+    for k in bottom_base - game_base - top_base:
+        placing = placed_by[k]
+        based[k] = f"it loads at the bottom ({placing.by}" + (f": {placing.note}" if placing.note else "") + ")"
     early = _before_the_game(list(best), game_keys)
     implicit = {}
     for key in keys:
@@ -396,9 +405,11 @@ def arrange(adapter, mod_list, installed, rule_sets, how=FEWEST):
     new_place = {k: n for n, k in enumerate(order)}
     moves = []
     for key in order:
-        if key in kept:
+        # A mod whose place number does not change is not listed, though the mods around it moved (1.88.0).
+        if key in kept or old_place[key] == new_place[key]:
             continue
-        moves.append(_explain(key, old_place, new_place, edges, placed_by, mods, kept, how, group))
+        moves.append(_explain(key, old_place, new_place, edges, placed_by, mods, kept, how, group,
+                              _group_reason(key, group, via, based, mods)))
     return {"how": how, "ids": [listed[k] for k in order], "keys": order, "moves": moves,
             "set_aside": [_aside(gone, mods) for gone in set_aside],
             "rules": {source: sum(1 for r in best.values() if r.source == source) for source in RULE_SOURCES},
@@ -423,23 +434,42 @@ def _groups(keys, edges, game_base, top_base, bottom_base):
         before.setdefault(then, set()).add(first)
         after.setdefault(first, set()).add(then)
 
+    via = {}
+
     def reach(start, links):
         found, waiting = set(start), list(start)
         while waiting:
-            for other in links.get(waiting.pop(), ()):
+            member = waiting.pop()
+            for other in links.get(member, ()):
                 if other not in found:
                     found.add(other)
+                    via.setdefault(other, member)
                     waiting.append(other)
         return found
 
     game = reach(game_base, before)
     top = reach(top_base, before) - game
     bottom = reach(bottom_base, after) - game - top
-    return {k: GAME_GROUP if k in game else TOP_GROUP if k in top else BOTTOM_GROUP if k in bottom else MIDDLE_GROUP
-            for k in keys}
+    group = {k: GAME_GROUP if k in game else TOP_GROUP if k in top else BOTTOM_GROUP if k in bottom else MIDDLE_GROUP
+             for k in keys}
+    return group, via
 
 
-def _explain(key, old_place, new_place, edges, placed_by, mods, kept, how=FEWEST, group=None):
+def _group_reason(key, group, via, based, mods):
+    """Why this mod is in its group, in words: its own reason, or the member it must load before (or after, at the bottom)."""
+    level = group.get(key, MIDDLE_GROUP)
+    if level == MIDDLE_GROUP:
+        return None
+    if key in based:
+        why = based[key]
+    elif level == BOTTOM_GROUP:
+        why = f"it loads after {_name(mods, via[key])}, which goes at the bottom"
+    else:
+        why = f"{_name(mods, via[key])} loads after it"
+    return f"{_name(mods, key)}: {why}, so it goes in {GROUP_PLACES[level]}."
+
+
+def _explain(key, old_place, new_place, edges, placed_by, mods, kept, how=FEWEST, group=None, group_reason=None):
     reasons, sources = [], []
     for (first, then), rule in edges.items():
         if key not in (first, then) or old_place[first] < old_place[then]:
@@ -457,13 +487,11 @@ def _explain(key, old_place, new_place, edges, placed_by, mods, kept, how=FEWEST
                 break
     kind = RULE_MOVE if reasons else ROOM_MOVE
     level = (group or {}).get(key, MIDDLE_GROUP)
-    if not reasons and level != MIDDLE_GROUP:
+    if not reasons and level != MIDDLE_GROUP and group_reason:
         kind = GROUP_MOVE
-        said = f"{_name(mods, key)}: {GROUP_WORDS[level]}."
         if placing is not None:
-            said += f" ({placing.by}" + (f": {placing.note}" if placing.note else "") + ")"
             sources.append(placing.source)
-        reasons.append(said)
+        reasons.append(group_reason)
     elif not reasons and how == FULL:
         kind = ORDER_MOVE
         reasons.append("No rule places it: a full re-sort puts such mods in order of their names.")
