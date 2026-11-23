@@ -71,6 +71,11 @@ Core (no game in it) and game adapters (`games/<game>/`) live here; project poli
   Steam client already running and signed in, or through SteamCMD, which takes the login in its own prompt and console, so
   the tool never sees, stores or passes a password. **Agents, tests and CI never run a real upload**: tests pass stand-ins
   for SteamCMD and for the Steam library, and an agent may run `--what-if` at most.
+- **AI programs reach only reports that read** (owner, 23 November 2026, D'thorga Companion's AI design, A1): `mcp serve` runs a
+  report only while the manifest calls it `reads` (`reads-online` only when started with `--online`), checked at every call; never
+  `writes`, `runs`, `owner-press` or `owner-only`. A repository comes from the games list by name, never a path a program types,
+  and every answer is redacted. **A new report that changes anything must say so in its manifest**, or this server would offer
+  it. Tests use stand-ins: no test runs a real report through it (`docs/mcp.md`).
 - **Open logs for shared reading.** A game may hold its log open.
 - **Paths** come from one resolver: argument, then environment variable, then a local settings file, then
   the platform default. Never hard-code a personal path.

@@ -55,6 +55,7 @@
     "command-docs": "docs/command-docs.md",
     "doc-tables": "docs/doc-tables.md",
     "gate": "docs/gate.md",
+    "mcp": "docs/mcp.md",
     "manifest": "docs/manifest.md"
   }
 }

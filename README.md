@@ -128,6 +128,7 @@ Generated from the manifest by `python -m phobos_modkit command-docs --write`. E
 | [`issue-links`](docs/issue-links.md) | any | where a fault in a mod is reported, and GitHub's new-issue form filled in for a person to send |
 | [`makeup`](docs/makeup.md) | any | what a repository is made of, how it grew, where the work goes, and what each product holds |
 | [`manifest`](docs/manifest.md) | any | every command, its reports and options, and what each one reads or changes |
+| [`mcp`](docs/mcp.md) | any | the kit's read-only reports offered to AI programs over the Model Context Protocol, and how to set one up |
 | [`mod-list`](docs/mod-list.md) | any | what is wrong with a game's list of active mods and why; safe changes, each after a backup |
 | [`picks`](docs/picks.md) | any | the pictures and sounds waiting for the owner to pick one, with their tries; records picks |
 | [`pins`](docs/pins.md) | any | which version of this tool kit each repository pins, and what moving the pin would bring |

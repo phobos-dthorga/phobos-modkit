@@ -4,6 +4,24 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.109.0] - 2026-11-23
+
+### Added
+
+- **`mcp`: the kit's reports that read, offered to AI programs over the Model Context Protocol** (the owner, 23 Nov 2026, choosing
+  all three parts of D'thorga Companion's AI design, and "a small one of our own" for the server). `mcp serve` is started by an AI
+  program (Claude Desktop, Claude Code, LM Studio, Gemini CLI and others) and offers three tools: `find_reports`, `describe_report`
+  and `ask_report`. **It runs only reports whose manifest effect is `reads`**, checked at every call, and `reads-online` only with
+  `--online`; a repository is named from the games list, never by a path; a text value that looks like a path is refused; every
+  answer is redacted. It answers revision 2026-07-28 of the protocol and the older `initialize` handshake both. `mcp setup` gives
+  the lines to paste into a program's settings. Standard library only, no new dependency. Checked by its tests and one real run
+  over standard input and output; not yet tried from any AI program. See [mcp](docs/mcp.md).
+
+### Changed
+
+- **The games list is read in one place, `games_list.py`**, moved out of `safe_copies_daily`, which keeps `GAMES`, `games_file`
+  and `repositories` under the same names. Each entry now also names the game that lists it.
+
 ## [1.108.1] - 2026-11-23
 
 ### Added

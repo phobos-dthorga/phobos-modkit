@@ -59,5 +59,6 @@ COMMANDS = {
     "command-docs": (".command_docs", "each command's doc lists its reports and options, and the README its commands, from the manifest"),
     "doc-tables": (".doc_tables", "tables in a repository's own docs filled from its files: projects, Harmony patches, mod requirements"),
     "gate": (".gate.cli", "run a repository's checks before a commit and report only what failed"),
+    "mcp": (".mcp", "the kit's read-only reports offered to AI programs over the Model Context Protocol, and how to set one up"),
     "manifest": (".manifest", "every command, its reports and options, and what each one reads or changes"),
 }

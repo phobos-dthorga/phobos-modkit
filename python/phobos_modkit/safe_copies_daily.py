@@ -22,11 +22,11 @@ import sys
 import tempfile
 from xml.etree import ElementTree
 
-from . import __version__, safe_copies as sc
-from .paths import companion_data, resolve
+from . import __version__, games_list, safe_copies as sc
+from .games_list import GAMES, games_file  # noqa: F401  (kept here for the callers that import them from this module)
+from .paths import companion_data
 from .progress import silent
 
-GAMES = ("companionGamesPath", "PHOBOS_COMPANION_GAMES")
 TASK = "D'thorga Safe Copies"
 TIME = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 LIMIT = "PT3H"                        # a run that has not ended in three hours is stopped; the next day's starts afresh
@@ -38,26 +38,12 @@ class DailyError(sc.SafeCopiesError):
     """A request about the daily run this module refuses, with the reason in words."""
 
 
-def games_file(explicit=None, environ=None):
-    """The owner's games list: the argument, PHOBOS_COMPANION_GAMES (as D'thorga Companion reads it), the setting, or the
-    Companion's own folder."""
-    return resolve(*GAMES, companion_data(environ) / "games.json", explicit, environ)
-
-
 def repositories(path):
-    """Every repository folder on a games list, each once, in the list's order."""
+    """Every repository folder on a games list, each once, in the list's order (games_list, since 1.109.0)."""
     try:
-        data = json.loads(Path(path).read_text(encoding="utf-8-sig"))
-    except (OSError, ValueError) as error:
-        raise DailyError(f"the games list {path} could not be read: {error}") from None
-    root = Path(data["root"]) if data.get("root") else None
-    found = []
-    for game in data.get("games", []):
-        for entry in game.get("repositories", []):
-            folder = Path(entry) if Path(entry).is_absolute() or root is None else root / entry
-            if folder not in found:
-                found.append(folder)
-    return found
+        return games_list.repositories(path)
+    except games_list.GamesListError as error:
+        raise DailyError(str(error)) from None
 
 
 def lists_in(repository):
