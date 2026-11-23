@@ -1,11 +1,10 @@
-# Release chores
+# Release: changelogs checked, constants kept in step, history screened
 
-**Answer first.** `release` checks changelogs, keeps every copy of a version or tuning figure in step, and screens a
-repository's history before it goes public. None of it contacts a network or names a game. Carried over from
-phobos-ostranauts (`update-constants.py`, `audit-public-history.py`) on 8 November 2026; Workshop publishing is in
+`release` checks changelogs, keeps every copy of a version or tuning figure in step, and screens a repository's history before it
+goes public. Carried over from phobos-ostranauts (`update-constants.py`, `audit-public-history.py`); Workshop publishing is in
 [its own guide](workshop-publishing.md).
 
-## Read this first (gotchas)
+## Read this first
 
 - **`constants --set` only previews.** Add `--apply` to write. Every registered copy is checked first, so drift in
   any file stops the whole change, even one you did not ask to change.
@@ -14,12 +13,51 @@ phobos-ostranauts (`update-constants.py`, `audit-public-history.py`) on 8 Novemb
 - **Test fixtures trip the history screen on purpose.** A made-up `C:\Users\tester` path or a hand-written save is
   flagged like a real one; review each finding.
 
-## Changelogs
+## Examples
 
 ```text
 python -m phobos_modkit release changelog mods/*/CHANGELOG.md
 python -m phobos_modkit release changelog CHANGELOG.md --version 1.2.0
+python -m phobos_modkit release constants --list
+python -m phobos_modkit release constants --check
+python -m phobos_modkit release constants --set Framework.version=0.13.0 --expect Framework.version=0.12.0
+python -m phobos_modkit release constants --set Framework.version=0.13.0 --apply
+python -m phobos_modkit release history
 ```
+
+## Reports and options
+
+<!-- generated: options release -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `changelog` | Check changelogs: structure, dates and entry text. | reads only |
+| `constants` | List, check or change registered constants. | writes, with `--apply` |
+| `history` | Credentials, personal paths and refused file types in history. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | all | the repository (default: the current folder) |  |
+| `FILES ...` | `changelog` | the changelogs to check |  |
+| `--version VALUE` | `changelog` | also require an entry for this version |  |
+| `--plain` | `changelog` | skip the store-page text check (any Markdown allowed) |  |
+| `--catalogue VALUE` | `constants` | the list of registered constants, in the repository | `config/maintained-constants.json` |
+| `--list` | `constants` | every key, value, bounds and target |  |
+| `--check` | `constants` | verify every registered copy; write nothing |  |
+| `--apply` | `constants` | write the changes; default only previews them |  |
+| `--set KEY=VALUE` | `constants` | a constant's new value; repeatable |  |
+| `--expect KEY=OLD_VALUE` | `constants` | refuse unless the constant holds this value now; repeatable |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- [Common options](common-options.md) explains `--root`, `--json` and `--no-redact`, which many commands share.
+- Only one of `--list`, `--check`, `--apply` at a time (`constants`).
+<!-- end generated -->
+
+## Inputs
+
+### Changelogs
 
 The form, shared by the Phobos repositories:
 
@@ -52,14 +90,7 @@ merged into this one. Unless `--plain`, every entry must also fit the store-page
 `###` headings, `**bold**` and `[label](https://...)` links, with no backticks, tables, images, `<`, `>`, `|`, `#`
 or square brackets in the text.
 
-## Constants
-
-```text
-python -m phobos_modkit release constants --list
-python -m phobos_modkit release constants --check
-python -m phobos_modkit release constants --set Framework.version=0.13.0 --expect Framework.version=0.12.0
-python -m phobos_modkit release constants --set Framework.version=0.13.0 --apply
-```
+### Constants
 
 The catalogue is `config/maintained-constants.json` (`--catalogue` for another). Each constant has a type (version
 with 3 or 4 parts, number or integer with `min` and `max`, boolean), its value, and every target: a regular
@@ -67,45 +98,18 @@ expression with a group named `value` that must match `count` times (default 1),
 `"literal": "csharp-float"` adds the `f` a C# float needs once a fraction arrives. `targetsUnder` limits where targets
 may live; `.git/` and `.local/` never may. `review` lines are printed after a change: the builds and records to redo.
 
-Writes keep each file's byte-order mark, line endings and formatting, go through temporary files, are read back, and
-are undone if anything fails. Changed JSON and XML files are parsed before writing.
-
-## History screen
-
-```text
-python -m phobos_modkit release history
-```
+### History screen
 
 Reads every file object reachable from any branch or tag and flags: credential patterns (GitHub, OpenAI, Anthropic
 and AWS keys, private key blocks), personal machine paths (`C:\Users\...`, `/home/<name>/...`, `/Users/<name>/...`),
-and refused file types (`.dll`, `.exe`, `.zip`, saves, dumps, certificates and keys). Exit 1 when anything is found.
+and refused file types (`.dll`, `.exe`, `.zip`, saves, dumps, certificates and keys).
 
-## Reports and options
+## Effects
 
-<!-- generated: options release -->
-Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+- None of it contacts a network or names a game.
+- Writes of constants keep each file's byte-order mark, line endings and formatting, go through temporary files, are read back,
+  and are undone if anything fails. Changed JSON and XML files are parsed before writing.
 
-| Report | What it does | Effect |
-| --- | --- | --- |
-| `changelog` | Check changelogs: structure, dates and entry text. | reads only |
-| `constants` | List, check or change registered constants. | writes, with `--apply` |
-| `history` | Credentials, personal paths and refused file types in history. | reads only |
+## Failures and exit codes
 
-| Option | Reports | What it does | Default |
-| --- | --- | --- | --- |
-| `--root VALUE` | all | the repository (default: the current folder) |  |
-| `FILES ...` | `changelog` | the changelogs to check |  |
-| `--version VALUE` | `changelog` | also require an entry for this version |  |
-| `--plain` | `changelog` | skip the store-page text check (any Markdown allowed) |  |
-| `--catalogue VALUE` | `constants` | the list of registered constants, in the repository | `config/maintained-constants.json` |
-| `--list` | `constants` | every key, value, bounds and target |  |
-| `--check` | `constants` | verify every registered copy; write nothing |  |
-| `--apply` | `constants` | write the changes; default only previews them |  |
-| `--set KEY=VALUE` | `constants` | a constant's new value; repeatable |  |
-| `--expect KEY=OLD_VALUE` | `constants` | refuse unless the constant holds this value now; repeatable |  |
-
-- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
-- Names in capitals are given bare, without a flag, in the order shown.
-- [Common options](common-options.md) explains `--root`, `--json` and `--no-redact`, which many commands share.
-- Only one of `--list`, `--check`, `--apply` at a time (`constants`).
-<!-- end generated -->
+- `history` exits 1 when anything is found.

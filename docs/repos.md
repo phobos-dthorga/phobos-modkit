@@ -1,9 +1,9 @@
 # repos: where each repository stands, and whether GitHub's checks passed
 
-Built in 1.89.0 (23 November 2026) for D'thorga Companion's gate lights (phobos-companion `docs/online.md`, O4), at the owner's
-go-ahead. Game-free: any git repository, and GitHub's checks for any whose remote is on GitHub.
+For D'thorga Companion's gate lights (phobos-companion `docs/online.md`, O4). Game-free: any git repository, and GitHub's checks
+for any whose remote is on GitHub.
 
-## Read this first (gotchas)
+## Read this first
 
 - **Keyless: 60 calls an hour from this computer, shared by every tool.** The reader keeps the figure GitHub last gave, so every tool
   sees the same one. An automatic look (`--automatic`) stops at 15 left, keeping them for a press; anything stops at none.
@@ -17,7 +17,7 @@ go-ahead. Game-free: any git repository, and GitHub's checks for any whose remot
 - **A nightly run older than two days is marked late.** GitHub switches a schedule off after 60 days without activity in a public
   repository; a late run is how that, or a run failing to start, shows.
 
-## Use
+## Examples
 
 ```text
 cd python
@@ -25,28 +25,6 @@ python -m phobos_modkit repos status --root ../../phobos-rimworld --root ..     
 python -m phobos_modkit repos status --root ../../phobos-rimworld --root .. --online        and GitHub's checks
 python -m phobos_modkit repos status --root ... --online --automatic                        as the Companion's own look
 ```
-
-## What each light says
-
-| State | Meaning |
-| --- | --- |
-| passed | Every workflow run for the last pushed commit ended well (success, skipped or neutral) |
-| failed | One or more ended in failure, a time-out, a failure to start, or waiting for approval; the report names which |
-| running | One is still queued or going |
-| cancelled | None failed, but one was cancelled |
-| waiting | The newest runs for pushes are for an older commit: none yet for the last push |
-| no-push-checks | The repository has runs, but none started by a push |
-| none | No runs on GitHub at all |
-| not-on-github, no-upstream | The remote is elsewhere, or the branch has none |
-| unknown | GitHub could not be asked and there was no earlier answer; `why` says what happened |
-
-## The JSON
-
-`data.repositories[]`: `name`, `root`, `branch`, `upstream`, `remoteBranch`, `github` (`owner/repo`), `pushed`, `ahead`, `behind`,
-`changed`, `scheduled`, and with `--online` `checks` (`state`, `runs[]` with `workflow`, `event`, `status`, `conclusion`, `commit`,
-`when`, `link`; `stale` and `asOf`, the time of the answer given, when it is an earlier one; `why` when unknown) and `nightly[]` (the
-same fields, and `late`). Also `data.allowance` (`remaining`, `size`, `reset`, `seen_at`, `turned`), `asked`, `reused`,
-`revalidated` and `limited`.
 
 ## Reports and options
 
@@ -67,3 +45,25 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 - Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
 - [Common options](common-options.md) explains `--root`, `--cache`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->
+
+## Outputs
+
+`data.repositories[]`: `name`, `root`, `branch`, `upstream`, `remoteBranch`, `github` (`owner/repo`), `pushed`, `ahead`, `behind`,
+`changed`, `scheduled`, and with `--online` `checks` (`state`, `runs[]` with `workflow`, `event`, `status`, `conclusion`, `commit`,
+`when`, `link`; `stale` and `asOf`, the time of the answer given, when it is an earlier one; `why` when unknown) and `nightly[]` (the
+same fields, and `late`). Also `data.allowance` (`remaining`, `size`, `reset`, `seen_at`, `turned`), `asked`, `reused`,
+`revalidated` and `limited`.
+
+### What each light says
+
+| State | Meaning |
+| --- | --- |
+| passed | Every workflow run for the last pushed commit ended well (success, skipped or neutral) |
+| failed | One or more ended in failure, a time-out, a failure to start, or waiting for approval; the report names which |
+| running | One is still queued or going |
+| cancelled | None failed, but one was cancelled |
+| waiting | The newest runs for pushes are for an older commit: none yet for the last push |
+| no-push-checks | The repository has runs, but none started by a push |
+| none | No runs on GitHub at all |
+| not-on-github, no-upstream | The remote is elsewhere, or the branch has none |
+| unknown | GitHub could not be asked and there was no earlier answer; `why` says what happened |

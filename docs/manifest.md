@@ -1,6 +1,9 @@
 # The tool manifest and the JSON envelope
 
-## Read this first (gotchas)
+`manifest` describes every command, its reports and their effects, for a program to read; every command's `--json` prints the
+envelope described here.
+
+## Read this first
 
 - **Every command's `--json` prints the same shape** since 1.0.0. Read `report` for what the tool found and `data` for
   anything extra it has.
@@ -8,14 +11,42 @@
   report is for, not what the code proves. A program should still refuse anything marked `owner-only`.
 - **`rimworld-log` takes a file name for `--json`**, with `-` for standard output. Every other command takes the flag alone.
 
-## Run it
+## Examples
 
 ```text
 python -m phobos_modkit manifest           a table of the commands
 python -m phobos_modkit manifest --json    the whole description, in the envelope's data
 ```
 
-## The envelope
+## Reports and options
+
+<!-- generated: options manifest -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+Effect: reads only.
+
+- It takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--json` and `--no-redact`, which many commands share.
+<!-- end generated -->
+
+## Inputs
+
+### Adding a command
+
+Add it to `python/phobos_modkit/commands.py`, and give its module a `MANIFEST` beside its parser:
+
+```python
+MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
+            "reports": {"snapshot": {"effect": WRITES, "note": "writes the snapshot file you name"}}}
+```
+
+`tests/test_manifest.py` fails if a command has no manifest, an effect is unknown, or a report named there does not exist.
+Name its doc in `config/command-docs.json` and run `python -m phobos_modkit command-docs --write`, which adds the doc's table of
+reports and options ([command-docs](command-docs.md)); the gate fails until it is there.
+
+## Outputs
+
+### The envelope
 
 ```json
 {"envelope": 1, "tool": "rimworld-save", "kit_version": "1.0.0", "report": {}, "data": {}}
@@ -67,7 +98,7 @@ A layer's `kind` is `categories` (each value indexes `categories`, whose `colour
 equal to `missing` means nothing is there, and `missing_label` says why (`water`). An `overlay` layer is drawn over the
 chosen view, clear where its raw value is 0 or missing. The first `categories` layer is the view to open with.
 
-## The manifest
+### The manifest
 
 `data` holds `manifest` (the format's version) and `commands`. Each command has `name`, `summary`, `game` (null for core)
 and `reports`. Each report has:
@@ -93,20 +124,7 @@ and `reports`. Each report has:
 | `owner-press` | A program may run it only on the person's own press and yes, in a window they see (1.98.0: the Workshop uploader, for D'thorga Companion's Publish page). Never an agent, a test or CI |
 | `owner-only` | Only the owner runs it, in their own console. Never a program or an agent |
 
-## Adding a command
-
-Add it to `python/phobos_modkit/commands.py`, and give its module a `MANIFEST` beside its parser:
-
-```python
-MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
-            "reports": {"snapshot": {"effect": WRITES, "note": "writes the snapshot file you name"}}}
-```
-
-`tests/test_manifest.py` fails if a command has no manifest, an effect is unknown, or a report named there does not exist.
-Name its doc in `config/command-docs.json` and run `python -m phobos_modkit command-docs --write`, which adds the doc's table of
-reports and options ([command-docs](command-docs.md)); the gate fails until it is there.
-
-## Progress
+### Progress
 
 A program that wants to show progress sets `PHOBOS_MODKIT_PROGRESS=1` and reads the command's standard error line by line while it
 runs (1.24.0). Each progress line is one JSON object; every other line of standard error is the command's own, as before. Standard
@@ -135,14 +153,3 @@ ordinary output lines into details (`progress.run_streaming`).
 - Most commands report nothing while they work. Those that do (installs, rimworld-textures, rimworld-save, changes) write
   progress lines to standard error only when asked: see [Progress](#progress).
 - The manifest describes the kit. A game repository's own scripts are not in it.
-
-## Reports and options
-
-<!-- generated: options manifest -->
-Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
-
-Effect: reads only.
-
-- It takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
-- [Common options](common-options.md) explains `--json` and `--no-redact`, which many commands share.
-<!-- end generated -->

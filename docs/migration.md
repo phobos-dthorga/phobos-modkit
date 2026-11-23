@@ -42,7 +42,7 @@ The owner-run uploader used to be listed here. On 8 November 2026 the owner aske
 
 Checked read-only against phobos-ostranauts that day: release notes for all 444 entries, due updates, combined change
 notes, worksheets, pull findings and its 149 constants all came out the same (see
-[Workshop publishing](workshop-publishing.md#checked-8-november-2026)). What changed, and what that repository's
+[Workshop publishing](workshop-publishing.md#checked)). What changed, and what that repository's
 catalogue needs to keep its behaviour when it adopts the kit:
 
 | Area | phobos-ostranauts script | Kit | To keep the old behaviour |

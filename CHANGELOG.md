@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.113.1] - 2026-11-24
+
+### Changed
+
+- **One template for every tool page: [writing a tool page](docs/writing-a-tool-page.md)** (docs rewrite, step 7, the owner's
+  go-ahead of 24 Nov 2026). What it is for, Read this first, Examples, the generated Reports and options, Inputs, Outputs,
+  Effects, Failures and exit codes, Limits; no versions in headings and no "built in" status lines, whose history is here. All
+  46 tool pages are reordered to it, facts kept; topical sections become subsections of the heading they belong to.
+
 ## [1.113.0] - 2026-11-24
 
 ### Added

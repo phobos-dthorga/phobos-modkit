@@ -220,7 +220,7 @@ Every machine path comes from `paths.resolve(key, env_var, default, explicit, en
    `surface` as needed.
 4. **Add it to `commands.py`.**
 5. **Paths through `paths.resolve`**, derived data through `cache`, filters through `query`, long work through `progress`.
-6. **Write its doc** (`docs/<name>.md`: answer first, gotchas, run it, limits) and name it in `config/command-docs.json`; run
+6. **Write its doc** (`docs/<name>.md`, to [the tool page template](writing-a-tool-page.md)) and name it in `config/command-docs.json`; run
    `python -m phobos_modkit command-docs --write`.
 7. **Tests with hand-written fixtures**, then the gate; a `CHANGELOG.md` entry (new command: the middle number) and the three
    version files.

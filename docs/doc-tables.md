@@ -1,11 +1,10 @@
-# doc-tables
+# doc-tables: tables in a repository's docs, filled from its own files
 
 Tables in a repository's own docs, filled from its own files, so they cannot drift from them: its .NET projects, the methods its
-C# patches with Harmony, what each of its mods needs, and each mod's settings. Built in 1.107.0 (docs rewrite, step 3, the owner's
-go-ahead of 23 Nov 2026; settings in 1.108.0, the same day), beside [command-docs](command-docs.md), which does the same for the
-kit's own commands.
+C# patches with Harmony, what each of its mods needs, and each mod's settings. Beside [command-docs](command-docs.md), which does
+the same for the kit's own commands.
 
-## Read this first (gotchas)
+## Read this first
 
 - **Change the files, never the table.** The next `--write` puts a table back as the files say. Everything outside the marks is
   the doc's own and is never touched.
@@ -24,7 +23,7 @@ kit's own commands.
   it could not resolve shows as its key in backticks and is listed in the command's report: change the code or the language file,
   or accept it.
 
-## Run it
+## Examples
 
 ```text
 python -m phobos_modkit doc-tables --root REPO            check: which tables are missing or out of date (fails when any is)
@@ -33,7 +32,25 @@ python -m phobos_modkit doc-tables --root REPO --write    write them
 
 Without `--root` it reads the current folder. A consumer calls it through a thin script that passes its own root.
 
-## The config: `config/doc-tables.json`
+## Reports and options
+
+<!-- generated: options doc-tables -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+Effect: writes, with `--write`. Fails when a table is missing or out of date; with `--write`, writes only the generated tables in the docs config/doc-tables.json names.
+
+| Option | What it does | Default |
+| --- | --- | --- |
+| `--root VALUE` | the repository (default: the current folder) |  |
+| `--write` | write the tables that are missing or out of date; without it, only check |  |
+
+- It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--root`, `--json` and `--no-redact`, which many commands share.
+<!-- end generated -->
+
+## Inputs
+
+### The config: `config/doc-tables.json`
 
 ```json
 {
@@ -61,9 +78,9 @@ without the marks gains the table in a section of its own at its end (`## Projec
 needs`, `## Settings`); move it anywhere afterwards and `--write` keeps it there. The marks, reading and writing are the same code as
 command-docs' (`generated_blocks.py`), and a doc keeps its own line endings.
 
-## The kinds
+### The kinds
 
-### `dotnet-projects` (any game)
+#### `dotnet-projects` (any game)
 
 Every `*.csproj` under `folders`, by name, with what it builds into, the projects and other assemblies it references, whether its
 own C# uses Harmony (`using HarmonyLib` or a `[HarmonyPatch]`), and which test projects reference it or compile its files.
@@ -75,7 +92,7 @@ own C# uses Harmony (`using HarmonyLib` or a `[HarmonyPatch]`), and which test p
 | `output` | A template of where a project builds to, from its own properties: `mods/{ModFolder}/{TieInFolder}`. A property the file does not set is empty; when the first one is missing, the cell says "not set". Left out, the column is too |
 | `outputLabel` | The column's heading (default "Builds into") |
 
-### `harmony-patches` (any game)
+#### `harmony-patches` (any game)
 
 Per project under `folders`, a summary row (patched methods, patch classes that find their target by name, manual `.Patch(`
 calls, attributes not read), then a folded list of each project's patched methods with their kinds and files. It reads:
@@ -91,7 +108,7 @@ calls, attributes not read), then a folded list of each project's patched method
 Comments are skipped (the kit's C# scanner, [code](code.md)). Harmony's attributes are its public API, documented by Andreas
 Pardeike at [harmony.pardeike.net](https://harmony.pardeike.net/articles/annotations.html).
 
-### `mod-requirements` (through the game's adapter)
+#### `mod-requirements` (through the game's adapter)
 
 Per mod folder under `folders`: its name, package ID, what it needs, what it loads after and before, the game versions it supports,
 and the optional mods that switch on extra content of it.
@@ -112,7 +129,7 @@ the repository's own About files, then the config's `names`.
 already uses), returning `(Mod, [TieIn])` from the core `mod_list` module, or None for a folder that holds no mod. Project
 Zomboid's adapter reads `mod.info` already and would need only that function; until then its table says it cannot be made.
 
-### `mod-settings` (through the game's adapter)
+#### `mod-settings` (through the game's adapter)
 
 One mod's settings, in the order its settings window draws them: the label as the window shows it, what it does (its tooltip or
 description), its default as a player sees it (On or Off, an option's label, a number), and the page and section it is drawn
@@ -152,19 +169,3 @@ DrawGeneral)`), a number among their arguments ordering them, and a drawing meth
   another setting is on is read like any other; the table cannot say when. Keep such a sentence as the doc's own note under it.
 - **Line numbers appear only for attributes not read**, so ordinary edits above a patch do not make a table stale; moving a patch
   to another file, or adding or removing one, does.
-
-## Reports and options
-
-<!-- generated: options doc-tables -->
-Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
-
-Effect: writes, with `--write`. Fails when a table is missing or out of date; with `--write`, writes only the generated tables in the docs config/doc-tables.json names.
-
-| Option | What it does | Default |
-| --- | --- | --- |
-| `--root VALUE` | the repository (default: the current folder) |  |
-| `--write` | write the tables that are missing or out of date; without it, only check |  |
-
-- It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
-- [Common options](common-options.md) explains `--root`, `--json` and `--no-redact`, which many commands share.
-<!-- end generated -->

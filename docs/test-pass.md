@@ -2,7 +2,7 @@
 
 What a repository's in-game test list is waiting for, from the game's seen-in-play notes and the owner's verdicts.
 
-## Read this first (gotchas)
+## Read this first
 
 - **A seen-in-play note never passes a row.** It says a feature ran without an error, not that it looked right. A row the notes
   flag is "seen working, awaiting the owner's word" until the owner gives a verdict.
@@ -13,27 +13,48 @@ What a repository's in-game test list is waiting for, from the game's seen-in-pl
 - **Since 1.19.0 a sighting can be weaker than it looks, and the report says so**: notes whose figures miss what the row expects,
   notes older than the row, and notes out of the order a rule demands are listed apart and do not mark a row seen.
 
-## Run it
+## Examples
 
 ```text
 python -m phobos_modkit test-pass report --root REPO              rows waiting, rows seen working, verdicts not yet written
 python -m phobos_modkit test-pass apply --root REPO               what apply would write (a preview)
 python -m phobos_modkit test-pass apply --root REPO --apply       write it
-python -m phobos_modkit test-pass code --root REPO                where the code notes each row's keys (1.36.0)
+python -m phobos_modkit test-pass code --root REPO                where the code notes each row's keys
 ```
 
-`--seen PATH` (repeatable) and `--verdicts PATH` name other files; `--all` lists every row; `--json` gives every row's cells,
-sightings, verdict and the sentence apply would add, for a program such as D'thorga Companion.
+`--seen PATH` (repeatable) and `--verdicts PATH` name other files; `--all` lists every row.
 
-## Where the code notes each row: `code` (1.36.0)
+## Reports and options
 
-`code` finds every string in the repository's C#, Lua and Python that is a key the map names, or starts with one of its `prefixes`,
-and places it in the method, function or type whose lines hold it (phobos-modkit's `connections`). Its JSON gives `places`, each
-`{key, prefix, file, line, thing, rows}`, and `unplaced`: keys the map names that no string in the code matches as written. Folders
-named `tests` or `test` are skipped, since a test naming a key is not where the game notes it. D'thorga Companion joins rows to
-code with it: a row's code, and a method's rows. It reads text, so a key in a comment counts too.
+<!-- generated: options test-pass -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
 
-## The repository's evidence map: `config/test-evidence.json`
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `report` | Rows waiting for the owner, rows seen working, verdicts not yet written. | reads only |
+| `apply` | Write verdicts and seen-working notes into the test list; a preview without `--apply`. | writes, with `--apply` |
+| `code` | Where the code notes each row's keys, and in which method, function or type. Where the code notes each row's keys; for a program joining rows to code. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | all | the repository (default: the current folder) |  |
+| `--seen VALUE` | `report`, `apply` | a seen-in-play notes file (repeatable; default: from the config's game) |  |
+| `--verdicts VALUE` | `report`, `apply` | the owner's verdicts file (default: D'thorga Companion's, for this repository) |  |
+| `--decisions VALUE` | `report`, `apply` | the owner's decisions on notes no row names (default: D'thorga Companion's) |  |
+| `--settings VALUE` | `report`, `apply` | a JSON settings file naming paths |  |
+| `--verdict ROW:WORD[:NOTE]` | `report`, `apply` | a verdict the owner gave in conversation (WORD passed, partial or failed; repeatable) |  |
+| `--all` | `report`, `apply` | list every row, not only those waiting |  |
+| `--top N` | `report`, `apply` | rows per table (default 40) | `40` |
+| `--apply` | `apply` | write the test list; without it, only show what would change |  |
+| `--top N` | `code` | places to list (default 40) | `40` |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--root`, `--settings`, `--top`, `--json` and `--no-redact`, which many commands share.
+<!-- end generated -->
+
+## Inputs
+
+### The repository's evidence map: `config/test-evidence.json`
 
 | Field | What it holds |
 | --- | --- |
@@ -65,7 +86,7 @@ names, for a repository's own checks.
 A row's status is read from its last cell: `Passed in part` or a lower-case "passed: the owner" (part of a row) is passed in
 part, `Passed` is passed, `**Failed` is failed, "Seen working by the game" is seen; the last of these in the cell decides.
 
-## The seen-in-play notes
+### The seen-in-play notes
 
 JSON lines a mod writes the first time each feature is seen working in a session. RimWorld: `PhobosSnapshots/SeenInPlay.jsonl`
 beside the Config folder, written by phobos-rimworld's D'thorga Framework 0.118.0 and later with its setting on (or
@@ -82,14 +103,14 @@ thing that is; `variant`, which case of the feature; `values`, figures by name a
 {"format":1,"time":"2026-11-19T12:00:00Z","key":"vehicles.grid-hook-up","mod":"D'thorga Framework","version":"0.138.0","detail":"M2A3 Bradley: 960 W","on":"Vehicle_M2A3Bradley412","kind":"M2A3Bradley","values":{"W":960,"loadsA":30,"chargingA":4}}
 ```
 
-## The owner's decisions on notes no row names
+### The owner's decisions on notes no row names
 
 JSON lines D'thorga Companion writes beside its verdicts (`test-key-decisions/<repository folder>.jsonl`, or
 `PHOBOS_TEST_KEY_DECISIONS`, or a settings file's `companionTestKeyDecisionsPath`, or `--decisions`): `key`, `decision`
 (`make-row`, `no-row` or `cleared`), `time` and an optional `note`. The latest line for a key wins. "No row needed" leaves the key out
 of the report; "make a row" marks it as a request for the next session that edits the test list.
 
-## The owner's verdicts
+### The owner's verdicts
 
 JSON lines, one per click, written by D'thorga Companion's Tests page: by default
 `org.phobosdthorga.companion/test-verdicts/<repository folder>.jsonl` in the system's local application data (`LOCALAPPDATA` on
@@ -111,7 +132,21 @@ python -m phobos_modkit test-pass apply --root REPO --verdict "55:partial:the la
 verdict in the file for its row, and is written "in conversation". `report` takes it too, to preview. A badly written one is
 refused with what to give.
 
-## What apply writes
+## Outputs
+
+`--json` gives every row's cells, sightings, verdict and the sentence apply would add, for a program such as D'thorga Companion.
+
+### Where the code notes each row: `code`
+
+`code` finds every string in the repository's C#, Lua and Python that is a key the map names, or starts with one of its `prefixes`,
+and places it in the method, function or type whose lines hold it (phobos-modkit's `connections`). Its JSON gives `places`, each
+`{key, prefix, file, line, thing, rows}`, and `unplaced`: keys the map names that no string in the code matches as written. Folders
+named `tests` or `test` are skipped, since a test naming a key is not where the game notes it. D'thorga Companion joins rows to
+code with it: a row's code, and a method's rows. It reads text, so a key in a comment counts too.
+
+## Effects
+
+### What apply writes
 
 | Case | Sentence added to the row's last cell |
 | --- | --- |
@@ -122,31 +157,3 @@ refused with what to give.
 | Seen, no verdict, row open or passed in part | `**Seen working by the game, 17 Nov 2026 (D'thorga Framework 0.118.0); awaiting the owner's word.**` |
 
 A sentence already in the cell is not added again, so running apply twice changes nothing the second time.
-
-## Reports and options
-
-<!-- generated: options test-pass -->
-Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
-
-| Report | What it does | Effect |
-| --- | --- | --- |
-| `report` | Rows waiting for the owner, rows seen working, verdicts not yet written. | reads only |
-| `apply` | Write verdicts and seen-working notes into the test list; a preview without `--apply`. | writes, with `--apply` |
-| `code` | Where the code notes each row's keys, and in which method, function or type. Where the code notes each row's keys; for a program joining rows to code. | reads only |
-
-| Option | Reports | What it does | Default |
-| --- | --- | --- | --- |
-| `--root VALUE` | all | the repository (default: the current folder) |  |
-| `--seen VALUE` | `report`, `apply` | a seen-in-play notes file (repeatable; default: from the config's game) |  |
-| `--verdicts VALUE` | `report`, `apply` | the owner's verdicts file (default: D'thorga Companion's, for this repository) |  |
-| `--decisions VALUE` | `report`, `apply` | the owner's decisions on notes no row names (default: D'thorga Companion's) |  |
-| `--settings VALUE` | `report`, `apply` | a JSON settings file naming paths |  |
-| `--verdict ROW:WORD[:NOTE]` | `report`, `apply` | a verdict the owner gave in conversation (WORD passed, partial or failed; repeatable) |  |
-| `--all` | `report`, `apply` | list every row, not only those waiting |  |
-| `--top N` | `report`, `apply` | rows per table (default 40) | `40` |
-| `--apply` | `apply` | write the test list; without it, only show what would change |  |
-| `--top N` | `code` | places to list (default 40) | `40` |
-
-- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
-- [Common options](common-options.md) explains `--root`, `--settings`, `--top`, `--json` and `--no-redact`, which many commands share.
-<!-- end generated -->

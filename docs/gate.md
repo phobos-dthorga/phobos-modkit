@@ -1,14 +1,14 @@
 # The gate: every check before a commit, and only what failed
 
-Built in 0.11.0 (9 November 2026), at the owner's request for tools that keep agent sessions lean. A session that
-checks its work before a commit used to type a long shell loop of builds, tests and checks, then read pages of
-their output for the one line that mattered; phobos-rimworld's loop had quietly missed four of its seven test
-projects. The gate runs a list the repository keeps, finds repeated steps by glob, and prints a few lines.
+The gate runs a list of builds, tests and checks the repository keeps, finds repeated steps by glob, and prints a few lines: made
+at the owner's request for tools that keep agent sessions lean.
 
 ## Read this first
 
-- **Commit only on its exit code**: `python -m phobos_modkit gate && git commit ...`. 0 means every step passed; 1
-  means one failed; 2 means the list itself is wrong or nothing matched.
+- **Commit only on its exit code**: `python -m phobos_modkit gate && git commit ...` ([the codes](#failures-and-exit-codes)).
+- **Use it, not a shell loop of your own.** A session that checks its work before a commit used to type a long shell loop of
+  builds, tests and checks, then read pages of their output for the one line that mattered; phobos-rimworld's loop had quietly
+  missed four of its seven test projects.
 - **A passing run prints three lines.** A failing one names each failed step with its errors, failed tests and their
   messages (at most 12 each), and where its full output was kept: the kit's cache folder, `gate-logs/<repository>/`.
   Open that file only when the summary is not enough.
@@ -16,34 +16,8 @@ projects. The gate runs a list the repository keeps, finds repeated steps by glo
   them anyway. Steps inside a stage all run.
 - **A step whose program is missing is skipped, and says so** ("requires"), so a machine without Rust can still run
   the Python checks. The report lists what was skipped and why.
-- It runs what it is told to: it never commits or pushes, and writes only to the cache and, after a full pass, to its note
-  for the commit guard inside the repository's `.git` folder.
 
-## The commit guard (1.22.0)
-
-A gate that passes is only useful if the commit that follows is the thing it checked. Chained with `&&` it is; piped through
-`tail`, or followed by another edit, it is not (a broken commit went in that way). So:
-
-- **After a full passing run** (no `--only` or `--skip`), the gate notes every file that differs from HEAD, by the blob git
-  would store for it, in `.git/phobos-gate/passes.json` (the last 20 passes). A file that changed while the gate ran is left
-  out, since the gate may have read either version.
-- **`gate --verify-staged`** runs nothing. It exits 0 only when one noted pass saw every staged file exactly as staged; else
-  it names the files and exits 1. A repository makes it its pre-commit hook:
-
-  ```sh
-  #!/bin/sh
-  exec python scripts/check-all.py --verify-staged
-  ```
-
-  and each clone turns hooks on once with `git config core.hooksPath .githooks`.
-- Sessions sharing a tree: one session's failing run does not undo another's earlier pass, and a pass covers any file it
-  saw, whoever commits it. A commit of paths (`git commit -- a b`) is judged on those paths alone, as git stages them.
-- **It cannot pass a commit that stages only part of a file** (`git add -p`, or a patch applied to the index): the gate
-  checked the whole file as it stood. When another session has uncommitted changes in a file you need, wait for its
-  commit, or agree to commit the file together.
-- The guard is no stronger than the gate's list: it proves the files were checked, not that the checks are enough.
-
-## Use
+## Examples
 
 ```text
 python -m phobos_modkit gate                       every step
@@ -56,7 +30,32 @@ python -m phobos_modkit gate --json                the same report as JSON
 Run it from the kit's `python` folder with `--root` naming the repository (`--root ..` for the kit itself), or through
 a consumer's thin script (phobos-rimworld: `python scripts/check-all.py`).
 
-## The step list: config/gate.json
+## Reports and options
+
+<!-- generated: options gate -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+Effect: runs other programs. Builds the repository and runs its tests.
+
+| Option | What it does | Default |
+| --- | --- | --- |
+| `--root VALUE` | the repository (default: the current folder) |  |
+| `--config VALUE` | the step list, relative to the root (default config/gate.json) | `config/gate.json` |
+| `--only PATTERN` | run only steps whose name matches (wildcards \* and ?); repeatable |  |
+| `--skip PATTERN` | leave out matching steps; repeatable |  |
+| `--jobs N` | lanes run at once (default up to 4) | `4` |
+| `--keep-going` | run later stages even when a stage failed |  |
+| `--list` | show the steps, expanded, without running them |  |
+| `--verify-staged` | run nothing: exit 0 only when a full passing run saw every staged file as it is staged (a pre-commit hook) |  |
+| `--verbose` | list every step, not only the failed ones |  |
+
+- It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--root`, `--config`, `--json` and `--no-redact`, which many commands share.
+<!-- end generated -->
+
+## Inputs
+
+### The step list: config/gate.json
 
 ```json
 {
@@ -89,7 +88,9 @@ Placeholders work in `name`, `run`, `cwd` and `env`: `{python}` (the interpreter
 `{path}` (relative, forward slashes), `{name}`, `{stem}` and `{dir}`. Every step runs with `PYTHONIOENCODING=utf-8`,
 `DOTNET_CLI_UI_LANGUAGE=en` and `DOTNET_NOLOGO=1` unless the step sets them, so the parsers see English, UTF-8 output.
 
-## What each parser keeps
+## Outputs
+
+### What each parser keeps
 
 | Parser | Keeps | Summary |
 | --- | --- | --- |
@@ -103,7 +104,36 @@ The formats are the tools' console output as their authors print it (Microsoft's
 project's unittest, the Rust project's cargo); the tests use outputs written by hand in those shapes. Anything a
 parser does not recognise still fails the step by its exit code, with the output's tail.
 
-## The build lock
+## Effects
+
+It runs what it is told to: it never commits or pushes, and writes only to the cache and, after a full pass, to its note
+for the commit guard inside the repository's `.git` folder.
+
+### The commit guard
+
+A gate that passes is only useful if the commit that follows is the thing it checked. Chained with `&&` it is; piped through
+`tail`, or followed by another edit, it is not (a broken commit went in that way). So:
+
+- **After a full passing run** (no `--only` or `--skip`), the gate notes every file that differs from HEAD, by the blob git
+  would store for it, in `.git/phobos-gate/passes.json` (the last 20 passes). A file that changed while the gate ran is left
+  out, since the gate may have read either version.
+- **`gate --verify-staged`** runs nothing. It exits 0 only when one noted pass saw every staged file exactly as staged; else
+  it names the files and exits 1. A repository makes it its pre-commit hook:
+
+  ```sh
+  #!/bin/sh
+  exec python scripts/check-all.py --verify-staged
+  ```
+
+  and each clone turns hooks on once with `git config core.hooksPath .githooks`.
+- Sessions sharing a tree: one session's failing run does not undo another's earlier pass, and a pass covers any file it
+  saw, whoever commits it. A commit of paths (`git commit -- a b`) is judged on those paths alone, as git stages them.
+- **It cannot pass a commit that stages only part of a file** (`git add -p`, or a patch applied to the index): the gate
+  checked the whole file as it stood. When another session has uncommitted changes in a file you need, wait for its
+  commit, or agree to commit the file together.
+- The guard is no stronger than the gate's list: it proves the files were checked, not that the checks are enough.
+
+### The build lock
 
 **One build at a time in a repository** (1.103.0; the owner's report of 23 Nov 2026: an install failed with "being used by another
 process" because another session's gate was building the same projects at the same moment). `phobos_modkit.build_lock.held(root,
@@ -115,32 +145,15 @@ on sight. The lock files live in the kit's cache (`locks/`), one per repository 
 - **A repository's own build scripts** take it around their builds: `with build_lock.held(ROOT, "an install", log=print): ...`.
 - It guards only builds that go through these tools. A build run by hand, or by an editor, can still meet one.
 
+## Failures and exit codes
+
+- **0** means every step passed; **1** means one failed; **2** means the list itself is wrong or nothing matched.
+- With `--verify-staged`, **0** only when one noted pass saw every staged file exactly as staged; else **1**, naming the files.
+- A lane that waits 15 minutes for the [build lock](#the-build-lock) fails, naming the holder.
+
 ## Limits
 
 - Lanes share the machine: four lanes of builds would compete for the same processor. Give heavy steps one lane.
 - The parsers read console output, which tools may change between versions; a change shows as a failed step whose
   problems are the output's tail rather than tidy lines. The fix is the parser, here.
 - Steps never see the terminal, so a program that asks a question will wait until its timeout.
-
-## Reports and options
-
-<!-- generated: options gate -->
-Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
-
-Effect: runs other programs. Builds the repository and runs its tests.
-
-| Option | What it does | Default |
-| --- | --- | --- |
-| `--root VALUE` | the repository (default: the current folder) |  |
-| `--config VALUE` | the step list, relative to the root (default config/gate.json) | `config/gate.json` |
-| `--only PATTERN` | run only steps whose name matches (wildcards \* and ?); repeatable |  |
-| `--skip PATTERN` | leave out matching steps; repeatable |  |
-| `--jobs N` | lanes run at once (default up to 4) | `4` |
-| `--keep-going` | run later stages even when a stage failed |  |
-| `--list` | show the steps, expanded, without running them |  |
-| `--verify-staged` | run nothing: exit 0 only when a full passing run saw every staged file as it is staged (a pre-commit hook) |  |
-| `--verbose` | list every step, not only the failed ones |  |
-
-- It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
-- [Common options](common-options.md) explains `--root`, `--config`, `--json` and `--no-redact`, which many commands share.
-<!-- end generated -->

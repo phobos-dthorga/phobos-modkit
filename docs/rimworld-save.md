@@ -1,10 +1,9 @@
-# RimWorld save index
+# rimworld-save: what a RimWorld save holds, from an index
 
-**Answer first.** `rimworld-save` answers questions about a RimWorld save (pawns, hediffs, where a thing is, what a
-map holds) from a SQLite index instead of the 300 MB file. The first question indexes a frozen copy of the save in
-about a second and a half; later questions take well under a second until the save changes.
+`rimworld-save` answers questions about a RimWorld save (pawns, hediffs, where a thing is, what a map holds) from a SQLite index
+instead of the 300 MB file.
 
-## Read this first (gotchas)
+## Read this first
 
 - **Build the indexer once:** add `--build-indexer` to any command. It is a Rust program (Rust comes from
   [rustup](https://rustup.rs)), built into `%LOCALAPPDATA%\phobos-modkit\target` on Windows or
@@ -28,9 +27,8 @@ about a second and a half; later questions take well under a second until the sa
   vehicle's systems) is read with `thing ID`: the index records where each thing sits in the save, and the report reads
   only those bytes, refusing once the save has been saved again since it was indexed. State kept in a Def or a file of
   the mod's own is not covered.
-- Checked against RimWorld 1.7.5000 saves (November 2026).
 
-## Run it
+## Examples
 
 ```text
 python -m phobos_modkit rimworld-save                          summary of the newest save
@@ -54,158 +52,6 @@ python -m phobos_modkit rimworld-save mood                           where the c
 python -m phobos_modkit rimworld-save mood --pawn Annie              one pawn's remembered events and needs
 python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP BY def"
 ```
-
-| Report | What it shows | Its options |
-| --- | --- | --- |
-| `summary` (the default) | Version, scenario, days since the colony began, maps, where things are, the player's pawns by race, the commonest things | |
-| `index` | Indexes the save again now, then the summary | |
-| `schema` | Element paths in the save with how often each occurs, to find where something is saved | `--under PATH`, `--depth N` |
-| `things` | Things counted by def, or listed one per row | `--def`, `--class`, `--map`, `--place`, `--held` or `--loose`, `--list` |
-| `pawns` | Name, ID, race, kind, faction, place, map and position, age, health state, how many hediffs | `--faction` (`player` or a name), `--name`, `--kind`, `--place` |
-| `hediffs` | Hediffs counted by def, or one pawn's in full with body part, severity, age and source | `--pawn`, `--def` |
-| `find ID` | A thing by its ID, with every thing holding it out to the map or world | |
-| `thing ID` | One thing's saved data in full, read from the save itself: every value its comps and mods wrote, with its path inside the thing. A dictionary shows as `name[key]`, list items as `li[0]`, `li[1]`, and `@Class` is the type a value was saved as. The things it holds (a vehicle's crew, a pawn's inventory and apparel) are listed and left out unless `--held`. Needs the save, so with `--index` name it with `--save` too | `--path`, `--value`, `--held` |
-| `world` | World objects counted by def and faction, listed with ID, name, faction and tile, or one object's values in full (an aircraft's flight path, a site's parts) | `--def`, `--faction`, `--name`, `--id` |
-| `planet` | Pollution on the world map from the save's planet layer: by band, patches of touching tiles with what stands on or nearest each, rings of tiles around a place, what changed against another save, every save of the world by in-game day. Tile positions come from a rebuilt model of the planet; a world with less than full coverage is reported as such and its tiles are not placed | `--near` (a name or tile number), `--hops`, `--compare SAVE`, `--history [PATTERN]` |
-| `terrain` | How high the land stands and how rough it is: land heights (tenths and median), hilliness by class with each class's median height, the player's places with their tile's height and hilliness, the height difference between neighbouring land tiles across the world (a step, not a slope: the tile's size is not in the save), and around a place its rings of tiles with their lowest, median and highest land and the steepest step within | `--near` (a name or tile number), `--hops` |
-| `atlas` | The whole world map for a program to draw (a globe block): every surface tile's biome, elevation, temperature, rainfall, hills, swampiness, pollution and named region, with landscape features (caves, coast), settlements and other world objects grouped by how their faction stands with the player, roads, rivers and the game's region labels. Tables list biomes, places with their latitude and longitude, named regions, and roads and rivers. See [Atlas](#atlas) | `--game`, `--workshop`, `--config`, `--no-defs` |
-| `components` | The game's, the world's and maps' components with how many values each holds, or the values inside them with their paths | `--class`, `--path`, `--value`, `--map` |
-| `grid` | A map's layers counted: terrain, foundations (bridges and the like), roofs, each gas, fog, snow, pollution and deep resources; one layer in full with a text picture (north up); or every layer at one cell with the things standing there | `--map`, `--kind`, `--render`, `--gas`, `--columns`, `--at X,Z`, `--area X1,Z1,X2,Z2`, `--no-names` |
-| `mood` | Where the colony's mood suffers: each pawn's mood against its break thresholds, the remembered events that cost the colony most and help it most, needs running low, and addictions and drug needs, with charts; `--pawn` gives one pawn's events and needs in full. See [Mood](#mood) for what a save cannot show | `--who` (`all`, `colonists`, `slaves`, `prisoners`), `--pawn`, `--patched-defs`, `--mood-file`, `--no-mood-file`, `--game`, `--workshop`, `--config`, `--no-defs` |
-| `diff OTHER` | What changed since another save: counts, things that appeared and went by def, stacks that grew or shrank, pawns that moved, arrived or left, pawns' hediffs gained, lost, worse or better, world objects that changed faction, appeared or went, and component values that changed and lists that grew or shrank | `--faction` (`player` by default, `any`, or a faction), `--component` |
-| `sql QUERY` | Any query; the index is opened read-only, so nothing can change it | |
-
-Every report takes `--save NAME` (default: the newest save), `--saves`, `--cache`, `--index FILE` (read an index
-directly), `--rebuild`, `--top N`, `--json` and `--no-redact`. Filters ignore case; `*` and `?` are wildcards, and
-`_` is an ordinary character.
-
-## Mood
-
-**A save holds only half of a pawn's mood.** The game saves remembered thoughts (a death, a meal off the floor, a
-party) and leaves out situational ones (bedroom and dining room, pain, hunger, cold, darkness, traits, precepts, a drug's
-high), which it works out while it runs. So `mood` counts the remembered events exactly and gives the rest as one
-figure, "everything else": the pawn's mood minus its remembered events. Summed over the colony it says how much the
-unsaved half costs, without naming it.
-
-| Part | Where it comes from |
-| --- | --- |
-| Who | Pawns on a map with a mood: the player's own (colonists), the player's slaves, and the player's prisoners |
-| Mood | The Mood need's saved level. **The game leaves a level of 0 out of the save**, so a missing level is 0, not unknown |
-| A remembered event's mood | Its ThoughtDef stage's `baseMoodEffect`, times the saved strength, plus the saved offset; fading where the Def says so. Repeats of one event count once at full weight, then each at 0.75 (or the Def's own multiplier) of the one before |
-| Break thresholds | The `MentalBreakThreshold` stat's base value, moved by the pawn's traits; major is 4/7 of minor, extreme 1/7 |
-| Defs | The patched-Defs file where one exists (by default where D'thorga Framework writes it, beside the Config folder), else the installed mods' Defs as written |
-
-These rules were read from the 1.7 game code and are summarised in `python/phobos_modkit/games/rimworld/mood.py`.
-**Left out, and said so in the report:** a thought's stat multipliers and its own rules; cancelling by hediffs, genes,
-precepts and tales (trait cancelling is applied); threshold changes from anything but traits; the difficulty's mood
-offset. The low-need line at 30% is our choice, not the game's.
-
-**The colony mood file names the other half** (1.6.0). phobos-rimworld's D'thorga Framework (0.64.0 and later, its setting
-"Write a colony mood file at each save") writes `PhobosSnapshots/ColonyMood.xml` beside the Config folder at every save: each
-colonist's, slave's and prisoner's thought groups as the game added them up, situational ones included, with each pawn's break
-thresholds from the game's own mental breaker. The file names the tick count and world seed it was written at, and `mood` uses
-it **only when both match the save it reads**; then every thought, its kind (remembered or situational) and every threshold
-come from the game, and the rules above are not needed. A file from another save is said and set aside. Name another file with
-`--mood-file`, `RIMWORLD_COLONY_MOOD` or `rimworldColonyMoodPath`; ignore it with `--no-mood-file`.
-
-**Advice** (1.6.0, owner's choice of 10 November 2026). "Where to start" lists the costliest causes a player can do something
-about, with a suggestion for each; one pawn's report and the needs table carry advice too. The suggestions are ours, written from
-how the game behaves, keyed by Def name in `python/phobos_modkit/games/rimworld/mood-advice.json` (wildcards allowed, every name
-checked against a 1.7 install), and the report always labels them as advice. A cause only time removes (a death) has advice but
-stays out of "Where to start".
-
-## Atlas
-
-**The planet sits as the game's does.** The game builds its world from an icosahedron of twelve points and twenty triangles,
-subdivides it, and never rotates it (`IcosahedronGenerator`, `PlanetLayer.InitializeLayer`, read from the 1.7 code on 10
-November 2026). `planet.py` rebuilds the same shape, so tile numbers, neighbours, longitude and latitude match the game's: a
-tile's outline joins the centres of the triangles it makes with its neighbours, and its longitude and latitude come from the
-mean of those corners, as `PlanetLayer.LongLatOf` reckons them. On the owner's world, ice sheet averages 75.5 degrees from the
-equator and tropical rainforest 4.4, as climate says they should.
-
-| Layer | As the game saves it | As the atlas gives it |
-| --- | --- | --- |
-| Biome | The BiomeDef's short hash | A category with a colour from `atlas-palette.json`, or from its tiles' climate when the palette does not know it |
-| Elevation | Metres + 8192 | Metres; seas and lakes show their depth |
-| Temperature | (degrees C + 300) x 10 | Degrees C, the year's average |
-| Rainfall | mm a year | mm a year; water tiles carry none |
-| Hills | The Hilliness enum | Flat to impassable; water tiles carry none |
-| Swampiness | 0 to 1 as 0 to 255 | Percent; water tiles carry none |
-| Pollution | 0 to 1 as 0 to 65535 | Percent, an overlay, with the game's four bands |
-| Region | The WorldFeature's ID | Its name, as text only |
-| Roads, rivers | The lower tile, the other's place in its neighbour list, the Def's short hash | Lines between tile centres, 1 to 4 wide by Def (`atlas-palette.json`) |
-| Mutators | Tile and TileMutatorDef short hash | Tags, such as Caves or Coast, named only when the Defs are read |
-
-A short hash is the game's `StableStringHash` of the Def name, modulo 65535, moved past 0 and past hashes earlier Defs of the
-same type took in name order. **Names need the Defs**: the installed mods' Def index names modded biomes, roads, mutators and
-world objects; without it (`--no-defs`, or no install found) only the names in the palette are known, and a hash nothing
-matches is shown as an unknown biome and counted in the report. The palette's colours and widths are agent-authored (10
-November 2026) for the owner to revise; they are our own choices, not the game's art.
-
-Places are the save's world objects on the surface: grouped as the player's own (any `Player*` faction), allies, neutral,
-hostile, or no faction, by the relation each faction holds with the player (a relation the save leaves out is neutral, the
-game's default). A world generated with less than full planet coverage renumbers its tiles and is refused, as by `planet`.
-
-On the owner's PG5 (590,492 tiles, 525 places, 287 named regions) the report takes about 1.1 s once the save is indexed, and
-its JSON is about 45 MB, most of it the tile positions and rings.
-
-## What the index holds
-
-| Table or view | Rows |
-| --- | --- |
-| `game` | The save's version, ticks, starting year, scenario, play time and world seed |
-| `mods` (view of `mod_id`, `mod_name`, `mod_steam_id`) | The save's mod list, in load order |
-| `faction` | Every faction's load ID, def and name; things name it as `Faction_<load ID>` |
-| `faction_relation` | How each faction stands with each other one: the other faction, kind and goodwill (left out at the defaults, Neutral and 0) |
-| `map` | Each map's position, generator, size and world object |
-| `thing` | Every thing on a map, held by another thing, or a world pawn: def, ID, class, stuff, stack, hit points, quality, forbidden, map, position, faction, the thing holding it |
-| `pawn` | The pawn part of a thing (same `id`): kind, gender, name parts, health state, biological age, backstories |
-| `hediff`, `trait`, `skill` | Each belongs to a pawn by its `id` |
-| `need`, `memory` | Each pawn's needs (def and level; a missing level is 0, which the game leaves out) and remembered thoughts (def, age, stage, mood power and offset, the other pawn, the precept) |
-| `thing_place` (view) | For each thing, the outermost thing holding it, whether it is held, its place and map |
-| `pawn_view` (view) | Pawns with display name, race, faction name, place, map, position and age in years |
-| `map_grid` | Each map's grids as the save holds them (base64 text), with the grid's element and owner |
-| `planet_grid` | The surface layer's per-tile arrays as the save holds them (base64 text): biome, elevation, hills, temperature, rainfall, swampiness, feature, pollution, roads, rivers and mutators |
-| `world_feature` | Named regions of the world map: def, ID, name, where the game draws the name, its size in tiles, and the planet layer |
-| `world_object` | Every world object (settlements, sites, caravans, destroyed settlements): def, class, ID, tile, faction, name |
-| `world_object_value`, `world_object_value_view` (view) | Every value with text inside a world object, with its path inside the object (about 70,000 on the owner's save) |
-| `component`, `component_value` | The game's, the world's and each map's components (class, position, map), and every value with text inside one (its tag, place among same-named siblings and text); `element_path` gives its full path |
-| `world_object_view`, `component_view` (views) | World objects with their faction's name and def; component values with the component's class, scope, map and the path inside the component |
-| `element_path` | Every element path in the save and how often it occurs |
-| `meta` | The source save's name, size and time, the schema's hash, the indexer's version |
-
-The schema is `python/phobos_modkit/games/rimworld/save-schema.toml`. Adding a table or column there is all it
-takes to index more; changing the file makes older indexes rebuild on their next use.
-
-## How the grids are stored
-
-Summarised in our own words from the RimWorld 1.7 game code (November 2026):
-
-| Layer | Stored as |
-| --- | --- |
-| Terrain (top, under, foundation), roofs, deep resources | A 16-bit Def number per cell; 0 is none |
-| Deep resource counts | A 16-bit count per cell |
-| Gas | A 32-bit number per cell: blind smoke, toxic gas, rot stink and deadlife dust as one byte each (0 to 255), lowest first |
-| Snow | A 16-bit fraction of full depth per cell |
-| Fog, pollution | One bit per cell, lowest bit first |
-
-Every grid is base64, of raw deflate when that is smaller (the element name then ends in "Deflate"); cells run row by
-row from the south-west corner (index = z times width plus x). A Def's number is the game's StableStringHash of its
-defName, modulo 65535; when two Defs of one type share a number, the later in defName order moves to the next free
-one. That tie order is approximated, so names whose number moved are marked `(?)`. Terrain the game makes in code
-(rough, hewn and smooth stone; carpets) is named through the Def index's game-made rows.
-
-## How fast (7 Nov 2026, on the owner's high-end PC)
-
-| Step | Time |
-| --- | --- |
-| Index PG2 (308 MB, 8.2 million elements; 84,608 things, 990 pawns, 9,110 hediffs) | 1.4 s, plus about 1 s to copy |
-| Any report afterwards | about 0.6 s, mostly starting Python |
-| Decode all ten grids of a 325 by 325 map | 0.02 s |
-| `diff` of two indexed saves, two in-game days apart | about 4 s |
-| Index PG3 (365 to 420 MB, 11.3 million elements, with 1.08 million component values; 8 Nov 2026) | 3.5 s |
-| `diff` with `--component` of two such saves | about 6 s |
-| The same save read once by Python's own XML reader, for comparison | 7.6 s |
 
 ## Reports and options
 
@@ -310,3 +156,166 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 - [Common options](common-options.md) explains `--game`, `--workshop`, `--config`, `--settings`, `--cache`, `--top`, `--json` and `--no-redact`, which many commands share.
 - Only one of `--held`, `--loose` at a time (`things`).
 <!-- end generated -->
+
+## Inputs
+
+Filters ignore case; `*` and `?` are wildcards, and `_` is an ordinary character.
+
+### How the grids are stored
+
+Summarised in our own words from the RimWorld 1.7 game code (November 2026):
+
+| Layer | Stored as |
+| --- | --- |
+| Terrain (top, under, foundation), roofs, deep resources | A 16-bit Def number per cell; 0 is none |
+| Deep resource counts | A 16-bit count per cell |
+| Gas | A 32-bit number per cell: blind smoke, toxic gas, rot stink and deadlife dust as one byte each (0 to 255), lowest first |
+| Snow | A 16-bit fraction of full depth per cell |
+| Fog, pollution | One bit per cell, lowest bit first |
+
+Every grid is base64, of raw deflate when that is smaller (the element name then ends in "Deflate"); cells run row by
+row from the south-west corner (index = z times width plus x). A Def's number is the game's StableStringHash of its
+defName, modulo 65535; when two Defs of one type share a number, the later in defName order moves to the next free
+one. That tie order is approximated, so names whose number moved are marked `(?)`. Terrain the game makes in code
+(rough, hewn and smooth stone; carpets) is named through the Def index's game-made rows.
+
+## Outputs
+
+### What each report shows
+
+| Report | What it shows | Its options |
+| --- | --- | --- |
+| `summary` (the default) | Version, scenario, days since the colony began, maps, where things are, the player's pawns by race, the commonest things | |
+| `index` | Indexes the save again now, then the summary | |
+| `schema` | Element paths in the save with how often each occurs, to find where something is saved | `--under PATH`, `--depth N` |
+| `things` | Things counted by def, or listed one per row | `--def`, `--class`, `--map`, `--place`, `--held` or `--loose`, `--list` |
+| `pawns` | Name, ID, race, kind, faction, place, map and position, age, health state, how many hediffs | `--faction` (`player` or a name), `--name`, `--kind`, `--place` |
+| `hediffs` | Hediffs counted by def, or one pawn's in full with body part, severity, age and source | `--pawn`, `--def` |
+| `find ID` | A thing by its ID, with every thing holding it out to the map or world | |
+| `thing ID` | One thing's saved data in full, read from the save itself: every value its comps and mods wrote, with its path inside the thing. A dictionary shows as `name[key]`, list items as `li[0]`, `li[1]`, and `@Class` is the type a value was saved as. The things it holds (a vehicle's crew, a pawn's inventory and apparel) are listed and left out unless `--held`. Needs the save, so with `--index` name it with `--save` too | `--path`, `--value`, `--held` |
+| `world` | World objects counted by def and faction, listed with ID, name, faction and tile, or one object's values in full (an aircraft's flight path, a site's parts) | `--def`, `--faction`, `--name`, `--id` |
+| `planet` | Pollution on the world map from the save's planet layer: by band, patches of touching tiles with what stands on or nearest each, rings of tiles around a place, what changed against another save, every save of the world by in-game day. Tile positions come from a rebuilt model of the planet; a world with less than full coverage is reported as such and its tiles are not placed | `--near` (a name or tile number), `--hops`, `--compare SAVE`, `--history [PATTERN]` |
+| `terrain` | How high the land stands and how rough it is: land heights (tenths and median), hilliness by class with each class's median height, the player's places with their tile's height and hilliness, the height difference between neighbouring land tiles across the world (a step, not a slope: the tile's size is not in the save), and around a place its rings of tiles with their lowest, median and highest land and the steepest step within | `--near` (a name or tile number), `--hops` |
+| `atlas` | The whole world map for a program to draw (a globe block): every surface tile's biome, elevation, temperature, rainfall, hills, swampiness, pollution and named region, with landscape features (caves, coast), settlements and other world objects grouped by how their faction stands with the player, roads, rivers and the game's region labels. Tables list biomes, places with their latitude and longitude, named regions, and roads and rivers. See [Atlas](#atlas) | `--game`, `--workshop`, `--config`, `--no-defs` |
+| `components` | The game's, the world's and maps' components with how many values each holds, or the values inside them with their paths | `--class`, `--path`, `--value`, `--map` |
+| `grid` | A map's layers counted: terrain, foundations (bridges and the like), roofs, each gas, fog, snow, pollution and deep resources; one layer in full with a text picture (north up); or every layer at one cell with the things standing there | `--map`, `--kind`, `--render`, `--gas`, `--columns`, `--at X,Z`, `--area X1,Z1,X2,Z2`, `--no-names` |
+| `mood` | Where the colony's mood suffers: each pawn's mood against its break thresholds, the remembered events that cost the colony most and help it most, needs running low, and addictions and drug needs, with charts; `--pawn` gives one pawn's events and needs in full. See [Mood](#mood) for what a save cannot show | `--who` (`all`, `colonists`, `slaves`, `prisoners`), `--pawn`, `--patched-defs`, `--mood-file`, `--no-mood-file`, `--game`, `--workshop`, `--config`, `--no-defs` |
+| `diff OTHER` | What changed since another save: counts, things that appeared and went by def, stacks that grew or shrank, pawns that moved, arrived or left, pawns' hediffs gained, lost, worse or better, world objects that changed faction, appeared or went, and component values that changed and lists that grew or shrank | `--faction` (`player` by default, `any`, or a faction), `--component` |
+| `sql QUERY` | Any query; the index is opened read-only, so nothing can change it | |
+
+### Mood
+
+**A save holds only half of a pawn's mood.** The game saves remembered thoughts (a death, a meal off the floor, a
+party) and leaves out situational ones (bedroom and dining room, pain, hunger, cold, darkness, traits, precepts, a drug's
+high), which it works out while it runs. So `mood` counts the remembered events exactly and gives the rest as one
+figure, "everything else": the pawn's mood minus its remembered events. Summed over the colony it says how much the
+unsaved half costs, without naming it.
+
+| Part | Where it comes from |
+| --- | --- |
+| Who | Pawns on a map with a mood: the player's own (colonists), the player's slaves, and the player's prisoners |
+| Mood | The Mood need's saved level. **The game leaves a level of 0 out of the save**, so a missing level is 0, not unknown |
+| A remembered event's mood | Its ThoughtDef stage's `baseMoodEffect`, times the saved strength, plus the saved offset; fading where the Def says so. Repeats of one event count once at full weight, then each at 0.75 (or the Def's own multiplier) of the one before |
+| Break thresholds | The `MentalBreakThreshold` stat's base value, moved by the pawn's traits; major is 4/7 of minor, extreme 1/7 |
+| Defs | The patched-Defs file where one exists (by default where D'thorga Framework writes it, beside the Config folder), else the installed mods' Defs as written |
+
+These rules were read from the 1.7 game code and are summarised in `python/phobos_modkit/games/rimworld/mood.py`.
+**Left out, and said so in the report:** a thought's stat multipliers and its own rules; cancelling by hediffs, genes,
+precepts and tales (trait cancelling is applied); threshold changes from anything but traits; the difficulty's mood
+offset. The low-need line at 30% is our choice, not the game's.
+
+**The colony mood file names the other half**. phobos-rimworld's D'thorga Framework (0.64.0 and later, its setting
+"Write a colony mood file at each save") writes `PhobosSnapshots/ColonyMood.xml` beside the Config folder at every save: each
+colonist's, slave's and prisoner's thought groups as the game added them up, situational ones included, with each pawn's break
+thresholds from the game's own mental breaker. The file names the tick count and world seed it was written at, and `mood` uses
+it **only when both match the save it reads**; then every thought, its kind (remembered or situational) and every threshold
+come from the game, and the rules above are not needed. A file from another save is said and set aside. Name another file with
+`--mood-file`, `RIMWORLD_COLONY_MOOD` or `rimworldColonyMoodPath`; ignore it with `--no-mood-file`.
+
+**Advice** (owner's choice of 10 November 2026). "Where to start" lists the costliest causes a player can do something
+about, with a suggestion for each; one pawn's report and the needs table carry advice too. The suggestions are ours, written from
+how the game behaves, keyed by Def name in `python/phobos_modkit/games/rimworld/mood-advice.json` (wildcards allowed, every name
+checked against a 1.7 install), and the report always labels them as advice. A cause only time removes (a death) has advice but
+stays out of "Where to start".
+
+### Atlas
+
+**The planet sits as the game's does.** The game builds its world from an icosahedron of twelve points and twenty triangles,
+subdivides it, and never rotates it (`IcosahedronGenerator`, `PlanetLayer.InitializeLayer`, read from the 1.7 code on 10
+November 2026). `planet.py` rebuilds the same shape, so tile numbers, neighbours, longitude and latitude match the game's: a
+tile's outline joins the centres of the triangles it makes with its neighbours, and its longitude and latitude come from the
+mean of those corners, as `PlanetLayer.LongLatOf` reckons them. On the owner's world, ice sheet averages 75.5 degrees from the
+equator and tropical rainforest 4.4, as climate says they should.
+
+| Layer | As the game saves it | As the atlas gives it |
+| --- | --- | --- |
+| Biome | The BiomeDef's short hash | A category with a colour from `atlas-palette.json`, or from its tiles' climate when the palette does not know it |
+| Elevation | Metres + 8192 | Metres; seas and lakes show their depth |
+| Temperature | (degrees C + 300) x 10 | Degrees C, the year's average |
+| Rainfall | mm a year | mm a year; water tiles carry none |
+| Hills | The Hilliness enum | Flat to impassable; water tiles carry none |
+| Swampiness | 0 to 1 as 0 to 255 | Percent; water tiles carry none |
+| Pollution | 0 to 1 as 0 to 65535 | Percent, an overlay, with the game's four bands |
+| Region | The WorldFeature's ID | Its name, as text only |
+| Roads, rivers | The lower tile, the other's place in its neighbour list, the Def's short hash | Lines between tile centres, 1 to 4 wide by Def (`atlas-palette.json`) |
+| Mutators | Tile and TileMutatorDef short hash | Tags, such as Caves or Coast, named only when the Defs are read |
+
+A short hash is the game's `StableStringHash` of the Def name, modulo 65535, moved past 0 and past hashes earlier Defs of the
+same type took in name order. **Names need the Defs**: the installed mods' Def index names modded biomes, roads, mutators and
+world objects; without it (`--no-defs`, or no install found) only the names in the palette are known, and a hash nothing
+matches is shown as an unknown biome and counted in the report. The palette's colours and widths are agent-authored (10
+November 2026) for the owner to revise; they are our own choices, not the game's art.
+
+Places are the save's world objects on the surface: grouped as the player's own (any `Player*` faction), allies, neutral,
+hostile, or no faction, by the relation each faction holds with the player (a relation the save leaves out is neutral, the
+game's default). A world generated with less than full planet coverage renumbers its tiles and is refused, as by `planet`.
+
+On the owner's PG5 (590,492 tiles, 525 places, 287 named regions) the report takes about 1.1 s once the save is indexed, and
+its JSON is about 45 MB, most of it the tile positions and rings.
+
+### What the index holds
+
+| Table or view | Rows |
+| --- | --- |
+| `game` | The save's version, ticks, starting year, scenario, play time and world seed |
+| `mods` (view of `mod_id`, `mod_name`, `mod_steam_id`) | The save's mod list, in load order |
+| `faction` | Every faction's load ID, def and name; things name it as `Faction_<load ID>` |
+| `faction_relation` | How each faction stands with each other one: the other faction, kind and goodwill (left out at the defaults, Neutral and 0) |
+| `map` | Each map's position, generator, size and world object |
+| `thing` | Every thing on a map, held by another thing, or a world pawn: def, ID, class, stuff, stack, hit points, quality, forbidden, map, position, faction, the thing holding it |
+| `pawn` | The pawn part of a thing (same `id`): kind, gender, name parts, health state, biological age, backstories |
+| `hediff`, `trait`, `skill` | Each belongs to a pawn by its `id` |
+| `need`, `memory` | Each pawn's needs (def and level; a missing level is 0, which the game leaves out) and remembered thoughts (def, age, stage, mood power and offset, the other pawn, the precept) |
+| `thing_place` (view) | For each thing, the outermost thing holding it, whether it is held, its place and map |
+| `pawn_view` (view) | Pawns with display name, race, faction name, place, map, position and age in years |
+| `map_grid` | Each map's grids as the save holds them (base64 text), with the grid's element and owner |
+| `planet_grid` | The surface layer's per-tile arrays as the save holds them (base64 text): biome, elevation, hills, temperature, rainfall, swampiness, feature, pollution, roads, rivers and mutators |
+| `world_feature` | Named regions of the world map: def, ID, name, where the game draws the name, its size in tiles, and the planet layer |
+| `world_object` | Every world object (settlements, sites, caravans, destroyed settlements): def, class, ID, tile, faction, name |
+| `world_object_value`, `world_object_value_view` (view) | Every value with text inside a world object, with its path inside the object (about 70,000 on the owner's save) |
+| `component`, `component_value` | The game's, the world's and each map's components (class, position, map), and every value with text inside one (its tag, place among same-named siblings and text); `element_path` gives its full path |
+| `world_object_view`, `component_view` (views) | World objects with their faction's name and def; component values with the component's class, scope, map and the path inside the component |
+| `element_path` | Every element path in the save and how often it occurs |
+| `meta` | The source save's name, size and time, the schema's hash, the indexer's version |
+
+The schema is `python/phobos_modkit/games/rimworld/save-schema.toml`. Adding a table or column there is all it
+takes to index more; changing the file makes older indexes rebuild on their next use.
+
+## Limits
+
+- Checked against RimWorld 1.7.5000 saves (November 2026).
+
+### How fast
+
+Measured on 7 Nov 2026, on the owner's high-end PC. The first question indexes a frozen copy of the save in about a second and
+a half; later questions take well under a second until the save changes.
+
+| Step | Time |
+| --- | --- |
+| Index PG2 (308 MB, 8.2 million elements; 84,608 things, 990 pawns, 9,110 hediffs) | 1.4 s, plus about 1 s to copy |
+| Any report afterwards | about 0.6 s, mostly starting Python |
+| Decode all ten grids of a 325 by 325 map | 0.02 s |
+| `diff` of two indexed saves, two in-game days apart | about 4 s |
+| Index PG3 (365 to 420 MB, 11.3 million elements, with 1.08 million component values; 8 Nov 2026) | 3.5 s |
+| `diff` with `--component` of two such saves | about 6 s |
+| The same save read once by Python's own XML reader, for comparison | 7.6 s |
