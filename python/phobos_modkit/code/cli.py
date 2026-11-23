@@ -51,7 +51,7 @@ def _parser():
     sub = p.add_subparsers(dest="report", metavar="report")
     sub.add_parser("summary", parents=[common], help="the corpora, their files and declarations")
     f = sub.add_parser("find", parents=[common], help="declarations whose name or full name matches")
-    f.add_argument("pattern")
+    f.add_argument("pattern", help="a name or full name; * and ? are wildcards")
     f.add_argument("--kind", action="append", default=[], help="only these kinds (class, method, property, field, ...)")
     o = sub.add_parser("outline", parents=[common], help="a type's members, in source order")
     o.add_argument("name", help="a type's name or dotted full name")

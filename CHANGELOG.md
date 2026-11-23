@@ -4,6 +4,24 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.106.0] - 2026-11-23
+
+### Added
+
+- **Every command's doc now lists all its reports and options** (docs rewrite, step 3, the owner's go-ahead of 23 Nov 2026: an
+  audit found 33 of 48 commands with options their doc never named). `command-docs --write` writes a block between
+  `<!-- generated: options COMMAND -->` marks in each doc, from the command's own parser: each report with its effect, each option
+  once with the reports that take it, its help and its default. `config/command-docs.json` names each command's doc. The
+  README's out-of-order Tools table, with its frozen "Built" versions, becomes a generated index of every command. Without
+  `--write` it checks, and the gate (and CI) fail when a block is out of date ([command-docs.md](docs/command-docs.md)).
+- **The manifest gives each option's `metavar`**, the placeholder its usage shows (`--set KEY=VALUE`), or null.
+
+### Fixed
+
+- **25 options that had no help text now have one**: the `sql` reports' `QUERY`, `rimworld-settings snapshot` and `compare`'s
+  files, `steam-publish`'s mod names, `--visibility`, `--description` and `--changelog` on `pull`, `release`'s `FILES`,
+  `--catalogue`, `--set` and `--expect`, and `code find`'s `PATTERN`.
+
 ## [1.105.1] - 2026-11-23
 
 ### Fixed

@@ -26,3 +26,26 @@ It reads only: `About.xml`, assemblies opened as files and never loaded or run, 
 
 **Riskiest first** is an authored weighting (a transpiler 3, Prepatcher 5, asset bundles 2), to put the likeliest trouble at the top. It is
 not a measurement. Each run remembers its result in the kit's cache, per version, and says what changed since the last.
+
+## Reports and options
+
+<!-- generated: options rimworld-readiness -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+Effect: reads only.
+
+| Option | What it does | Default |
+| --- | --- | --- |
+| `--game-version VALUE` | the version to check against, like 1.8 (default: the one the game is on) |  |
+| `--game VALUE` | the RimWorld folder (else RIMWORLD_PATH, the settings file, Steam's default) |  |
+| `--workshop VALUE` | the Workshop content folder (else RIMWORLD_WORKSHOP_PATH, settings, beside the game) |  |
+| `--config VALUE` | the folder holding ModsConfig.xml (else RIMWORLD_CONFIG_PATH, settings, default) |  |
+| `--cache VALUE` | where indexes are kept (else PHOBOS_MODKIT_CACHE, settings, the temp folder) |  |
+| `--settings VALUE` | a JSON settings file with rimworldPath, workshopPath, rimworldConfigPath |  |
+| `--top N` | rows per table (default 25) | `25` |
+| `--all` | list every mod that does not declare the version |  |
+| `--no-save` | do not remember this run |  |
+
+- It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->

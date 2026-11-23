@@ -64,7 +64,7 @@ def build_parser(prog, description, epilog, target_help, extra=None):
     c.add_argument("targets", nargs="+", help="a collection's Workshop ID or URL")
     c.add_argument("--grep", help="keep the items whose title or description matches (* and ? are wildcards)")
     q = sub.add_parser("sql", parents=[common], help="any read-only SQL query over the cache")
-    q.add_argument("query")
+    q.add_argument("query", help="one read-only SQL statement, in quotes")
     if extra:
         extra(sub, common)
     return p

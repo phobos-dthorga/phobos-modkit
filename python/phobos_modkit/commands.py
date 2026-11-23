@@ -56,6 +56,7 @@ COMMANDS = {
     "settings": (".settings_cli", "the settings the tools read, where each value comes from, and the central settings file"),
     "test-pass": (".testpass_cli", "what a repository's in-game test list is waiting for, from the game's notes and the owner's verdicts"),
     "art-audit": (".artaudit_cli", "every shipped image with its record and how it was made, and every borrowed picture"),
+    "command-docs": (".command_docs", "each command's doc lists its reports and options, and the README its commands, from the manifest"),
     "gate": (".gate.cli", "run a repository's checks before a commit and report only what failed"),
     "manifest": (".manifest", "every command, its reports and options, and what each one reads or changes"),
 }

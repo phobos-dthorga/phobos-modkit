@@ -121,3 +121,25 @@ on sight. The lock files live in the kit's cache (`locks/`), one per repository 
 - The parsers read console output, which tools may change between versions; a change shows as a failed step whose
   problems are the output's tail rather than tidy lines. The fix is the parser, here.
 - Steps never see the terminal, so a program that asks a question will wait until its timeout.
+
+## Reports and options
+
+<!-- generated: options gate -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+Effect: runs other programs. Builds the repository and runs its tests.
+
+| Option | What it does | Default |
+| --- | --- | --- |
+| `--root VALUE` | the repository (default: the current folder) |  |
+| `--config VALUE` | the step list, relative to the root (default config/gate.json) | `config/gate.json` |
+| `--only PATTERN` | run only steps whose name matches (wildcards \* and ?); repeatable |  |
+| `--skip PATTERN` | leave out matching steps; repeatable |  |
+| `--jobs N` | lanes run at once (default up to 4) | `4` |
+| `--keep-going` | run later stages even when a stage failed |  |
+| `--list` | show the steps, expanded, without running them |  |
+| `--verify-staged` | run nothing: exit 0 only when a full passing run saw every staged file as it is staged (a pre-commit hook) |  |
+| `--verbose` | list every step, not only the failed ones |  |
+
+It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

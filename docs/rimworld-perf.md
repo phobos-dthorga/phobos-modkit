@@ -191,3 +191,88 @@ cannot be made again.
 `look`, `look-kind`, `look-why` and `look-serve` read a Windows snapshot of the game with the kit's heap reader instead of
 dotnet-gcdump: every object with no limit on how many, any object's values, and why something is still in memory, without forcing a
 collection. See [the heap reader](heap-reader.md).
+
+## Reports and options
+
+<!-- generated: options rimworld-perf -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `report` | A recording: phases, who caused the time, busiest methods, garbage collection. | reads only |
+| `record` | Record the running game, then report it. | runs other programs |
+| `index` | Index a speedscope file recorded by hand with dotnet-trace. | reads only |
+| `mod` | One mod in a recording. | reads only |
+| `compare` | Two recordings, as shares of the main thread and of ticking. | reads only |
+| `list` | Every recording and snapshot kept. | reads only |
+| `stack` | A frozen or stuck game: every thread's stack, a few times. | runs other programs |
+| `stack-report` | Stack snapshots taken earlier. | reads only |
+| `heap` | What holds the game's memory, by type and by mod (pauses the game). Forces a full garbage collection: the game pauses until it is done. | runs other programs |
+| `heap-report` | A heap taken earlier. | reads only |
+| `heap-compare` | Two heaps: who grew. | reads only |
+| `watch` | The game's memory over time, without pausing it; Ctrl+C ends it early. Reads Windows' memory figures without pausing the game; attaches dotnet-counters once unless `--no-counters`. Ends early when watch-stop asks. | runs other programs |
+| `watch-report` | A memory watch taken earlier. | reads only |
+| `watch-status` | A running or kept watch as it stands, light enough to read every few seconds. Light enough to read every few seconds: the latest figures, the timeline so far, your marks, the watches kept. | reads only |
+| `watch-stop` | End a running watch early, from another console or a program. Writes a stop file into the running watch's own folder in the kit's cache; the watch ends at its next look. | writes |
+| `watch-mark` | Put a few words of your own beside a watch's figures. Adds the owner's words to the watch's own database in the kit's cache; nothing else. | writes |
+| `look` | Inside the running game from a snapshot: every object by type and by mod. Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own memory-reading library from its install folder; nothing is written to the game. | runs other programs |
+| `look-kind` | One kind's objects in the running game, each described. Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own memory-reading library from its install folder; nothing is written to the game. | runs other programs |
+| `look-why` | Why a kind is still in memory: paths from a root to its largest objects. Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own memory-reading library from its install folder; nothing is written to the game. | runs other programs |
+| `look-serve` | Hold a snapshot and answer JSON requests a line at a time, for a program. Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own memory-reading library from its install folder; nothing is written to the game. Holds the snapshot and answers one JSON request a line on standard input until it closes or the time limit passes; for a program's page, not a person's console. | runs other programs |
+
+Unless its row says otherwise, each report: Attaches Microsoft's dotnet-trace, dotnet-counters, dotnet-stack or dotnet-gcdump to the running game; it changes nothing in it.
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--cache VALUE` | all | where recordings are kept (else PHOBOS_MODKIT_CACHE, the settings file, the temp folder) |  |
+| `--game VALUE` | all | the RimWorld folder (else RIMWORLD_PATH, the settings file, Steam's default) |  |
+| `--workshop VALUE` | all | the Workshop content folder (else RIMWORLD_WORKSHOP_PATH, settings, beside the game) |  |
+| `--config VALUE` | all | the folder holding ModsConfig.xml (else RIMWORLD_CONFIG_PATH, settings, default) |  |
+| `--settings VALUE` | all | a JSON settings file with the paths above |  |
+| `--top N` | all | rows per table (default 15) | `15` |
+| `RECORDING` | `report` | (optional) a recording's ID (its start is enough) or label; the newest when left out |  |
+| `--seconds N` | `record` | how long to record (default 30) | `30` |
+| `--label VALUE` | `record` | a few words to find the recording by, such as what was happening |  |
+| `--pid N` | `record`, `stack`, `heap`, `watch`, `look`, `look-kind`, `look-why`, `look-serve` | the game's process ID, when more than one RimWorld runs |  |
+| `--keep-speedscope` | `record` | keep the converted trace beside the index (large) |  |
+| `FILE` | `index` | a .speedscope.json file from dotnet-trace |  |
+| `--counters VALUE` | `index` | dotnet-counters' JSON file from the same time |  |
+| `--label VALUE` | `index` | a few words to find the recording by |  |
+| `NAME` | `mod` | a mod's name; \* and ? are wildcards |  |
+| `RECORDING` | `mod` | (optional) a recording's ID or label; the newest when left out |  |
+| `FIRST` | `compare` | (optional) the earlier recording; the second newest when both are left out |  |
+| `SECOND` | `compare` | (optional) the later recording; the newest when both are left out |  |
+| `--times N` | `stack` | how many snapshots (default 3) | `3` |
+| `--every N` | `stack` | seconds between them (default 2) | `2.0` |
+| `--label VALUE` | `stack` | a few words to find the snapshots by, such as what the game was doing |  |
+| `--frames N` | `stack`, `stack-report` | frames of the main thread shown (default 40) | `40` |
+| `SNAPSHOT` | `stack-report`, `heap-report` | (optional) its ID (its start is enough) or label; the newest when left out |  |
+| `--label VALUE` | `heap` | a few words to find the heap by, such as the in-game day |  |
+| `FIRST` | `heap-compare` | (optional) the earlier heap; the second newest when both are left out |  |
+| `SECOND` | `heap-compare` | (optional) the later heap; the newest when both are left out |  |
+| `--minutes N` | `watch` | how long to watch (default 60) | `60` |
+| `--every N` | `watch` | seconds between samples (default 5) | `5` |
+| `--map-every N` | `watch` | seconds between memory maps, 0 for none (default 60; Windows only) | `60` |
+| `--no-counters` | `watch` | leave .NET's counters out: nothing attaches to the game at all |  |
+| `--label VALUE` | `watch` | a few words to find the watch by, such as what you plan to do |  |
+| `--logs VALUE` | `watch` | the folder holding Player.log (else RIMWORLD_LOGS_PATH, settings, default) |  |
+| `WATCH` | `watch-report` | (optional) its ID (its start is enough) or label; the newest when left out |  |
+| `WATCH` | `watch-status` | (optional) its ID or label; the one running, else the newest, when left out |  |
+| `WATCH` | `watch-stop` | (optional) its ID or label; the one running when left out |  |
+| `TEXT` | `watch-mark` | what you are doing or about to do, such as "reloading now" (at most 200 characters) |  |
+| `--watch VALUE` | `watch-mark` | its ID or label; the one running, else the newest, when left out |  |
+| `--at N` | `watch-mark` | the moment it names, in seconds since 1970; now when left out |  |
+| `--label VALUE` | `look` | a few words to find it by, such as the in-game day |  |
+| `TYPE` | `look-kind` | the type's full name, as look lists it (Verse.Pawn) |  |
+| `--match VALUE` | `look-kind` | only objects whose description holds this text (a pawn's name, a defName) |  |
+| `--largest` | `look-kind` | largest first |  |
+| `--open` | `look-kind` | also show the first one with every value it holds |  |
+| `TYPE` | `look-why` | the type's full name, as look lists it (System.Xml.XmlDocument) |  |
+| `--sample N` | `look-why` | paths to show, each to a different object (default 3) | `3` |
+| `--label VALUE` | `look-serve` | a few words to keep its overview by |  |
+| `--limit-seconds N` | `look-serve` | let the snapshot go after this long (default 600: it costs memory while held) | `600` |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->

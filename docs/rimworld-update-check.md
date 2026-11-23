@@ -53,3 +53,29 @@ change (a fix can be a new constructor).
 `--json` prints the kit's envelope; `data` holds `since`, `parts`, and per part: `names` {found, failing, notChecked, atRunTime,
 assemblies}, `temporary` [rows with status and detail], `updates` [rows with added, removed, signatures, bodies, newTypes,
 newTypeCount, keptAt], `xml` {checked, skipped, rows, patchedDefs}.
+
+## Reports and options
+
+<!-- generated: options rimworld-update-check -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+Effect: runs other programs. Runs ilspycmd on archived assemblies and the kit's assembly reader, reading them, never loading them.
+
+| Option | What it does | Default |
+| --- | --- | --- |
+| `--root VALUE` | the repository holding our C#, our mods and config/update-check.json | `.` |
+| `--only VALUE` | some of names, temporary, updates, xml, by commas (default: all four) |  |
+| `--since VALUE` | count updates the archive kept since this moment (ISO, UTC unless it says otherwise) |  |
+| `--days N` | without `--since`: the last N days (default 7) | `7` |
+| `--game VALUE` | the RimWorld folder (else RIMWORLD_PATH, the settings file, Steam's default) |  |
+| `--workshop VALUE` | the Workshop content folder (else RIMWORLD_WORKSHOP_PATH, settings, beside the game) |  |
+| `--config VALUE` | the folder holding ModsConfig.xml (else RIMWORLD_CONFIG_PATH, settings, default) |  |
+| `--archive VALUE` | the assembly archive (else PHOBOS_ASSEMBLY_ARCHIVE, the settings file, the default) |  |
+| `--decompiler VALUE` | ilspycmd (else PHOBOS_MODKIT_ILSPYCMD, ilspycmdPath in the settings file, the PATH) |  |
+| `--cache VALUE` | the kit's cache folder |  |
+| `--settings VALUE` | a JSON settings file |  |
+| `--top N` | rows per table (default 25) | `25` |
+
+- It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->

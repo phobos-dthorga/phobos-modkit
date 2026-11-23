@@ -137,3 +137,76 @@ passes a mod of another group, and its reason follows the links back to the memb
 `mod-list/<game>/backups/<UTC time>--<list>.list` holds the list file as it stood, byte for byte; the `.json` beside it says which
 list, where, what the change was, a hash of what was written (how `undo` sees a later change), and from 1.73.0 `undone` once an undo has gone back on it. Going back keeps the list as it
 then stood as a backup too ("before going back").
+
+## Reports and options
+
+<!-- generated: options mod-list -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `check` | Every problem with the game's lists of active mods, why, and the changes offered. | reads public pages online, with `--online` |
+| `fix` | One change to a list, after a backup; only with `--apply`. | writes, with `--apply` |
+| `undo` | Put a list back as it was before the last change made here; only with `--apply`. | writes, with `--apply` |
+| `sort` | The list sorted from every rule, each move explained; written only with `--apply`. | writes, with `--apply` |
+| `rules` | Your own load-order rules, and every rule set the sorter reads. | writes, with `--apply` |
+| `since` | What the first game run after the last change made here showed; only reads. | reads only |
+| `lists` | Every saved list: by name, kept at game starts, each save's, and RimSort's history. | reads only |
+| `compare` | What loading a list would change; only reads. | reads only |
+| `load` | Load a list in place of the one the game reads, after a backup; only with `--apply`. | writes, with `--apply` |
+| `save` | Keep the list as it stands, by name; only with `--apply`. | writes, with `--apply` |
+| `forget` | Take away a list saved by name; only with `--apply`. | writes, with `--apply` |
+| `export` | Write a list as the game's own list file; only with `--apply`. | writes, with `--apply` |
+| `subscribe` | Subscribe to Workshop items through the running Steam client; only with `--apply`. | writes, with `--apply` |
+| `unsubscribe` | Switch Workshop mods off, then unsubscribe through Steam; only with `--apply`. | writes, with `--apply` |
+| `mods` | Every mod on this PC, and where each of the game's lists has it. | reads only |
+| `backups` | Every backup kept of the game's lists, newest first. | reads only |
+| `games` | The games whose lists the check can read. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--name VALUE` | all but `games` | the game, by name or id (RimWorld, project-zomboid) |  |
+| `--app-id N` | all but `games` | the game's Steam app ID, instead of its name |  |
+| `--data VALUE` | all but `games` | the game's own data folder, where the tools would not find it |  |
+| `--settings VALUE` | all but `games` | a JSON settings file with the games' paths |  |
+| `--list KEY` | `check`, `fix`, `undo`, `sort`, `since`, `compare`, `load`, `save`, `export`, `unsubscribe` | only this list, by the key a check names |  |
+| `--online` | `check` | ask Steam which Workshop items still exist |  |
+| `--known` | `check` | also warn of known problems, from the known-problems feeds the kit last read (no network) |  |
+| `--remove ID` | `fix` | take this mod off the list (again for several). Repeatable. |  |
+| `--remove-extra ID` | `fix` | keep the first entry of this mod and take the others off |  |
+| `--enable ID` | `fix` | switch this mod on: at `--to`, else just before the first mod that needs it (again for several). Repeatable. |  |
+| `--move ID` | `fix` | move this mod to the place `--to` names (again for several, moved as one block). Repeatable. |  |
+| `--to PLACE` | `fix` | the place a mod moved or switched on goes to, 1 first (1.73.0) |  |
+| `--apply` | `fix` | make the change; without it, only say what it would be |  |
+| `--backup VALUE` | `undo` | this backup (its file name), instead of the latest |  |
+| `--apply` | `undo` | go back; without it, only say what it would do |  |
+| `--full` | `sort` | rebuild the whole order (else move only what a rule says is out of place) |  |
+| `--apply` | `sort` | write the sorted list, after a backup |  |
+| `--mod ID` | `rules` | the mod a new rule is about |  |
+| `--after OTHER` | `rules` | it loads after this mod |  |
+| `--before OTHER` | `rules` | it loads before this mod |  |
+| `--top` | `rules` | it loads as near the top as its rules allow |  |
+| `--bottom` | `rules` | it loads as near the bottom as its rules allow |  |
+| `--drop N` | `rules` | take your rule N away (as `rules` numbers them) |  |
+| `--apply` | `rules` | keep the change; without it, only say what it would be |  |
+| `--from SOURCE:REF` | `compare`, `load` | a list as `lists` names it: saved:NAME, kept:TIME, save:FILE, manager:FILE |  |
+| `--last-clean` | `compare`, `load` | the newest list kept at a game start that then ran clean (1.85.0) |  |
+| `--file PATH` | `compare`, `load` | a list file (the game's .rml, a save, an exported RimSort list) |  |
+| `--apply` | `load`, `export` | write it; without it, only say what it would do |  |
+| `--as NAME` | `save` | the name to keep it by. Required. |  |
+| `--replace` | `save` | replace a list kept by that name |  |
+| `--apply` | `save` | keep it; without it, only say what it would do |  |
+| `--saved NAME` | `forget` | the saved list's name, as `lists` gives its ref. Required. |  |
+| `--apply` | `forget` | take it away; without it, only say what it would do |  |
+| `--from SOURCE:REF` | `export` | a saved list, instead of the game's list |  |
+| `--to PATH` | `export` | the file to write. Required. |  |
+| `--item N` | `subscribe`, `unsubscribe` | a Workshop number (again for several). Required. Repeatable. |  |
+| `--wait SECONDS` | `subscribe` | wait this long for Steam to download them, saying how far it is | `0` |
+| `--apply` | `subscribe` | subscribe; without it, only say what it would do |  |
+| `--apply` | `unsubscribe` | do it; without it, only say what it would do |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Only one of `--remove`, `--remove-extra`, `--enable`, `--move` at a time (`fix`).
+- Only one of `--after`, `--before`, `--top`, `--bottom`, `--drop` at a time (`rules`).
+- Only one of `--from`, `--last-clean`, `--file` at a time (`compare`, `load`).
+<!-- end generated -->

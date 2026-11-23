@@ -106,3 +106,20 @@ and D'thorga Companion the same day; the others when next worked on.
 - A repository that has not pinned the kit is reached only by the owner's own instructions on their machine, which another
   contributor does not have.
 - The check sees that a repository reads the rules, never that a session followed them.
+
+## Reports and options
+
+<!-- generated: options rules -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `list` | The shared rule files, when each is read and what it covers. | reads only |
+| `check` | Whether a repository reads the shared rules. Fails when the repository's CLAUDE.md or AGENTS.md does not read the shared rules. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | `check` | the repository (default: the current folder) |  |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

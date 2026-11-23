@@ -47,3 +47,7 @@ jobs:
         run: |
           ${{ matrix.python }} --version
           ${{ matrix.python }} -W error::DeprecationWarning -m unittest discover -s tests -v
+      - name: Check every command's doc lists its reports and options
+        shell: bash
+        working-directory: python
+        run: ${{ matrix.python }} -m phobos_modkit command-docs

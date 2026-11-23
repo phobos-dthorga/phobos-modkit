@@ -62,3 +62,82 @@ lag, stutter, abandoned, outdated, no longer, null reference, stuck, corrupt, pl
 | --- | --- |
 | Details | `POST https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/` (Valve's public Web API, no key), up to 100 items at once |
 | Comments | `POST https://steamcommunity.com/comment/PublishedFile_Public/render/<creator>/<item>/` with `start` and `count`: the markup an item's own comment pages show. The uploader is the commenter whose account number is the creator's SteamID64 less 76561197960265728 |
+
+## Reports and options
+
+### `rimworld-workshop`
+
+<!-- generated: options rimworld-workshop -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `report` | Details and comment research per item. | reads public pages online |
+| `details` | Update dates, version tags and subscribers; no comments fetched. | reads public pages online |
+| `comments` | One item's comments in full, newest first. | reads public pages online |
+| `collection` | A collection's items: versions and the opening of each description; no comments fetched. | reads public pages online |
+| `sql` | Any read-only SQL query over the cache. | reads only |
+| `versions` | The active Workshop mods' declared versions against the game's (details only, one quick request per 100 mods). | reads public pages online |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--max-age N` | all | hours fetched comments and collections stay fresh (default 24) | `24` |
+| `--details-max-age N` | all | hours fetched details (update date, versions) stay fresh (default 1) | `1` |
+| `--refresh` | all | fetch again even when the cache is fresh |  |
+| `--offline` | all | use the cache only; never contact Steam |  |
+| `--cache VALUE` | all | where the cache is kept (else PHOBOS_MODKIT_CACHE, settings, the temp folder) |  |
+| `--settings VALUE` | all | a JSON settings file with modkitCachePath |  |
+| `--days N` | all | how far back 'recent' comments go (default 90) | `90` |
+| `--game-version VALUE` | all | also flag comments that mention this version, e.g. 1.7 |  |
+| `--top N` | all | rows per table (default 30) | `30` |
+| `TARGETS ...` | `report`, `details` | a mod's name, package ID, Workshop ID or URL |  |
+| `--game VALUE` | all but `sql`, `versions` | the RimWorld folder (for finding the Workshop folder) |  |
+| `--workshop VALUE` | all but `sql`, `versions` | the Workshop content folder, where mods are looked up by name |  |
+| `--config VALUE` | all but `sql`, `versions` | the folder holding ModsConfig.xml (for the game's version) |  |
+| `TARGETS` | `comments` | a mod's name, package ID, Workshop ID or URL |  |
+| `TARGETS ...` | `collection` | a collection's Workshop ID or URL |  |
+| `--grep VALUE` | `collection` | keep the items whose title or description matches (\* and ? are wildcards) |  |
+| `QUERY` | `sql` | one read-only SQL statement, in quotes |  |
+| `--game VALUE` | `versions` | the RimWorld folder |  |
+| `--workshop VALUE` | `versions` | the Workshop content folder |  |
+| `--config VALUE` | `versions` | the folder holding ModsConfig.xml |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->
+
+### `steam-workshop`
+
+<!-- generated: options steam-workshop -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `report` | Details and comment research per item. | reads public pages online |
+| `details` | Update dates, version tags and subscribers; no comments fetched. | reads public pages online |
+| `comments` | One item's comments in full, newest first. | reads public pages online |
+| `collection` | A collection's items: versions and the opening of each description; no comments fetched. | reads public pages online |
+| `sql` | Any read-only SQL query over the cache. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--max-age N` | all | hours fetched comments and collections stay fresh (default 24) | `24` |
+| `--details-max-age N` | all | hours fetched details (update date, versions) stay fresh (default 1) | `1` |
+| `--refresh` | all | fetch again even when the cache is fresh |  |
+| `--offline` | all | use the cache only; never contact Steam |  |
+| `--cache VALUE` | all | where the cache is kept (else PHOBOS_MODKIT_CACHE, settings, the temp folder) |  |
+| `--settings VALUE` | all | a JSON settings file with modkitCachePath |  |
+| `--days N` | all | how far back 'recent' comments go (default 90) | `90` |
+| `--game-version VALUE` | all | also flag comments that mention this version, e.g. 1.7 |  |
+| `--top N` | all | rows per table (default 30) | `30` |
+| `TARGETS ...` | `report`, `details` | a Workshop item ID or URL |  |
+| `TARGETS` | `comments` | a Workshop item ID or URL |  |
+| `TARGETS ...` | `collection` | a collection's Workshop ID or URL |  |
+| `--grep VALUE` | `collection` | keep the items whose title or description matches (\* and ? are wildcards) |  |
+| `QUERY` | `sql` | one read-only SQL statement, in quotes |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->

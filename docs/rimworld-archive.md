@@ -67,3 +67,41 @@ older one is not confirmed. For a mod with public source, its own repository's h
 - A file's version text is the owner's own (`Version.txt` for the game, `modVersion` for a mod) and may be blank; the first-seen
   time and the hash always tell versions apart.
 - Going back to an older build counts as a new version (stored once), so `--back 1` is always the version before the newest.
+
+## Reports and options
+
+<!-- generated: options rimworld-archive -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `snapshot` | Keep each watched file whose content changed since the last snapshot. Writes only to the archive folder, never to the game or Workshop. | writes |
+| `list` | What the archive holds. | reads only |
+| `compare` | What changed between two kept versions, member by member. Unpacks both sides inside the archive folder and runs ilspycmd, which reads a file without loading or running it. | runs other programs |
+| `get` | Unpack a kept version and print where it is. Unpacks a kept file inside the archive folder. | writes |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--archive VALUE` | all | the archive folder (else PHOBOS_ASSEMBLY_ARCHIVE, assemblyArchivePath in settings, %LOCALAPPDATA%\phobos-modkit\assembly-archive) |  |
+| `--settings VALUE` | all | a JSON settings file with rimworldPath, workshopPath, rimworldConfigPath, assemblyArchivePath |  |
+| `--top N` | all | rows per table (default 60) | `60` |
+| `--root VALUE` | `snapshot` | the project whose mods' tie-ins decide what to watch (default: here) | `.` |
+| `--mod PACKAGE_ID` | `snapshot` | watch this active mod too; may repeat |  |
+| `--game-file NAME` | `snapshot` | a game assembly to watch beside Assembly-CSharp.dll; may repeat |  |
+| `--game VALUE` | `snapshot` | the RimWorld folder (else RIMWORLD_PATH, the settings file, Steam's default) |  |
+| `--workshop VALUE` | `snapshot` | the Workshop content folder (else RIMWORLD_WORKSHOP_PATH, settings, beside the game) |  |
+| `--config VALUE` | `snapshot` | the folder holding ModsConfig.xml (else RIMWORLD_CONFIG_PATH, settings, default) |  |
+| `--if-installed` | `snapshot` | with no game on this machine, say so and pass (for CI) |  |
+| `--file VALUE` | `list` | every version of one file (its name, any case) |  |
+| `FILE` | `compare`, `get` | the file's name, as the mod or game ships it |  |
+| `--owner VALUE` | `compare`, `get` | the package ID that ships it, when several do |  |
+| `--back N` | `compare`, `get` | how many versions before the newest (default 1) | `1` |
+| `--to BACK` | `compare` | the newer side, versions before the newest (default 0) | `0` |
+| `--only PATTERN` | `compare` | only declarations whose full name matches; repeatable |  |
+| `--show NAME` | `compare` | the changes in one declaration, as a diff |  |
+| `--decompiler VALUE` | `compare` | ilspycmd (else PHOBOS_MODKIT_ILSPYCMD, settings, the PATH) |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->

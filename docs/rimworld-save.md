@@ -206,3 +206,106 @@ one. That tie order is approximated, so names whose number moved are marked `(?)
 | Index PG3 (365 to 420 MB, 11.3 million elements, with 1.08 million component values; 8 Nov 2026) | 3.5 s |
 | `diff` with `--component` of two such saves | about 6 s |
 | The same save read once by Python's own XML reader, for comparison | 7.6 s |
+
+## Reports and options
+
+<!-- generated: options rimworld-save -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `summary` | Game, maps, where things are, the colony, commonest things. | reads only |
+| `index` | Index the save again now and say what the index holds. | reads only |
+| `schema` | Element paths in the save, with counts. | reads only |
+| `things` | Things by def, or a list of them. | reads only |
+| `pawns` | Pawns with their faction, place and health. | reads only |
+| `hediffs` | Hediffs by def, or one pawn's. | reads only |
+| `find` | A thing by its ID, with what holds it. | reads only |
+| `thing` | One thing's saved data in full: every value its comps and mods wrote, read from the save. | reads only |
+| `world` | World objects: settlements, sites, caravans, by faction. | reads only |
+| `components` | The game's, world's and maps' components (mods' saved state) and the values inside them. | reads only |
+| `grid` | A map's grids: terrain, roofs, gas, fog, snow, pollution, deep resources. | reads only |
+| `planet` | Pollution on the world map: patch by patch, around a place, against another save, or across saves. | reads only |
+| `terrain` | How high the land stands and how rough it is: across the world, at your places and around one. | reads only |
+| `atlas` | The whole world map for a program to draw: biomes, climate, terrain, pollution, places, roads and rivers. | reads only |
+| `mood` | Where the colony's mood suffers: who may break, what hurts and helps most, low needs and addictions. | reads only |
+| `diff` | What changed between this save and another. | reads only |
+| `sql` | Any read-only SQL query over the index. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--save VALUE` | all | a save's name (PG2) or path (default: the newest save) |  |
+| `--saves VALUE` | all | the Saves folder (else RIMWORLD_SAVES_PATH, the settings file, the default) |  |
+| `--index VALUE` | all | read this index file directly; no save needed |  |
+| `--cache VALUE` | all | where indexes are kept (else PHOBOS_MODKIT_CACHE, settings, the temp folder) |  |
+| `--indexer VALUE` | all | the xml-index program (else PHOBOS_XML_INDEX, this kit's release build) |  |
+| `--build-indexer` | all | build xml-index with cargo first |  |
+| `--rebuild` | all | index the save again even if the index is current |  |
+| `--settings VALUE` | all | a JSON settings file with rimworldSavesPath and modkitCachePath |  |
+| `--top N` | all | rows per table (default 30) | `30` |
+| `--under VALUE` | `schema` | only paths below this one, e.g. savegame/game/maps/li |  |
+| `--depth N` | `schema` | levels to show (default 3 from the root, 2 below `--under`) |  |
+| `--def VALUE` | `things` | def name; \* and ? are wildcards |  |
+| `--class VALUE` | `things` | thing class, e.g. Pawn or \*Building\* |  |
+| `--map N` | `things` | map position (0 is the first map) |  |
+| `--place VALUE` | `things` | map, world pawn, dead world pawn, mothballed world pawn, world object, elsewhere |  |
+| `--held` | `things` | only things another holds |  |
+| `--loose` | `things` | only things nothing holds |  |
+| `--list` | `things` | one row per thing instead of counts by def |  |
+| `--faction VALUE` | `pawns` | player, or a faction's name or def |  |
+| `--name VALUE` | `pawns` | a pawn's name or ID |  |
+| `--kind VALUE` | `pawns` | pawn kind or race def |  |
+| `--place VALUE` | `pawns` | as for things |  |
+| `--pawn VALUE` | `hediffs` | a pawn's name or ID |  |
+| `--def VALUE` | `hediffs` | hediff def; \* and ? are wildcards |  |
+| `THING_ID` | `find` | e.g. ChunkA8061017; \* and ? are wildcards |  |
+| `THING_ID` | `thing` | its ID, e.g. VVE_Dirtbike30494987 (find gives IDs) |  |
+| `--path VALUE` | `thing` | only values whose path matches, e.g. \*Phobos\* or \*coolant\* |  |
+| `--value VALUE` | `thing` | only values that match, e.g. Faction_12 |  |
+| `--held` | `thing` | include the things it holds (crew, inventory, apparel) |  |
+| `--def VALUE` | `world` | world object def or class, e.g. Settlement; \* and ? are wildcards |  |
+| `--faction VALUE` | `world` | a faction's name or def |  |
+| `--name VALUE` | `world` | a world object's name |  |
+| `--id N` | `world` | one world object's values in full, by its ID |  |
+| `--class VALUE` | `components` | component class, e.g. \*RimPacts\*; lists its values |  |
+| `--path VALUE` | `components` | path inside the component, e.g. spectate/\* |  |
+| `--value VALUE` | `components` | a value, e.g. Faction_12 |  |
+| `--map N` | `components` | map position, for map components |  |
+| `--map N` | `grid` | map position (default: the map the save was on) |  |
+| `--kind VALUE` | `grid` | one layer in full. One of `deep resource`, `deep resource count`, `fog`, `foundation`, `gas`, `pollution`, `roof`, `snow`, `terrain`, `under-terrain`. |  |
+| `--render` | `grid` | with `--kind`: a text picture of the layer, north up |  |
+| `--gas VALUE` | `grid` | with `--kind` gas `--render`: one gas only. One of `blind smoke`, `deadlife dust`, `rot stink`, `toxic gas`. |  |
+| `--columns N` | `grid` | width of the picture in characters (default 100) | `100` |
+| `--at X,Z` | `grid` | every layer at one cell, and the things standing there |  |
+| `--area X1,Z1,X2,Z2` | `grid` | count only cells inside this rectangle |  |
+| `--game VALUE` | `grid` | the RimWorld folder, for naming terrain and roofs |  |
+| `--workshop VALUE` | `grid`, `atlas` | the Workshop content folder, for naming |  |
+| `--config VALUE` | `grid`, `atlas` | the folder holding ModsConfig.xml, for naming |  |
+| `--no-names` | `grid` | show Defs as numbers; do not read the installed mods |  |
+| `--near VALUE` | `planet` | a world object's name, or a tile number: rings of tiles around it |  |
+| `--hops N` | `planet` | with `--near` or `--history`: tiles out from the place (default 8) | `8` |
+| `--compare SAVE` | `planet` | what changed against another save, usually an earlier one |  |
+| `--history PATTERN` | `planet` | with `--near`: every save of this world by in-game day, optionally only saves matching a pattern such as Autosave-\* |  |
+| `--near VALUE` | `terrain` | a world object's name, or a tile number: the heights in rings of tiles around it |  |
+| `--hops N` | `terrain` | with `--near`: tiles out from the place (default 8) | `8` |
+| `--game VALUE` | `atlas` | the RimWorld folder, for naming modded biomes, roads and places |  |
+| `--no-defs` | `atlas` | read no Defs: name only the game's own biomes, roads and rivers |  |
+| `--who VALUE` | `mood` | whose mood: all (default), colonists, slaves or prisoners | `all` |
+| `--pawn VALUE` | `mood` | one pawn's remembered events and needs, by name |  |
+| `--patched-defs VALUE` | `mood` | the patched-Defs file a running game wrote (else RIMWORLD_PATCHED_DEFS, settings, where D'thorga Framework writes it); used when it exists |  |
+| `--game VALUE` | `mood` | the RimWorld folder, for reading Defs |  |
+| `--workshop VALUE` | `mood` | the Workshop content folder, for reading Defs |  |
+| `--config VALUE` | `mood` | the folder holding ModsConfig.xml, for reading Defs |  |
+| `--no-defs` | `mood` | read no Defs: mood levels and needs only |  |
+| `--mood-file VALUE` | `mood` | the colony mood file a running game wrote at a save (else RIMWORLD_COLONY_MOOD, settings, where D'thorga Framework writes it); used when it matches the save |  |
+| `--no-mood-file` | `mood` | ignore the colony mood file: the save alone |  |
+| `OTHER` | `diff` | the save to compare with (a name or path), usually an earlier one |  |
+| `--faction VALUE` | `diff` | whose pawns and hediffs to compare: player (default), any, or a faction's name or def | `player` |
+| `--component VALUE` | `diff` | compare only components whose class matches, e.g. \*RimPacts\* |  |
+| `QUERY` | `sql` | one read-only SQL statement, in quotes |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+- Only one of `--held`, `--loose` at a time (`things`).
+<!-- end generated -->

@@ -122,3 +122,30 @@ refused with what to give.
 | Seen, no verdict, row open or passed in part | `**Seen working by the game, 17 Nov 2026 (D'thorga Framework 0.118.0); awaiting the owner's word.**` |
 
 A sentence already in the cell is not added again, so running apply twice changes nothing the second time.
+
+## Reports and options
+
+<!-- generated: options test-pass -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `report` | Rows waiting for the owner, rows seen working, verdicts not yet written. | reads only |
+| `apply` | Write verdicts and seen-working notes into the test list; a preview without `--apply`. | writes, with `--apply` |
+| `code` | Where the code notes each row's keys, and in which method, function or type. Where the code notes each row's keys; for a program joining rows to code. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | all | the repository (default: the current folder) |  |
+| `--seen VALUE` | `report`, `apply` | a seen-in-play notes file (repeatable; default: from the config's game) |  |
+| `--verdicts VALUE` | `report`, `apply` | the owner's verdicts file (default: D'thorga Companion's, for this repository) |  |
+| `--decisions VALUE` | `report`, `apply` | the owner's decisions on notes no row names (default: D'thorga Companion's) |  |
+| `--settings VALUE` | `report`, `apply` | a JSON settings file naming paths |  |
+| `--verdict ROW:WORD[:NOTE]` | `report`, `apply` | a verdict the owner gave in conversation (WORD passed, partial or failed; repeatable) |  |
+| `--all` | `report`, `apply` | list every row, not only those waiting |  |
+| `--top N` | `report`, `apply` | rows per table (default 40) | `40` |
+| `--apply` | `apply` | write the test list; without it, only show what would change |  |
+| `--top N` | `code` | places to list (default 40) | `40` |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

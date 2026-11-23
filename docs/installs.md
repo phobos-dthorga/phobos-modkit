@@ -147,3 +147,33 @@ The 1 GB margin and the hour are agent defaults.
 - A copy's version and name come from its own files; a hand-edited install is read as it stands.
 - The install command's own safety (backing up what it replaces, refusing while the game runs) is the repository's; phobos-rimworld's
   deploy.py does both.
+
+## Reports and options
+
+<!-- generated: options installs -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `status` | Every mod's installed copy, repository copy and backups, and what moving between them gains or loses. | reads only |
+| `backup` | Copy the installed mod into the backups folder. Packs an installed mod into a zip in the repository's backups folder. | writes |
+| `restore` | Put a backup back as the installed mod; the replaced install becomes a backup first. Replaces an installed mod with a backup; the replaced install is kept as a backup, then the mod's backups that repeat the one before them are removed and the rest packed as zips. | writes |
+| `install` | Run the repository's own install command for one or more mods. Runs the repository's own install command, which builds and copies. | runs other programs |
+| `build` | Run the repository's own build command; it writes only inside the repository. Runs the repository's own build command, which writes only inside it. | runs other programs |
+| `dedupe` | Remove every backup that repeats the one before it (the same, or only rebuilt), keeping the oldest of each run. Deletes backups that repeat the one before them file for file; the oldest of each run is kept. | writes |
+| `pack` | Turn every backup still kept as a folder into a zip, each checked file for file before its folder goes. Turns backups kept as folders into zips, each checked file for file before its folder goes. | writes |
+| `settings` | Every setting the repository's mods ever added, removed or gave a new default, with when, newest first. The history of the mods' settings; for a program to list. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | all | the repository (default: the current folder) |  |
+| `--mod VALUE` | `status`, `dedupe`, `pack` | the mod's folder name (default: every mod) |  |
+| `--settings VALUE` | all | a JSON settings file naming the game's folder (default: the one installs.json names) |  |
+| `--top N` | all | entries shown per list in the summary (default 12) | `12` |
+| `--mod VALUE` | `backup`, `restore` | the mod's folder name. Required. |  |
+| `--backup VALUE` | `restore` | the backup's folder name, as status lists it. Required. |  |
+| `--mod VALUE` | `install` | a mod's folder name (repeatable). Required. |  |
+| `--identical-only` | `dedupe` | remove only backups that are the same file for file, not those only rebuilt |  |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

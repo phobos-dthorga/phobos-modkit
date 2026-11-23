@@ -81,7 +81,7 @@ def _parser():
     pt.add_argument("--type", help="the Def type the xpath selects")
     pt.add_argument("--operation", help="operation class, e.g. *Replace*")
     q = sub.add_parser("sql", parents=[common], help="any read-only SQL query over the index")
-    q.add_argument("query")
+    q.add_argument("query", help="one read-only SQL statement, in quotes")
     return p
 
 

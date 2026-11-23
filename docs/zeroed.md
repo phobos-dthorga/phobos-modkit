@@ -36,3 +36,25 @@ folder and the Companion's own data folder.
 | git's own store | Inside `.git` | `git fsck` in that repository |
 | built | The kit's build folder | A full rebuild (`--no-incremental` for .NET; a .NET build that thinks it is up to date keeps a damaged file) |
 | Companion data | D'thorga Companion's own folder | The Companion's backups, or the safe copies |
+
+## Reports and options
+
+<!-- generated: options zeroed -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `check` | Every zero-filled file, what it is and what puts it right. | reads only |
+| `restore` | Put zero-filled files git tracks back as the last commit has them; only with `--apply`. | writes, with `--apply` |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root PATH` | all | look only here (again for several). Repeatable. |  |
+| `--days N` | all | open files written in the last N days (default 3) | `3` |
+| `--all` | all | open every file, however old (slow on large folders) |  |
+| `--games FILE` | all | the games list naming the repositories (else the Companion's) |  |
+| `--apply` | `restore` | write them back; without it, only say which |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Only one of `--days`, `--all` at a time.
+<!-- end generated -->

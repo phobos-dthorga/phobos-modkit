@@ -79,3 +79,32 @@ python -m phobos_modkit release history
 Reads every file object reachable from any branch or tag and flags: credential patterns (GitHub, OpenAI, Anthropic
 and AWS keys, private key blocks), personal machine paths (`C:\Users\...`, `/home/<name>/...`, `/Users/<name>/...`),
 and refused file types (`.dll`, `.exe`, `.zip`, saves, dumps, certificates and keys). Exit 1 when anything is found.
+
+## Reports and options
+
+<!-- generated: options release -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `changelog` | Check changelogs: structure, dates and entry text. | reads only |
+| `constants` | List, check or change registered constants. | writes, with `--apply` |
+| `history` | Credentials, personal paths and refused file types in history. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | all | the repository (default: the current folder) |  |
+| `FILES ...` | `changelog` | the changelogs to check |  |
+| `--version VALUE` | `changelog` | also require an entry for this version |  |
+| `--plain` | `changelog` | skip the store-page text check (any Markdown allowed) |  |
+| `--catalogue VALUE` | `constants` | the list of registered constants, in the repository | `config/maintained-constants.json` |
+| `--list` | `constants` | every key, value, bounds and target |  |
+| `--check` | `constants` | verify every registered copy; write nothing |  |
+| `--apply` | `constants` | write the changes; default only previews them |  |
+| `--set KEY=VALUE` | `constants` | a constant's new value; repeatable |  |
+| `--expect KEY=OLD_VALUE` | `constants` | refuse unless the constant holds this value now; repeatable |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- Only one of `--list`, `--check`, `--apply` at a time (`constants`).
+<!-- end generated -->

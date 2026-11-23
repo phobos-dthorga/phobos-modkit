@@ -67,3 +67,38 @@ Andreas Pardeike's Harmony documentation; types are matched by name, so a mod's 
 - Patches the game applies itself, and ones made by other frameworks' attributes (a framework that scans for its own
   attribute and calls Harmony), are not seen.
 - The game's own assembly is not read: it patches nothing.
+
+## Reports and options
+
+<!-- generated: options rimworld-patches -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `summary` | Counts and the most-patched methods. | reads only |
+| `who` | Every patch on a method. | reads only |
+| `mod` | What one mod patches. | reads only |
+| `hotspots` | Methods several mods patch. | reads only |
+| `targets` | Each method a repository's code patches: the other mods patching it, and, with `--updates`, what its last update changed (1.37.0). Each method a repository patches, with the other mods on it; needs the repository. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--game VALUE` | all | the RimWorld folder (else RIMWORLD_PATH, the settings file, Steam's default) |  |
+| `--workshop VALUE` | all | the Workshop content folder (else RIMWORLD_WORKSHOP_PATH, settings, beside the game) |  |
+| `--config VALUE` | all | the folder holding ModsConfig.xml (else RIMWORLD_CONFIG_PATH, settings, default) |  |
+| `--cache VALUE` | all | where the index is kept (else PHOBOS_MODKIT_CACHE, settings, the temp folder) |  |
+| `--settings VALUE` | all | a JSON settings file with rimworldPath, workshopPath, rimworldConfigPath |  |
+| `--rebuild` | all | read every assembly again |  |
+| `--top N` | all | rows per table (default 25) | `25` |
+| `TARGET` | `who` | Type.Method, Namespace.Type.Method or Method; \* and ? are wildcards |  |
+| `NAME` | `mod` | a mod's name or package ID; \* and ? are wildcards |  |
+| `--root VALUE` | `targets` | the repository whose patches to look at (default: here) | `.` |
+| `--updates` | `targets` | also compare the archive's newest two versions of each file (rimworld-upstream updates; decompiles on first use) |  |
+| `--days N` | `targets` | `--updates`: updates in the last N days (default 30) | `30` |
+| `--archive VALUE` | `targets` | `--updates`: the assembly archive (else PHOBOS_ASSEMBLY_ARCHIVE, settings, default) |  |
+| `--decompiler VALUE` | `targets` | `--updates`: ilspycmd (else PHOBOS_MODKIT_ILSPYCMD, settings, the PATH) |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->

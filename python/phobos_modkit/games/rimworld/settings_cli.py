@@ -48,10 +48,10 @@ def _parser():
     sub = p.add_subparsers(dest="report", metavar="report")
     sub.add_parser("summary", parents=[common], help="mods with settings, values of chosen mods, files left behind")
     s = sub.add_parser("snapshot", parents=[common], help="write every value now to a JSON file")
-    s.add_argument("file")
+    s.add_argument("file", help="the JSON file to write")
     k = sub.add_parser("compare", parents=[common], help="what changed since a snapshot, or between two")
-    k.add_argument("before")
-    k.add_argument("after", nargs="?")
+    k.add_argument("before", help="a snapshot file to compare from")
+    k.add_argument("after", nargs="?", help="a later snapshot file (default: the settings now)")
     return p
 
 

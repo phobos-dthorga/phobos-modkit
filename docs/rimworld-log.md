@@ -79,3 +79,30 @@ less the game's own `Verse.Log` frames. A program can look a frame's method up i
 Clues become mod names through an index of installed mods: each mod's `About.xml` and the file names in its
 `Assemblies` folders. Assemblies are never opened or run. A namespace matches a mod when it equals one of the
 mod's assembly names or the last part of its package ID; a Harmony ID matches a package ID.
+
+## Reports and options
+
+<!-- generated: options rimworld-log -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+Effect: reads only.
+
+| Option | What it does | Default |
+| --- | --- | --- |
+| `LOG` | (optional) the log to read (default: Player.log in the logs folder) |  |
+| `--previous VALUE` | the log to compare with (default: Player-prev.log beside a Player.log) |  |
+| `--no-previous` | do not compare with another log |  |
+| `--show ID` | print one signature in full (an ID, or the start of one) |  |
+| `--top N` | signatures to list (default 20) | `20` |
+| `--levels VALUE` | levels to list, comma-separated (default FATAL,ERROR,WARN,UNKNOWN; add INFO for everything) | `FATAL,ERROR,WARN,UNKNOWN` |
+| `--brief` | with `--json`, keep only the `--top` signatures of the listed levels, without their line lists: a page's worth |  |
+| `--logs VALUE` | the logs folder (else RIMWORLD_LOGS_PATH, the settings file, the default) |  |
+| `--game VALUE` | the RimWorld folder, for naming mods (else RIMWORLD_PATH, settings, default) |  |
+| `--workshop VALUE` | the Workshop content folder (else RIMWORLD_WORKSHOP_PATH, settings, beside the game) |  |
+| `--no-mods` | do not read installed mods; clues stay unnamed |  |
+| `--settings VALUE` | a JSON settings file with rimworldLogsPath, rimworldPath and workshopPath |  |
+
+- It also takes `--json` (also write the full report as JSON to FILE; - prints only JSON) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->

@@ -48,3 +48,31 @@ that depends on it.
 First run on the owner's PC (18 November 2026, 184 members, 20 clones, 60 days): 13 commits in Vanilla Expanded Framework and
 Vehicle Framework, among them VF-412, the upgrade research check found by hand three days before. A spot check of one ("Progress
 bar tweaks") showed a real change inside `CompAdvancedResourceProcessor.PostSpawnSetup`, which a patch of ours targets.
+
+## Reports and options
+
+<!-- generated: options rimworld-upstream -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+Effect: reads public pages online, with `--clone-into`. Runs ilspycmd on archived assemblies (reading them, never loading them) and git log on the source clones.
+
+| Option | What it does | Default |
+| --- | --- | --- |
+| `REPORT` | (optional) updates, pending or both (default) | `both` |
+| `--root VALUE` | the repository holding our C# (default: here) | `.` |
+| `--days N` | how far back to look (default 30) | `30` |
+| `--file VALUE` | updates: only this archived file (Vehicles.dll) |  |
+| `--clones VALUE` | pending: the folder rimworld-sources cloned into |  |
+| `--clone-into FOLDER` | pending: make or update lean clones of the register's confirmed repositories here, then read them |  |
+| `--feed FILE` | pending: also write the findings as an upstream-watch feed file |  |
+| `--register VALUE` | pending: the source register, relative to the root (default config/source-repos.json) | `config/source-repos.json` |
+| `--archive VALUE` | the assembly archive (else PHOBOS_ASSEMBLY_ARCHIVE, the settings file, the default) |  |
+| `--decompiler VALUE` | ilspycmd (else PHOBOS_MODKIT_ILSPYCMD, ilspycmdPath in the settings file, the PATH) |  |
+| `--cache VALUE` | the kit's cache folder |  |
+| `--settings VALUE` | a JSON settings file |  |
+| `--top N` | rows per table (default 25) | `25` |
+
+- It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->

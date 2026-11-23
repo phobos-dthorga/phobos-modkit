@@ -34,17 +34,18 @@ def build_parser():
     p = argparse.ArgumentParser(prog="release", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="command", metavar="command")
     s = sub.add_parser("changelog", parents=[common], help="check changelogs: structure, dates and entry text")
-    s.add_argument("files", nargs="+")
+    s.add_argument("files", nargs="+", help="the changelogs to check")
     s.add_argument("--version", help="also require an entry for this version")
     s.add_argument("--plain", action="store_true", help="skip the store-page text check (any Markdown allowed)")
     s = sub.add_parser("constants", parents=[common], help="list, check or change registered constants")
-    s.add_argument("--catalogue", default=constants.CATALOGUE)
+    s.add_argument("--catalogue", default=constants.CATALOGUE, help="the list of registered constants, in the repository")
     mode = s.add_mutually_exclusive_group()
     mode.add_argument("--list", action="store_true", help="every key, value, bounds and target")
     mode.add_argument("--check", action="store_true", help="verify every registered copy; write nothing")
     mode.add_argument("--apply", action="store_true", help="write the changes; default only previews them")
-    s.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
-    s.add_argument("--expect", action="append", default=[], metavar="KEY=OLD_VALUE")
+    s.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="a constant's new value; repeatable")
+    s.add_argument("--expect", action="append", default=[], metavar="KEY=OLD_VALUE",
+                   help="refuse unless the constant holds this value now; repeatable")
     sub.add_parser("history", parents=[common], help="credentials, personal paths and refused file types in history")
     return p
 

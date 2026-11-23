@@ -60,3 +60,43 @@ window: without one it changes nothing and prints the PowerShell lines instead.
 - A loop counts as one at 50 repeats or more, with at least 90% of them at one spacing. A loop shorter than that is reported as no single loop.
 
 The dump can be read while the owner of the program is doing something else: nothing is written, and no code from the dump is run.
+
+## Reports and options
+
+### `crash-dump`
+
+<!-- generated: options crash-dump -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+Effect: reads only.
+
+| Option | What it does | Default |
+| --- | --- | --- |
+| `DUMP` | (optional) the .dmp file (default: the newest in the crash dumps folder) |  |
+| `--program VALUE` | with no file named, only this program's dumps, by the start of the file name |  |
+| `--folder VALUE` | the crash dumps folder (else PHOBOS_CRASH_DUMPS, else %LOCALAPPDATA%\CrashDumps) |  |
+| `--no-names` | do not ask dotnet-dump to name methods, even in a full dump |  |
+| `--top N` | rows per table (default 15) | `15` |
+
+- It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+<!-- end generated -->
+
+### `windows-dumps`
+
+<!-- generated: options windows-dumps -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+Effect: reads only. `--apply` and `--off` write the one registry key for the program named; they need an administrator window.
+
+| Option | What it does | Default |
+| --- | --- | --- |
+| `--program VALUE` | the program's file name, with or without .exe (RimWorld). Required. |  |
+| `--count N` | how many full dumps Windows keeps (default 2) | `2` |
+| `--folder VALUE` | where they go (default Windows' own, %LOCALAPPDATA%\CrashDumps) |  |
+| `--apply` | ask Windows for full dumps of this program (administrator window) |  |
+| `--off` | remove this program's own setting (administrator window) |  |
+
+- It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Only one of `--apply`, `--off` at a time.
+<!-- end generated -->

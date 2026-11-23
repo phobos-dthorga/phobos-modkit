@@ -48,3 +48,33 @@ finished copy was already kept). A failure is `data.ok` false with the reason, a
 
 All three carry the manifest surface `other-code`. `rimworld-archive list` (now with `data.files`: each kept file's owner, how
 many versions, the newest and the one before) and `compare` carry `updates`, for "what did an update change?".
+
+## Reports and options
+
+<!-- generated: options rimworld-code -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `show` | A type's or member's source, from the best copy kept. | reads only |
+| `holder` | Which of the game's and active mods' assemblies declares a type. | reads only |
+| `decompile` | Decompile an assembly into the kit's cache, once per build. Runs ilspycmd, which reads an assembly without loading or running it; writes only into the kit's cache. | runs other programs |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | all | the repository whose clones and decompiles are read (default: here) | `.` |
+| `--clones VALUE` | all | the source clones' folder (else PHOBOS_SOURCE_CLONES, sourceClonesPath in settings) |  |
+| `--cache VALUE` | all | the kit's cache folder |  |
+| `--settings VALUE` | all | a JSON settings file (default: the repository's .local/install-settings.json) |  |
+| `--game VALUE` | all | the RimWorld folder (else RIMWORLD_PATH, the settings file, Steam's default) |  |
+| `--workshop VALUE` | all | the Workshop content folder |  |
+| `--config VALUE` | all | the folder holding ModsConfig.xml |  |
+| `NAME` | `show` | Type, Type.Member or Namespace.Type.Member (a leading dot or a colon is fine) |  |
+| `--lines N` | `show` | lines per declaration (default 400) | `400` |
+| `NAME` | `holder` | a type's name or full name, or a member of it |  |
+| `--assembly VALUE` | `decompile` | the assembly's path, as holder gave it. Required. |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->

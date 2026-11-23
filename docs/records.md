@@ -43,3 +43,22 @@ folder is chosen, and there is no copy yet or the newest is N hours old or more.
 
 Each copy holds `backup.json`: `format`, `time`, `kit`, `files`, `bytes`, `automatic` (1.55.0) and where each record came from. It is written into
 `<name>.partial` and renamed when whole. A folder inside the records themselves is refused.
+
+## Reports and options
+
+<!-- generated: options records -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `status` | What would be copied, where to, and the copies already there. What would be copied, where to, and how old the newest copy is. | reads only |
+| `backup` | Copies the records into a new dated folder. Copies the Companion's records into a new dated folder; deletes nothing. | writes |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--to VALUE` | all | the backup folder (default: recordsBackupPath) |  |
+| `--every-hours N` | `status` | also say whether a copy is due: none yet, or the newest this old |  |
+| `--automatic` | `backup` | mark the copy as made by the Companion's own timer |  |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

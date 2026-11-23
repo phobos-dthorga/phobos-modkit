@@ -57,3 +57,24 @@ read a value through `phobos_modkit.paths.resolve`, which applies the order abov
 
 - Only paths for now: a folder or a file. Other kinds of setting (numbers, choices) wait for a tool that needs one.
 - A setting a repository's script reads without `paths.resolve` does not see the central file.
+
+## Reports and options
+
+<!-- generated: options settings -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `list` | Every setting, its value and where it comes from. | reads only |
+| `set` | Set or clear a setting in the central file. Writes one setting into the central settings file. | writes |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | all | a repository whose own settings to read (repeatable) |  |
+| `--key VALUE` | `set` | the setting's name, as list gives it. Required. |  |
+| `--value VALUE` | `set` | its new value: a full path |  |
+| `--clear` | `set` | take it out of the central file |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Only one of `--value`, `--clear` at a time (`set`).
+<!-- end generated -->

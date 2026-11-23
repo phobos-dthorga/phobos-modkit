@@ -51,3 +51,28 @@ python -m phobos_modkit picks settle --root ../phobos-rimworld --id billy-kettle
 
 Each repository's `grounds` and `picks`, waiting ones first; every path made absolute with `there` (the try's file is on this PC)
 and `inUseThere`; and `answer` (`pick`, `words`, `time`) or null.
+
+## Reports and options
+
+<!-- generated: options picks -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `list` | Every pick, waiting ones first, with any answer. | reads only |
+| `answer` | Records the owner's pick. Appends the owner's pick to the Companion's picks file. | writes |
+| `offer` | Adds or replaces one waiting pick. Adds a waiting pick to the repository's config/picks.json. | writes |
+| `settle` | Removes a pick once its answer is applied. Removes an applied pick from the repository's config/picks.json. | writes |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | `list` | a repository (repeatable; default: the current folder) |  |
+| `--root VALUE` | `answer` | the repository the pick belongs to. Required. |  |
+| `--id VALUE` | `answer`, `settle` | the pick. Required. |  |
+| `--pick VALUE` | `answer` | the chosen try's id, or 'none' (say why with `--words`). Required. |  |
+| `--words VALUE` | `answer` | anything the owner added |  |
+| `--root VALUE` | `offer`, `settle` | the repository. Required. |  |
+| `--file VALUE` | `offer` | a JSON file holding one pick, as config/picks.json holds them. Required. |  |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

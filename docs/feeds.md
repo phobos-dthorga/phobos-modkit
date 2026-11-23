@@ -76,3 +76,30 @@ VF-412 and VF-414 and Combat Extended's loadout changes, each with a link to its
 `read`: `data.feeds[]`, each with `source`, `repository`, `ref`, `path`, `state` (`read`, `missing`, `unreachable`, `refused`),
 `feed`, `title`, `updated`, `stale` and `asOf`, and `files[]` with `path`, `kind`, `state` (`new`, `same`, `kept`, `failed`,
 `refused`), `why`, `content` (parsed JSON, or the text of a guide entry) and `keptAt` for a kept copy.
+
+## Reports and options
+
+<!-- generated: options feeds -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `index` | The index of a feed folder; written with `--write`. | writes, with `--write` |
+| `check` | Whether a feed folder's index matches its files, and each file its kind. | reads only |
+| `read` | Each feed from GitHub's raw files, checked, with the last good copy kept. GitHub's raw files, keyless; keeps checked copies in the kit's cache. | reads public pages online |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--folder VALUE` | `index`, `check` | the feed folder. Required. |  |
+| `--name VALUE` | `index` | the feed's short name (the repository's, usually). Required. |  |
+| `--title VALUE` | `index` | the feed's title for people (default: its name) |  |
+| `--write` | `index` | write index.json into the folder |  |
+| `--source VALUE` | `read` | OWNER/REPO[@REF][:PATH] (repeatable) |  |
+| `--root VALUE` | `read` | a repository on this PC: its nightly results, found from its own GitHub remote (repeatable) |  |
+| `--results VALUE` | `read` | with `--root`, the results branch (default companion-results) | `companion-results` |
+| `--from VALUE` | `read` | with `--root`: the nightly results branch (default), or the feeds/ folder people publish on the default branch. One of `published`, `results`. | `results` |
+| `--refresh` | `read` | ask GitHub again even when the last answer is under six hours old |  |
+| `--cache VALUE` | `read` | the kit's cache folder (default: the setting, then the temporary folder) |  |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

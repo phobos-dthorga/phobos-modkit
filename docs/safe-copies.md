@@ -154,3 +154,51 @@ is kept only when the run changed something, so a quiet night makes no commit.
   not list earlier copies yet.
 - **It cannot take a file back out of the repository.** A training found unproven after its files were pushed is warned about
   in every run until the owner looks; removing it from git history is the owner's call.
+
+## Reports and options
+
+<!-- generated: options safe-copies -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `plan` | What a run would copy, where each kind may go, and what is refused. | reads only |
+| `run` | Copies what changed, then commits and pushes the repository's copy. Copies what changed to the chosen destinations, then commits and pushes the repository's copy; lets go only earlier copies beyond a set's keepEarlier. | writes |
+| `status` | Each set's copies, what changed since, and anything never copied. | reads only |
+| `verify` | Hashes every copy again against its record. | reads only |
+| `restore` | Copies a set back out into a folder you name. Copies a set into a folder the owner names; never over a different file unasked. | writes |
+| `mark` | Marks a folder as a destination, on the owner's word. Writes .safe-copies.json in the folder named, on the owner's word. | writes |
+| `let-go` | Removes copies the list no longer takes, on request; a preview without `--apply`. Removes copies the list no longer takes, each named, from the plain folder; never a source and never a copy in use. | writes, with `--apply` |
+| `run-all` | Runs every list of every repository on the games list (the daily run). Runs every list of every repository on the games list, as run does, then checks every copy with `--verify`. | writes |
+| `schedule` | The daily run: how it stands, or set it with `--at`, or remove it with `--off`. Sets, moves or removes the daily run, a Windows scheduled task of the owner's own; without `--at` or `--off` it only says how it stands. | writes, with `--at` or `--off` |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | `plan`, `run`, `status`, `verify`, `restore`, `let-go` | the repository whose config/safe-copies.json to read | `.` |
+| `--game VALUE` | `plan`, `run`, `status`, `let-go` | read the list the repository keeps for this game's saves and settings, config/safe-copies/GAME.json, instead of its own |  |
+| `--set VALUE` | `plan`, `run` | only this set (repeatable) |  |
+| `--no-push` | `run`, `run-all` | commit the repository's copy but do not push it |  |
+| `--set VALUE` | `restore` | the set to restore. Required. |  |
+| `--unit VALUE` | `restore` | one unit of the set (a training) |  |
+| `--game VALUE` | `restore` | the game the set belongs to (default: the repository's) |  |
+| `--to VALUE` | `restore` | the folder to copy into (a new or empty one is safest). Required. |  |
+| `--from VALUE` | `restore` | which copy to restore from. One of `local`, `repository`. | `local` |
+| `--overwrite` | `restore` | replace files there that are older than the copy |  |
+| `--overwrite-newer` | `restore` | with `--overwrite`, replace newer files too |  |
+| `--to VALUE` | `mark` | the folder to mark. Required. |  |
+| `--local` | `mark` | a plain folder for our own files only |  |
+| `--private-local` | `mark` | a plain folder on a local, unsynced disk: game-derived too |  |
+| `--repository` | `mark` | a clone of a private git repository: our own files only |  |
+| `--file VALUE` | `let-go` | a copy as status lists it, such as rimworld/saves/PG15.rws (repeatable) |  |
+| `--all` | `let-go` | every copy status lists as no longer taken |  |
+| `--apply` | `let-go` | remove them; without it, only say what would go |  |
+| `--games VALUE` | `run-all`, `schedule` | the games list (default: as D'thorga Companion finds it) |  |
+| `--settle` | `run-all` | leave files written in the last two minutes for next time |  |
+| `--verify` | `run-all` | then hash every copy again against its record |  |
+| `--at VALUE` | `schedule` | set or move the daily run to this time of day, HH:MM |  |
+| `--off` | `schedule` | remove the daily run; the copies stay |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Only one of `--local`, `--private-local`, `--repository` at a time (`mark`).
+- Only one of `--at`, `--off` at a time (`schedule`).
+<!-- end generated -->

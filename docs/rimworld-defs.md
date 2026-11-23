@@ -97,3 +97,52 @@ into one Def; read it bottom up.
 | `problem` | Active mods not installed, files no load folder loads because another shadows them, and unreadable XML |
 | `def_view`, `patch_view` | The same with the mod's name |
 | `meta` | Provenance: the game version, file stamps, the local mods' fingerprint, the kit's version |
+
+## Reports and options
+
+<!-- generated: options rimworld-defs -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `summary` | Def types, names several mods define, mods, problems. | reads only |
+| `index` | Index the mods again now, then the summary. | reads only |
+| `mods` | The active mods in load order, with their Defs and patches. | reads only |
+| `who` | Every definition of a Def and every patch naming it. | reads only |
+| `show` | A Def's XML as written, then each parent up the chain. | reads only |
+| `patched` | A Def with every patch applied, and what the patches changed. | reads only |
+| `list` | Defs by type, mod, name or parent. | reads only |
+| `patches` | Patch operations by target, mod, type or operation. | reads only |
+| `sql` | Any read-only SQL query over the index. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--game VALUE` | all | the RimWorld folder (else RIMWORLD_PATH, the settings file, Steam's default) |  |
+| `--workshop VALUE` | all | the Workshop content folder (else RIMWORLD_WORKSHOP_PATH, settings, beside the game) |  |
+| `--config VALUE` | all | the folder holding ModsConfig.xml (else RIMWORLD_CONFIG_PATH, settings, default) |  |
+| `--cache VALUE` | all | where the index is kept (else PHOBOS_MODKIT_CACHE, settings, the temp folder) |  |
+| `--settings VALUE` | all | a JSON settings file with rimworldPath, workshopPath, rimworldConfigPath |  |
+| `--rebuild` | all | index the mods again even if the index is current |  |
+| `--top N` | all | rows per table (default 30) | `30` |
+| `--name VALUE` | `mods` | a mod's name or package ID |  |
+| `NAME` | `who` | a defName or abstract Name; \* and ? are wildcards |  |
+| `--dump VALUE` | `who`, `show` | a patched-Defs file; when it exists, the report points at the patched view |  |
+| `NAME` | `show`, `patched` | a defName or abstract Name |  |
+| `--type VALUE` | `show`, `patched` | the Def type, when several types use the name |  |
+| `--lines N` | `show` | XML lines per Def before it is cut (default 80; 0 shows every line) | `80` |
+| `--dump VALUE` | `patched` | the patched-Defs file a running game wrote (else RIMWORLD_PATCHED_DEFS, settings) |  |
+| `--lines N` | `patched` | XML lines shown (default 80; 0 shows every line) | `80` |
+| `--type VALUE` | `list` | Def type, e.g. ThingDef or \*Def |  |
+| `--mod VALUE` | `list`, `patches` | mod name or package ID |  |
+| `--name VALUE` | `list` | defName or abstract Name |  |
+| `--parent VALUE` | `list` | ParentName |  |
+| `--all` | `list` | also replaced, abstract and unloaded definitions |  |
+| `--target VALUE` | `patches` | a defName the xpath names |  |
+| `--type VALUE` | `patches` | the Def type the xpath selects |  |
+| `--operation VALUE` | `patches` | operation class, e.g. \*Replace\* |  |
+| `QUERY` | `sql` | one read-only SQL statement, in quotes |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->

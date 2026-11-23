@@ -63,3 +63,35 @@ clone, `DIR/<Name>-src`, and the report says what each one and all of them cost,
 With `--write`, the answers go to `config/source-repos.json` under the root, by package ID: the repository, where it was found,
 which About.xml confirmed it, its last push, licence and whether it is archived, the candidates passed over with why, and the date
 checked. Later runs take confirmed mods from the register without asking GitHub again, unless `--recheck`.
+
+## Reports and options
+
+<!-- generated: options rimworld-sources -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+Effect: reads public pages online. Reads GitHub and Steam keyless, paced and cached; with `--write`, writes config/source-repos.json in the project.
+
+| Option | What it does | Default |
+| --- | --- | --- |
+| `--root VALUE` | the project whose mods' tie-ins decide what to look up (default: here) | `.` |
+| `--mod PACKAGE_ID` | look up this installed mod too; may repeat |  |
+| `--only-named` | look up only the mods named with `--mod` |  |
+| `--write` | record the answers in config/source-repos.json under the root |  |
+| `--recheck` | look again at mods the register already confirmed |  |
+| `--refresh` | ignore cached GitHub answers |  |
+| `--no-search` | never search GitHub by name; links only |  |
+| `--clone-into DIR` | keep a lean clone of each confirmed repository here (under the root), as \<Name>-src; says what they and the drive cost |  |
+| `--update-clones` | with `--clone-into`, also bring existing clones up to date |  |
+| `--budget-gb N` | warn when the clones together pass this many GB (default 3.0) | `3.0` |
+| `--floor-gb N` | no new clone while the drive has less free than this many GB (default 10.0) | `10.0` |
+| `--floor-percent N` | no new clone while the drive has less free than this share of its size (default 3.0) | `3.0` |
+| `--game VALUE` | the RimWorld folder (else RIMWORLD_PATH, the settings file, Steam's default) |  |
+| `--workshop VALUE` | the Workshop content folder (else RIMWORLD_WORKSHOP_PATH, settings, beside the game) |  |
+| `--config VALUE` | the folder holding ModsConfig.xml (else RIMWORLD_CONFIG_PATH, settings, default) |  |
+| `--cache VALUE` | the kit's cache folder (else PHOBOS_MODKIT_CACHE, settings, the system's temp folder) |  |
+| `--settings VALUE` | a JSON settings file with the paths above |  |
+| `--top N` | rows per table (default 80) | `80` |
+
+- It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->

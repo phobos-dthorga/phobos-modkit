@@ -320,3 +320,73 @@ Run read-only against phobos-ostranauts, whose scripts made its real uploads, an
 
 Tests (`tests/test_steam_publish.py` and the `test_release_*` files) build made-up repositories in temporary folders
 and use stand-ins for SteamCMD and Steam's API. None of this is an upload test.
+
+## Reports and options
+
+<!-- generated: options steam-publish -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `notes` | Check or write per-version change notes from changelogs. | writes, with `--write` |
+| `status` | Every mod's package, blockers, sizes and publication order. | reads only |
+| `pending` | Which items have a newer version than the one uploaded. | reads only |
+| `prepare` | Stage a checked candidate for one mod, offline. Stages a candidate in the kit's cache. | runs other programs, with `--build` |
+| `verify` | Re-check a staged candidate's files. | reads only |
+| `upload` | OWNER ONLY: send one candidate to Steam. Only on the owner's press or in their own console; never an agent. | only on the owner's own press |
+| `update` | OWNER ONLY: build, prepare and update every due item. Only on the owner's press or in their own console; never an agent. | only on the owner's own press |
+| `reconcile` | Settle an uncertain upload's receipt. Settles an upload's receipt. | writes |
+| `pull` | Bring Steam's live visibility, page and release dates back. Reads Steam. | writes, with `--write` |
+| `page` | A mod's Workshop page with its problems; check or save a new text. Writes only the page file, only without problems. | writes, with `--write` |
+| `show` | One mod's card: next change note, tags, Required items, receipts. | reads only |
+| `change-notes` | Worksheets for tidying each item's Change Notes tab. `--no-write` only counts. | writes |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | all | the repository (default: the current folder) |  |
+| `--catalogue VALUE` | all | the Workshop catalogue, relative to the root (default config/workshop-publishing.json) |  |
+| `--cache VALUE` | all | the kit's cache folder, where candidates are staged (else PHOBOS_MODKIT_CACHE, settings, temp) |  |
+| `--settings VALUE` | all | a JSON settings file with modkitCachePath |  |
+| `MODS ...` | `notes`, `update`, `pull`, `change-notes` | (optional) the mods, in full or by a unique ending (none named: every one it applies to) |  |
+| `--version VALUE` | `notes` | one version only (needs one mod) |  |
+| `--base VALUE` | `notes` | also require changelog and page edits for content changed since this commit |  |
+| `--check` | `notes` | fail when generated files are missing or stale |  |
+| `--write` | `notes` | write missing or stale files |  |
+| `MOD` | `prepare`, `upload`, `page`, `show` | the mod, in full or by a unique ending (Framework for PhobosFramework) |  |
+| `--build` | `prepare` | run the catalogue's build command first |  |
+| `CANDIDATE` | `verify` | the staged candidate's folder |  |
+| `--create` | `upload` | a new item (always private) |  |
+| `--update` | `upload` | the mod's existing item |  |
+| `--visibility VALUE` | `upload` | default: private, or the recorded one. One of `friends`, `friendsonly`, `private`, `public`, `unlisted`. |  |
+| `--candidate VALUE` | `upload` | a staged candidate folder (default: the newest) |  |
+| `--confirm-public` | `upload` | needed the first time an item goes public |  |
+| `--force` | `upload` | send a version already on Steam again |  |
+| `--via VALUE` | `upload`, `update` | steam: the running, signed-in Steam client (default); steamcmd: Valve's SteamCMD | `steam` |
+| `--steam-library VALUE` | `upload`, `update` | the game's steam_api library, when it cannot be found; remembered locally |  |
+| `--new-console` | `upload`, `update` | SteamCMD in a console window of its own (for a program) |  |
+| `--steam-user VALUE` | `upload`, `update` | SteamCMD: the Steam account name, remembered locally; never a password |  |
+| `--steamcmd VALUE` | `upload`, `update` | SteamCMD: its program, remembered locally |  |
+| `--acknowledge-hold` | `upload`, `update` | private only: pass holds and unpublished dependencies |  |
+| `--what-if` | `upload`, `update` | show the plan; write nothing and never ask Steam |  |
+| `--no-build` | `update` | stage what is already built |  |
+| `RECEIPT` | `reconcile` | the upload's receipt folder |  |
+| `--item-id VALUE` | `reconcile` | the item Steam shows |  |
+| `--not-created` | `reconcile` | Steam shows no such item |  |
+| `--visibility` | `pull` | bring back the item's visibility; without any of the three, only report |  |
+| `--description` | `pull` | bring back the item's description; without any of the three, only report |  |
+| `--changelog` | `pull` | bring back the item's changelog; without any of the three, only report |  |
+| `--write` | `pull` | apply; default only reports |  |
+| `--check` | `page` | check the text given, without writing |  |
+| `--write` | `page` | save the text given, only when it has no problems |  |
+| `--stdin` | `page` | the text, as UTF-8 on standard input |  |
+| `--from VALUE` | `page` | the text, from a file |  |
+| `--no-write` | `change-notes` | only count entries |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+- Only one of `--check`, `--write` at a time (`notes`, `page`).
+- Only one of `--create`, `--update` at a time (`upload`).
+- Only one of `--item-id`, `--not-created` at a time (`reconcile`).
+- Only one of `--stdin`, `--from` at a time (`page`).
+<!-- end generated -->

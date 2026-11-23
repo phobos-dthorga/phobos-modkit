@@ -34,3 +34,24 @@ second):
 | `picture.png` | the Companion | the whole page, scrolled parts included, as it was when the key was pressed |
 | `note.json` | the Companion | `format`, `time`, `game`, `page`, `address`, `words`, `version`, `window` |
 | `resolved.json` | `screen-notes resolve` | `format`, `time`, `how` |
+
+## Reports and options
+
+<!-- generated: options screen-notes -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `list` | The open notes, newest first. | reads only |
+| `resolve` | Marks a note dealt with, saying how. Writes resolved.json beside one note; nothing is deleted. | writes |
+| `reopen` | Marks a dealt-with note open again. Removes one note's resolved.json, so it is open again. | writes |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--all` | `list` | the dealt-with notes too |  |
+| `ID` | `resolve`, `reopen` | the note's name, as list shows it |  |
+| `--how VALUE` | `resolve` | how it was dealt with, in a sentence or two. Required. |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+<!-- end generated -->

@@ -74,3 +74,29 @@ git; the kit never decodes them.
 - A reworded entry is found by its present opening, so it shows the commit that reworded it if the opening itself changed.
 - An entry moved in from another file (a merged mod's old changelog) shows the commit that moved it.
 - Two entries with the same first 28 characters cannot be told apart.
+
+## Reports and options
+
+<!-- generated: options changes -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `list` | Every changelog in the repository, its newest versions and their entries. | reads only |
+| `entry` | The commit that wrote one changelog entry, and what it changed. The commit that wrote one entry, and its diff; needs the changelog and the entry. | reads only |
+| `commits` | The newest commits, for a repository with no changelog (1.82.0). | reads only |
+| `pending` | What each changelog has not released yet, for one or more repositories. What each changelog has not released yet; reads files only, for a program's first page. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | `list`, `entry`, `commits` | the repository (default: the current folder) |  |
+| `--versions N` | `list` | versions of each changelog to list, newest first (default 5; 0 for every version) | `5` |
+| `--top N` | all | rows per table (default 40) | `40` |
+| `--changelog VALUE` | `entry` | the changelog's path in the repository, as list gives it; needed with `--text` |  |
+| `--text VALUE` | `entry` | the entry's text, or its bold opening |  |
+| `--commit VALUE` | `entry` | instead of an entry, a commit: what it changed, with every entry it wrote |  |
+| `--skip N` | `commits` | newer commits to pass over first (default 0) | `0` |
+| `--root VALUE` | `pending` | a repository (repeatable; default: the current folder) |  |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

@@ -73,3 +73,28 @@ read is skipped. The tests point it into a folder of their own, so a test never 
 - Two entries with the same version and first 28 characters cannot be told apart.
 - An entry moved from one version to another reads as removed from one and added to the other.
 - Installs and the rest before 19 Nov 2026 are not on the timeline: the backups hold copies, but not when they were installed.
+
+## Reports and options
+
+<!-- generated: options history -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `timeline` | Every fact about a game's products, newest first. | reads only |
+| `at` | A changelog as it stood at a commit or a moment. A changelog as it stood at a commit or a moment; needs the changelog. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | `timeline` | a repository (repeatable; default: the current folder) |  |
+| `--game VALUE` | `timeline` | the game whose history log to read (default: none, git facts only) |  |
+| `--since VALUE` | `timeline` | only facts from this day on (YYYY-MM-DD) |  |
+| `--top N` | `timeline` | facts in the summary's table (default 40) | `40` |
+| `--settings VALUE` | all | a JSON settings file naming historyPath |  |
+| `--root VALUE` | `at` | the repository (default: the current folder) |  |
+| `--changelog VALUE` | `at` | the changelog's path in the repository. Required. |  |
+| `--commit VALUE` | `at` | the commit to read it at |  |
+| `--when VALUE` | `at` | the moment to read it at (an ISO date or time) |  |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

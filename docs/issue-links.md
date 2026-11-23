@@ -39,3 +39,32 @@ and Adaptive Storage Framework theirs; Dubs Mint Menus unknown.
 
 `where`: `data.mods[]` with `mod`, `id`, `whose`, `repository`. `new`: `data.url` and `data.clipboard` (the text to paste, or
 null). `issues`: `data.issues[]` with `number`, `title`, `state`, `updated`, `url`, `matches`, and `limited`, `stale`.
+
+## Reports and options
+
+<!-- generated: options issue-links -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `where` | Each mod: ours, theirs or unknown, with its repository on GitHub. | reads only |
+| `new` | The address of GitHub's new-issue form, filled in. | reads only |
+| `issues` | The repository's issues, those naming every word first (keyless). GitHub's issues, keyless; one call for each 100, cached an hour. | reads public pages online |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--name VALUE` | `where` | the game's name or id |  |
+| `--app-id VALUE` | `where` | the game's Steam app id |  |
+| `--data VALUE` | `where` | the game's data folder, when not where it usually is |  |
+| `--root VALUE` | `where` | a repository on this PC (repeatable) |  |
+| `--mod VALUE` | `where` | a mod's name as the log names it (repeatable) |  |
+| `--settings VALUE` | `where` | a JSON settings file |  |
+| `--repository VALUE` | `new`, `issues` | OWNER/REPO. Required. |  |
+| `--title VALUE` | `new` | the report's title. Required. |  |
+| `--body-file VALUE` | `new` | a file holding the report's text |  |
+| `--label VALUE` | `new` | a label to choose, where the repository has it |  |
+| `--words VALUE` | `issues` | words from the fault, to find an existing report of it |  |
+| `--cache VALUE` | `issues` | the kit's cache folder |  |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

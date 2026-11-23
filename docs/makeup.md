@@ -51,3 +51,24 @@ Add `--json` for the envelope.
 
 - Merges are left out of `churn`; renames count as a removal and an addition.
 - Growth follows the first-parent line, the last commit of each day.
+
+## Reports and options
+
+<!-- generated: options makeup -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `now` | Every committed file by product, kind, language, lines and size. Every committed file by product and kind; needs the repository. | reads only |
+| `growth` | Totals by kind and product, one point a day since the first commit. Totals one point a day; needs the repository. | reads only |
+| `churn` | The files commits changed lately. The files commits changed lately; needs the repository. | reads only |
+| `census` | Each product's Defs by type, pictures, sounds and text keys. What each product holds for players; needs the repository. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | all | the repository (default: here) | `.` |
+| `--top N` | all | rows per table (default 25) | `25` |
+| `--days N` | `churn` | how far back (default 30; 0 for every commit) | `30` |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

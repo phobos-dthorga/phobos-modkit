@@ -175,7 +175,7 @@ def _parser():
                                                        "or a faction's name or def")
     d.add_argument("--component", help="compare only components whose class matches, e.g. *RimPacts*")
     q = sub.add_parser("sql", parents=[common], help="any read-only SQL query over the index")
-    q.add_argument("query")
+    q.add_argument("query", help="one read-only SQL statement, in quotes")
     return p
 
 

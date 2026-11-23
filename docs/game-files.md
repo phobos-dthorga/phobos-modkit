@@ -57,3 +57,26 @@ newest first: `path`, `name`, `bytes`, `taken`, `source`), `count` and `bytes`. 
 | Space | each entry of the data folder; the install's and the Workshop items' sizes from Steam | `space` (`data`, `dataBytes`, `install`, `workshop`) |
 
 Lists hold up to 200 entries; the counts and sizes cover everything. `places` says which folders were used.
+
+## Reports and options
+
+<!-- generated: options game-files -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `report` | What changed since you last played, saves, screenshots and space, for one game. What changed since you last played, saves, screenshots and space, for one game. | reads only |
+| `steam-games` | Every game Steam has installed on this PC. Every game Steam has installed on this PC. | reads only |
+| `screenshots` | Only one game's screenshots, quickly: the same folders as the report. Only one game's screenshots, quickly, for a gallery. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--name VALUE` | `report`, `screenshots` | the game's name, as Steam shows it. Required. |  |
+| `--app-id N` | `report`, `screenshots` | its Steam app ID, when its name is not enough |  |
+| `--data VALUE` | `report`, `screenshots` | its data folder (default: guessed from its name) |  |
+| `--saves VALUE` | `report` | its saves folder (default: inside the data folder) |  |
+| `--screenshots VALUE` | `report`, `screenshots` | its own screenshots folder (default: inside the data folder) |  |
+| `--since VALUE` | `report` | list Workshop items updated since this time (default: the last launch); 'previous' for the launch before the last, as far as the kit has seen (1.51.0: while the game runs) |  |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

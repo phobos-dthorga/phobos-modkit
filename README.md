@@ -6,8 +6,8 @@ questions in a short summary instead of a long read. One shared home for code th
 
 ## Read this first (gotchas)
 
-- **48 commands are built**; `python -m phobos_modkit manifest` lists every one with what it reads and changes, and the
-  [Tools](#tools) table below says what each is for. The first were RimWorld log triage, the save index, the Def index,
+- **`python -m phobos_modkit manifest` lists every command** with what it reads and changes, and the [Tools](#tools) table
+  below says what each is for and links its doc, which ends with every report and option it takes. The first were RimWorld log triage, the save index, the Def index,
   Workshop research and publishing, release chores, the gate, mod settings, the code index, Harmony patches, startup sessions,
   the version readiness scan and the target check. See [log triage](docs/rimworld-log.md),
   [the save index](docs/rimworld-save.md), [the Def index](docs/rimworld-defs.md), [Workshop research](docs/workshop.md),
@@ -93,55 +93,70 @@ python -m phobos_modkit art-audit report --root REPO   images drawn in code, wit
 python -m phobos_modkit gate --root ..         this repository's checks before a commit; only what failed
 python -m phobos_modkit gate --verify-staged    the commit guard: were the staged files checked by a passing run?
 python -m phobos_modkit manifest               every command, its options and what it reads or changes
+python -m phobos_modkit command-docs --write  each doc's reports and options, and this README's command index
 ```
 
 ## Tools
 
-Proposed on 7 Nov 2026 in phobos-rimworld's
-[analysis tooling record](https://github.com/phobos-dthorga/phobos-rimworld/blob/main/docs/development/analysis-tooling.md),
-in order of expected saving.
+One row per command, generated from the manifest; each doc ends with every report and option its command takes. The first
+tools were proposed on 7 Nov 2026 in phobos-rimworld's
+[analysis tooling record](https://github.com/phobos-dthorga/phobos-rimworld/blob/main/docs/development/analysis-tooling.md).
 
-| # | Tool | What it answers | Language | Status |
-| --- | --- | --- | --- | --- |
-| 1 | [Log triage](docs/rimworld-log.md) (RimWorld) | What went wrong this run, which mod it came from, what is new since last run | Python | Built: 0.1.1 |
-| 2 | [Save index and query](docs/rimworld-save.md) (RimWorld) | Where things are in a large XML save; pawns, hediffs, holders; map grids; pollution on the world map; what changed between two saves; where a colony's mood suffers; the whole world map for a program to draw | Rust engine, Python reports | Built: 0.6.0, with map grids and save comparison; world-map pollution 0.19.0; colony mood 1.5.0, exact with the colony mood file and with advice 1.6.0; atlas 1.7.0; terrain 1.14.0; one thing's saved data 1.52.0 |
-| 3 | [Mod and Def index](docs/rimworld-defs.md) (RimWorld) | Which mod defines or patches something, in the player's load order, and which definition the game keeps | Python | Built: 0.4.0 |
-| 4 | [Harmony patches](docs/rimworld-patches.md) (RimWorld), the assembly metadata reader | Which active mods patch a method, what a mod patches, where several mods patch one method; read from metadata, never run | C# reader, Python reports | Built: 0.14.0 (patches; constants and API matching not yet) |
-| 5 | [Workshop research](docs/workshop.md) | What players report about a mod lately; supported versions; last update | Python | Built: 0.5.0 |
-| 6 | [Startup sessions](docs/rimworld-startup.md) (RimWorld) | Load-time history and what changed between launches | Python | Built |
-| 7 | [Version readiness scan](docs/rimworld-readiness.md) (RimWorld) | Which mods declare the new game version, and which use risky techniques | Python | Built |
-| 8 | [Release chores](docs/release.md) | Changelog checks, constants kept in step, a history screen before going public; doc links and layout rules to come | Python | Built: 0.10.0 |
-| 12 | [Code index](docs/code.md) | Where a C# type or member is, what a type holds, its source by name, and every line that uses a name, across decompiled and own source trees | Python | Built: 0.13.0 |
-| 11 | [Mod settings](docs/rimworld-settings.md) (RimWorld) | The settings the player runs with: which mod each file belongs to, values beside their defaults, files left by removed mods, what changed since a snapshot | Python | Built: 0.12.0 |
-| 10 | [The gate](docs/gate.md) | Every build, test and check before a commit, from the repository's own list; only what failed, with the errors and failed tests | Python | Built: 0.11.0 |
-| 13 | [Cleanup](docs/cleanup.md) | What the tools, builds and tests left behind, how big it is and why it may go; deleted only on request | Python | Built: 1.8.0 |
-| 14 | [Test pass](docs/test-pass.md) | A repository's in-game test list, what the game has seen working and the owner's verdicts; writes verdicts into the list on request | Python | Built: 1.9.0; part passes and verdicts given in conversation 1.14.0 |
-| 23 | [Connections](docs/connections.md) | How a repository's code fits together, in C# (exact from the built assemblies, with Harmony patches), XML Defs, Lua and Python: what calls what, holds what, builds on, overrides, patches and uses what; the things a commit changed; a flow of calls a few steps each way | Python, with the kit's C# assembly reader | Built: 1.33.0 |
-| 22 | [Settings](docs/settings.md) | Every path the tools read, its value and where that comes from (the environment, a repository's own file, the central settings file or the default); sets one in the central file on request | Python | Built: 1.30.0 |
-| 21 | [History](docs/history.md) | What happened to a game's products over time, as facts from git back to each repository's first commit (versions written, released, removed; entries added, reworded, removed; mods renamed or merged away) and from this PC's history log (installs, go-backs, backups, builds, encoded textures); any changelog as it stood at any moment | Python, with git | Built: 1.30.0 |
-| 20 | [Shared rules](rules/README.md) | The owner's rules for every game, mod and tool repository, in one place, and a check that a repository reads them | Markdown, with a Python check | Built: 1.25.0 |
-| 19 | [Changes](docs/changes.md) | What a repository's changelogs say changed lately, and the code behind any one entry: the commit that wrote it and its diff, file by file. Any game, any repository with a changelog | Python, with git | Built: 1.24.0 |
-| 18 | [Textures](docs/rimworld-textures.md) (RimWorld) | Whether every active mod's encoded textures match its pictures (a stale one shows the old picture), and encoding those that don't with RimSort's own todds preset, on request | Python, with RimSort's todds | Built: 1.21.0 |
-| 17 | [Installs](docs/installs.md) | Each mod's installed copy, the repository's and every backup, and what moving between them gains or loses by their changelogs; backs up, goes back to a backup, or runs the repository's install, on request | Python | Built: 1.20.0 |
-| 15 | [Art audit](docs/art-audit.md) | Every shipped image with its record and how it was made; images drawn in code or without a record; pictures a Def borrows from another thing or another mod | Python | Built: 1.12.0 |
-| 16 | [Performance in play](docs/rimworld-perf.md) (RimWorld 1.7) | Where the running game spends its time: by part of the game loop, by the mod that caused it, by method, with garbage collection; and whether a change made it faster. Since 1.22.0, where a frozen game is stuck and what holds its memory, by mod. Since 1.42.0, the game's memory over time, without pausing it: average or bursts, .NET's heap or the rest, with what the log says at each jump | Python, with Microsoft's dotnet-trace, dotnet-counters, dotnet-stack and dotnet-gcdump, and Windows' own memory figures | Built: 1.13.0, 1.22.0, 1.42.0 |
-| 36 | [Picks](docs/picks.md) | The pictures and sounds waiting for the owner to pick one, from each repository's config/picks.json (offered by its art tools), with every try; the owner's picks, kept in the Companion's folder | Python | Built: 1.83.0 |
-| 37 | [Repos](docs/repos.md) | Each repository's commits not pushed and files changed, and whether GitHub's checks passed for its last push and its nightly runs still run; keyless, with one hourly allowance every tool shares | Python, with git | Built: 1.89.0 |
-| 38 | [Feeds](docs/feeds.md) | Small files of data a repository publishes for D'thorga Companion: an index, each file checked by its kind, read keyless from GitHub with the last good copy kept; and a reusable nightly workflow that publishes one to a results branch only when it changed | Python; GitHub Actions | Built: 1.90.0 |
-| 39 | [Issue links](docs/issue-links.md) | Where a fault in a mod is reported (ours, theirs or unknown, with its repository), GitHub's new-issue form filled in for a person to send, and an author's existing issues; never posts | Python, with git | Built: 1.94.0 |
-| 35 | [Zeroed](docs/zeroed.md) | Files a crash left filled with zero bytes across your repositories and the tools' own folders, what each is and what puts it right; tracked files put back from git on `--apply` | Python | Built: 1.81.0 |
-| 34 | [Mod list](docs/mod-list.md) (RimWorld, Project Zomboid) | What is wrong with a game's list of active mods and why: missing mods with the reason they went and any clue that another mod now does their job, needs, order, clashes, early warnings from Steam and game versions; one change at a time, each after a backup, with an undo; a sorter that explains every move, from mods', community and your own rules (1.74.0); saved lists from saves, RimSort's history, files and each game start (1.76.0); subscribing and unsubscribing through Steam (1.77.0) | Python | Built: 1.72.0 |
-| 30 | [Game files](docs/game-files.md) | For any Steam game: what changed since you last played (the game's build and every Workshop item updated since), its saves, its screenshots (its own and Steam's) and where its space goes; places guessed by name or given | Python | Built: 1.46.0 |
-| 29 | [Decisions](docs/decisions.md) | The questions waiting for the owner, from each repository's config/decisions.json, with options and the agent's lean; the owner's answers, kept in the Companion's folder | Python | Built: 1.45.0 |
-| 28 | [Claims](docs/claims.md) | Who is working on what: agent sessions sharing a machine take and release version numbers, test rows and files on one board, and are refused what another holds | Python | Built: 1.44.0 |
-| 27 | [Records](docs/records.md) | A copy of D'thorga Companion's own records (verdicts, history log, marks, screen notes, shortcuts, central settings) in a folder of your choosing, and how old the newest copy is; never deletes | Python | Built: 1.43.0 |
-| 26 | [Screen notes](docs/screen-notes.md) | What the owner flagged as looking wrong in D'thorga Companion with one key: the page's picture, its address and their words, for agent sessions to read at the start; marked dealt with, never deleted | Python | Built: 1.41.0 |
-| 25 | [Make-up](docs/makeup.md) | What a repository is made of: every committed file by product, kind, lines and size; how that grew day by day; where the work goes; and what each product holds for players (Defs by type, pictures, sounds, text keys) | Python, with git | Built: 1.39.0 |
-| 24 | [Pins](docs/pins.md) | Which version of this kit each repository pins, and what moving its pin would bring, by the kit's changelog | Python, with git | Built: 1.38.0 |
-| 33 | [Safe copies](docs/safe-copies.md) | Copies of what cannot be made again (training sets, style models, notes) in folders the owner chose and a private repository, kept apart by kind so nothing made from a game's files reaches a shared place; checked by hash and copied back on request; never deletes at a source, and lets go only earlier copies beyond a set's keepEarlier. Every game's saves and settings from one small list each, and a daily run of everything (1.71.0) | Python, with git | Built: 1.66.0 |
-| 32 | [The heap reader](docs/heap-reader.md) (RimWorld 1.7 first) | Inside a running .NET game from a snapshot: every object by type and by mod, one kind's objects described, any object with every value it holds, what holds it, and paths from a root that say why it is still in memory; a held snapshot for a program's page | C# (Microsoft's ClrMD), Python | Built: 1.65.0 |
-| 31 | [Programs](docs/programs.md) | Which other programs the tools use (git, .NET, ilspycmd, Steam, a game's own), whether each is on this PC, what needs it and where to get it; builds the kit's compiled tools ready for an installer to carry | Python | Built: 1.62.0 |
-| 9 | [Workshop publishing](docs/workshop-publishing.md) | Release notes from changelogs, offline staging, the owner-run uploader, pulling Steam's state back | Python | Built: 0.10.0, from phobos-ostranauts |
+<!-- generated: command index -->
+Generated from the manifest by `python -m phobos_modkit command-docs --write`. Each doc ends with every report and option its command takes.
+
+| Command | Game | What it is for |
+| --- | --- | --- |
+| [`art-audit`](docs/art-audit.md) | any | every shipped image with its record and how it was made, and every borrowed picture |
+| [`changes`](docs/changes.md) | any | what the changelogs say changed lately, and the code behind any one entry |
+| [`claims`](docs/claims.md) | any | who is working on what: agent sessions take and release version numbers, test rows and files |
+| [`cleanup`](docs/cleanup.md) | any | what the tools, builds and tests left behind; deletes only with `--apply` |
+| [`code`](docs/code.md) | any | find, outline and show C# declarations, and every line using a name |
+| [`command-docs`](docs/command-docs.md) | any | each command's doc lists its reports and options, and the README its commands, from the manifest |
+| [`connections`](docs/connections.md) | any | how a repository's code fits together: calls, holds, builds on, overrides, patches, uses |
+| [`crash-dump`](docs/crash-dump.md) | any | what a Windows crash dump says failed, whether a call loop ran away, and its methods from a full dump |
+| [`decisions`](docs/decisions.md) | any | the questions waiting for the owner, with options and the agent's lean; records answers |
+| [`feeds`](docs/feeds.md) | any | a feed folder's index and checks, and reading feeds from GitHub with the last good copy kept |
+| [`game-files`](docs/game-files.md) | any | what a game writes and what Steam records: what changed since you last played, saves, screenshots, space |
+| [`gate`](docs/gate.md) | any | run a repository's checks before a commit and report only what failed |
+| [`history`](docs/history.md) | any | what happened to a game's products over time, and any changelog as it stood at any moment |
+| [`installs`](docs/installs.md) | any | what each installed mod would gain or lose by updating or going back to a backup; backs up, goes back, installs |
+| [`issue-links`](docs/issue-links.md) | any | where a fault in a mod is reported, and GitHub's new-issue form filled in for a person to send |
+| [`makeup`](docs/makeup.md) | any | what a repository is made of, how it grew, where the work goes, and what each product holds |
+| [`manifest`](docs/manifest.md) | any | every command, its reports and options, and what each one reads or changes |
+| [`mod-list`](docs/mod-list.md) | any | what is wrong with a game's list of active mods and why; safe changes, each after a backup |
+| [`picks`](docs/picks.md) | any | the pictures and sounds waiting for the owner to pick one, with their tries; records picks |
+| [`pins`](docs/pins.md) | any | which version of this tool kit each repository pins, and what moving the pin would bring |
+| [`programs`](docs/programs.md) | any | which other programs the tools use, whether each is on this PC, and where to get it |
+| [`records`](docs/records.md) | any | a copy of D'thorga Companion's own records in a folder of your choosing, and how old the newest is |
+| [`release`](docs/release.md) | any | changelog checks, version constants kept in step, history screen |
+| [`repos`](docs/repos.md) | any | each repository's commits not pushed, files changed, and whether GitHub's checks passed for its last push |
+| [`rimworld-archive`](docs/rimworld-archive.md) | rimworld | keep every version of the game's assembly and of tied mods, and compare two of them |
+| [`rimworld-code`](docs/rimworld-code.md) | rimworld | another author's code: its source from a public clone or a decompile, and which assembly holds it |
+| [`rimworld-defs`](docs/rimworld-defs.md) | rimworld | which active mods define and patch each RimWorld Def |
+| [`rimworld-log`](docs/rimworld-log.md) | rimworld | summarise a RimWorld Player.log and name the mods involved |
+| [`rimworld-patches`](docs/rimworld-patches.md) | rimworld | which active mods patch which methods with Harmony, from their metadata |
+| [`rimworld-perf`](docs/rimworld-perf.md) | rimworld | where a running RimWorld spends its time, by mod, method and part of the game loop |
+| [`rimworld-readiness`](docs/rimworld-readiness.md) | rimworld | which active mods are ready for a game version, and which are likeliest to break |
+| [`rimworld-save`](docs/rimworld-save.md) | rimworld | answer questions about a RimWorld save from a fast index |
+| [`rimworld-settings`](docs/rimworld-settings.md) | rimworld | the player's RimWorld mod settings, files left behind, changes since a snapshot |
+| [`rimworld-sources`](docs/rimworld-sources.md) | rimworld | where each tied mod's public source lives, checked against its package ID |
+| [`rimworld-startup`](docs/rimworld-startup.md) | rimworld | how long RimWorld takes to start, the costliest mods, what changed between launches |
+| [`rimworld-targets`](docs/rimworld-targets.md) | rimworld | whether every member our C# names by string still exists in the game and the mods |
+| [`rimworld-textures`](docs/rimworld-textures.md) | rimworld | whether active mods' encoded textures match their pictures, and encoding those that don't |
+| [`rimworld-update-check`](docs/rimworld-update-check.md) | rimworld | the game or mods updated: our patches' targets, temporary patches, update sizes, our XML patches |
+| [`rimworld-upstream`](docs/rimworld-upstream.md) | rimworld | whether an update or another author's source changed a method our code patches or names |
+| [`rimworld-workshop`](docs/workshop.md) | rimworld | what players report about RimWorld mods on the Workshop lately |
+| [`rules`](rules/README.md) | any | the rules every repository shares, and whether a repository reads them |
+| [`safe-copies`](docs/safe-copies.md) | any | copies of what cannot be made again, kept apart by kind; checks them and copies them back |
+| [`screen-notes`](docs/screen-notes.md) | any | what the owner flagged as looking wrong in D'thorga Companion; marks a note dealt with |
+| [`settings`](docs/settings.md) | any | the settings the tools read, where each value comes from, and the central settings file |
+| [`steam-publish`](docs/workshop-publishing.md) | any | release notes, staging and the owner-run Workshop uploader |
+| [`steam-workshop`](docs/workshop.md) | any | what players report about Workshop items lately, by ID or URL |
+| [`test-pass`](docs/test-pass.md) | any | what a repository's in-game test list is waiting for, from the game's notes and the owner's verdicts |
+| [`windows-dumps`](docs/crash-dump.md) | any | whether Windows keeps full crash dumps of a program, and asking it to |
+| [`zeroed`](docs/zeroed.md) | any | files a crash left filled with zero bytes, what each is, and putting tracked ones back from git |
+<!-- end generated -->
 
 ## How a repository uses it
 
@@ -202,6 +217,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/programs.md](docs/programs.md) | Programs: what status lists and how each is found, and what bundle makes |
 | [docs/heap-reader.md](docs/heap-reader.md) | The heap reader: looking inside a running game from a snapshot, what it answers, which memory-reading library it trusts, and its limits |
 | [docs/screen-notes.md](docs/screen-notes.md) | Screen notes: a note's folder, its files, and resolving one |
+| [docs/command-docs.md](docs/command-docs.md) | Command docs: the generated block of reports and options in each doc, and the README's command index |
 | [docs/gate.md](docs/gate.md) | The gate: a repository's checks from config/gate.json, and what each output parser keeps |
 | `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `sampling.py` and `dotnet_diagnostics.py` (sampled call stacks and Microsoft's diagnostics tools), `query.py` (report filters), `steam/` (Workshop research; `publish/` for publishing), `release/` (changelogs, constants, history screen), `gate/` (the check runner and its output parsers), `code/` (the C# declaration scanner and index), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema), `games/zomboid/` (the mod list and publishing), `games/ostranauts/`, `games/kenshi/` and `games/wrsr/` (publishing only: each a `workshop.json`) |
 | `crates/xml-index/` | Rust: streams any large XML file into SQLite, driven by a schema file; `cargo test` |

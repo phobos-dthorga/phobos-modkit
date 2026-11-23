@@ -65,3 +65,33 @@ as `external`, with the assembly that holds them where the reader knows it.
   reader cannot follow a method chosen while the game runs.
 - Patches of the repository's methods by other mods are not read here; `rimworld-patches` answers that for RimWorld.
 - A Def whose defName is also a word other Defs use for something else (a stat's name, say) may be counted as used.
+
+## Reports and options
+
+<!-- generated: options connections -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `summary` | What was read, how exactly, and how much. | reads only |
+| `find` | Things by name. Things by name; needs the name. | reads only |
+| `around` | Everything one connection away from one thing. Everything one connection away from one thing; needs its id. | reads only |
+| `flow` | Who calls one thing and what it calls, a few steps each way. The calls around one thing, a few steps each way; needs its id. | reads only |
+| `changed` | The things a commit changed. The things a commit changed; needs the commit. | reads only |
+| `history` | The commits that changed one thing's lines, with the changelog entries they wrote. The commits that changed one thing, with the entries they wrote; needs its id. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | all | the repository (default: the current folder) |  |
+| `--rebuild` | all | read every file again, whatever the cache holds |  |
+| `--top N` | all | rows per table (default 60) | `60` |
+| `--name VALUE` | `find` | a name or pattern (\* and ?). Required. |  |
+| `--kind VALUE` | `find` | only this kind (repeatable): method, class, def... |  |
+| `--outside` | `find` | also the game's and other mods' things the code uses |  |
+| `--node VALUE` | `around`, `flow`, `history` | a thing's id, as find gives it (cs:..., def:..., lua:..., py:...). Required. |  |
+| `--depth N` | `flow` | steps each way (default 2). One of `1`, `2`, `3`. | `2` |
+| `--commit VALUE` | `changed` | the commit. Required. |  |
+| `--limit N` | `history` | commits to give, newest first (default 25, at most 500) | `25` |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

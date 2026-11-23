@@ -92,6 +92,10 @@ session**; `CLAUDE.md` imports it. The rules below are this repository's own, an
   tool's own under `data`. Never `json.dumps` a report in a tool.
 - **Every command declares a `MANIFEST`** beside its parser (its game, the parser and what it reads or changes), and is
   listed in `commands.py`; `tests/test_manifest.py` holds it to that (`docs/manifest.md`).
+- **Every command's doc ends with a generated table of its reports and options**, and the README with an index of every
+  command: `python -m phobos_modkit command-docs --write` writes them from the manifest, `config/command-docs.json` names each
+  command's doc, and the gate fails when one is out of date (`docs/command-docs.md`). Change a help text in the parser, never
+  in the block.
 - **Report filters and capped queries go through `phobos_modkit.query`**: `like` for users' wildcards (`*` and `?`,
   with `%` and `_` literal), `Filters` for WHERE clauses with parameters, `count` and `rows` for tables cut at
   `--top`. Never build SQL from a user's text by hand.
@@ -135,6 +139,7 @@ session**; `CLAUDE.md` imports it. The rules below are this repository's own, an
   cargo test --locked
   cargo build --release --locked
   PHOBOS_REQUIRE_NATIVE=1 python -W error -m unittest discover -s tests
+  cd python && python -m phobos_modkit command-docs
   ```
 
   Run the Python tests on the oldest supported Python too when syntax or the standard library is involved, for

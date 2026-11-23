@@ -56,3 +56,28 @@ Exit 0 when everything named was found, 1 when something no longer matches, 2 fo
 - A by-name parameter is matched by its name alone; its type is not compared. Parameter names come from the reader from 1.10.0 on.
 - Types are matched by name and by the `using` lines in scope, so two mods' classes of one name can be confused; a target that matches
   several says so.
+
+## Reports and options
+
+<!-- generated: options rimworld-targets -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+Effect: reads only.
+
+| Option | What it does | Default |
+| --- | --- | --- |
+| `--root VALUE` | the repository holding the C# source (default: here) | `.` |
+| `--source VALUE` | a glob under the root (default src/\*\*/\*.cs); may repeat |  |
+| `--assemblies VALUE` | a glob under the root to read before the game's; may repeat |  |
+| `--type-lookup NAME` | a method that finds a type by its full name, such as a project's helper (Class.Method); may repeat |  |
+| `--game VALUE` | the RimWorld folder (else RIMWORLD_PATH, the settings file, Steam's default) |  |
+| `--workshop VALUE` | the Workshop content folder (else RIMWORLD_WORKSHOP_PATH, settings, beside the game) |  |
+| `--config VALUE` | the folder holding ModsConfig.xml (else RIMWORLD_CONFIG_PATH, settings, default) |  |
+| `--settings VALUE` | a JSON settings file with rimworldPath, workshopPath, rimworldConfigPath |  |
+| `--if-installed` | with no game on this machine, say so and pass (for CI) |  |
+| `--all` | list what passed too |  |
+| `--top N` | rows per table (default 40) | `40` |
+
+- It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->

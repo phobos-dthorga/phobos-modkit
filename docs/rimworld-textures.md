@@ -73,3 +73,28 @@ the header's mip count is lowered and the smaller levels' bytes dropped, through
 - Only block-compressed 2D files whose size the header fully explains are read further; plain pixels, cube maps, arrays and anything
   odd are left alone. A second run changes nothing. Waylith's own texture cache notices the change, as it compares each file's size and
   date.
+
+## Reports and options
+
+<!-- generated: options rimworld-textures -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `status` | Active mods whose encoded textures are stale, missing or left over. | reads only |
+| `encode` | Re-encode named mods' textures with RimSort's todds preset. Writes .dds files into the named mods' folders, Workshop ones included, and shortens the mip chains of those Waylith would unpack. | writes |
+| `pairs` | One active mod's pictures, each beside the encoded texture the game loads (1.82.0). | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--settings VALUE` | all | a JSON settings file naming the game, Workshop, Config and todds paths |  |
+| `--game VALUE` | all | the RimWorld folder |  |
+| `--todds VALUE` | all | RimSort's todds.exe |  |
+| `--all` | `status` | list every active mod, not only those needing attention |  |
+| `--top N` | `status` | mods per table (default 40) | `40` |
+| `--mod VALUE` | `encode` | a package ID or folder name (repeatable). Required. |  |
+| `--mod VALUE` | `pairs` | a package ID or folder name. Required. |  |
+| `--top N` | `pairs` | pairs listed at most (default 2,000) | `2000` |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

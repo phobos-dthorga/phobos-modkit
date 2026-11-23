@@ -60,3 +60,34 @@ starting value, which a player with no settings file gets). Booleans compare wit
 - Values are shown as written. An enum is its name; a list of plain items is one value, "[3] a; b; c", cut after eight.
 - The saved date is the file's modification time, in UTC.
 - A settings file whose name the game sanitised (a folder name with characters Windows refuses) may not match its mod.
+
+## Reports and options
+
+<!-- generated: options rimworld-settings -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `summary` | Mods with settings, values of chosen mods, files left behind. | reads only |
+| `snapshot` | Write every value now to a JSON file. Writes the snapshot file you name. | writes |
+| `compare` | What changed since a snapshot, or between two. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--config VALUE` | all | the Config folder (else RIMWORLD_CONFIG_PATH, the settings file, the default) |  |
+| `--game VALUE` | all | the RimWorld folder, to name the mods (else RIMWORLD_PATH, settings, Steam's default) |  |
+| `--workshop VALUE` | all | the Workshop content folder (else RIMWORLD_WORKSHOP_PATH, settings, beside the game) |  |
+| `--settings VALUE` | all | a JSON settings file with rimworldConfigPath, rimworldPath, workshopPath |  |
+| `--mod PATTERN` | all | show the values of mods whose name, package ID or folder matches; repeatable |  |
+| `--all` | all | show the values of every mod with a settings file |  |
+| `--list` | all | list every mod with settings and every file left behind, uncut |  |
+| `--top N` | all | rows per table (default 15) | `15` |
+| `--defaults VALUE` | all | a defaults file (schemaVersion 1) naming each settings class's keys and defaults |  |
+| `FILE` | `snapshot` | the JSON file to write |  |
+| `BEFORE` | `compare` | a snapshot file to compare from |  |
+| `AFTER` | `compare` | (optional) a later snapshot file (default: the settings now) |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->

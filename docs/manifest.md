@@ -81,7 +81,7 @@ and `reports`. Each report has:
 | `note` | Anything else a caller should know, or null |
 | `question` | The report as a person would ask for it, or null |
 | `surface` | What the report mostly is, when a program should give it a page of its own: `globe` (1.7.0), `textures` (1.21.0), `changes` (1.24.0), `timeline` and `settings` (1.30.0), `connections` (1.33.0), `log` (1.35.0), `patch-targets` (1.37.1), `memory-watch` (1.47.0), `other-code` and `updates` (1.49.0; rimworld-archive's `snapshot` joins `updates` in 1.51.0), `mod-list` (1.72.0), `repo-status` (1.89.0), `feeds` (1.90.0), or null |
-| `options` | `name`, `positional`, `kind` (`flag`, `integer`, `number` or `text`), `required`, `repeatable`, `choices`, `default` and `help`, read from the command's own parser |
+| `options` | `name`, `positional`, `kind` (`flag`, `integer`, `number` or `text`), `required`, `repeatable`, `choices`, `default`, `metavar` (1.106.0: the placeholder its usage shows, such as `KEY=VALUE`, or null) and `help`, read from the command's own parser |
 | `exclusive` | Groups of options that cannot be used together |
 
 | Effect | Meaning |
@@ -103,6 +103,8 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
 ```
 
 `tests/test_manifest.py` fails if a command has no manifest, an effect is unknown, or a report named there does not exist.
+Name its doc in `config/command-docs.json` and run `python -m phobos_modkit command-docs --write`, which adds the doc's table of
+reports and options ([command-docs](command-docs.md)); the gate fails until it is there.
 
 ## Progress
 
@@ -133,3 +135,13 @@ ordinary output lines into details (`progress.run_streaming`).
 - Most commands report nothing while they work. Those that do (installs, rimworld-textures, rimworld-save, changes) write
   progress lines to standard error only when asked: see [Progress](#progress).
 - The manifest describes the kit. A game repository's own scripts are not in it.
+
+## Reports and options
+
+<!-- generated: options manifest -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+Effect: reads only.
+
+It takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

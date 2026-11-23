@@ -77,3 +77,46 @@ with 97,000 declarations took about 5 minutes on first use, decompile included, 
 - `refs` is text: a name that is also a common word in strings (`Label`) finds those strings too, and a different
   member with the same name in another type is found as well. The "In" column tells them apart.
 - Partial types are listed once per file that declares a part.
+
+## Reports and options
+
+<!-- generated: options code -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `summary` | The corpora, their files and declarations. | reads only |
+| `find` | Declarations whose name or full name matches. | reads only |
+| `outline` | A type's members, in source order. | reads only |
+| `show` | A declaration's source, numbered. | reads only |
+| `refs` | Every line using a name, grouped by the member it is in. | reads only |
+| `compare` | What changed between two builds, member by member. Runs ilspycmd on the file, which reads it without loading or running it. | runs other programs, when a side is a .dll |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--corpus NAME=PATH` | all | a source tree (a folder or one .cs file) under a name; repeatable |  |
+| `--each-in DIR` | all | every folder and .cs file directly inside DIR is a corpus, named after it; repeatable |  |
+| `--in PATTERN` | all | query only corpora whose name matches (\* and ?); repeatable |  |
+| `--cache VALUE` | all | where indexes are kept (else PHOBOS_MODKIT_CACHE, settings, the temp folder) |  |
+| `--settings VALUE` | all | a JSON settings file with modkitCachePath |  |
+| `--rebuild` | all | index the chosen corpora again |  |
+| `--top N` | all | rows per table (default 40) | `40` |
+| `PATTERN` | `find` | a name or full name; \* and ? are wildcards |  |
+| `--kind VALUE` | `find` | only these kinds (class, method, property, field, ...). Repeatable. |  |
+| `NAME` | `outline` | a type's name or dotted full name |  |
+| `NAME` | `show` | Type, Type.Member or Namespace.Type.Member |  |
+| `--lines N` | `show` | lines shown per declaration (default 150; 0 for all) | `150` |
+| `--raw` | `show` | keep the decompiler's //IL_ notes |  |
+| `NAME` | `refs` | an identifier; a dotted name searches for its last part |  |
+| `LEFT` | `compare` | the older side: a .dll, a corpus name, or a folder or .cs file |  |
+| `RIGHT` | `compare` | the newer side, in any of the same forms |  |
+| `--only PATTERN` | `compare` | only declarations whose full name matches (\* and ?); repeatable |  |
+| `--show NAME` | `compare` | the changes in one declaration, as a diff: Type.Member or a full name |  |
+| `--lines N` | `compare` | lines shown per diff (default 150; 0 for all) | `150` |
+| `--decompiler VALUE` | `compare` | ilspycmd, for a .dll (else PHOBOS_MODKIT_ILSPYCMD, settings, the PATH) |  |
+| `--reference DIR` | `compare` | a folder of assemblies the .dll refers to, for a truer decompile; repeatable |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+- A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+<!-- end generated -->

@@ -51,3 +51,20 @@ debug files. About 2.5 MB in all (20 November 2026).
 - Windows is the only platform built and checked so far; the code names programs the same way elsewhere.
 - Whether a program works is not checked, only whether it is there: an old ilspycmd, or a Steam that won't start, still reads
   as here.
+
+## Reports and options
+
+<!-- generated: options programs -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `status` | Every other program the tools use: here or not, what needs it, where to get it. Looks only: runs none of them. | reads only |
+| `bundle` | Build the kit's compiled tools and copy them into one folder, for an installer. Builds the kit's compiled tools with cargo and the .NET SDK, and copies them into the folder named, for an installer. | writes |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--out VALUE` | `bundle` | the folder to fill (a full path). Required. |  |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

@@ -78,3 +78,24 @@ a file's record (the same place under the first matching mirror, else beside it)
 - Code is read for literal names; a name put together at run time is not seen.
 - Word matching is a heuristic: a word of four letters or more inside another counts as the same word (light, headlights).
   Accept a borrowing the owner keeps, with a reason, rather than renaming things to suit the tool.
+
+## Reports and options
+
+<!-- generated: options art-audit -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `report` | Images drawn in code, without a record or unclassed, and borrowed pictures. | reads only |
+| `check` | Fail when an image has no record of its own or shared. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | all | the repository (default: the current folder) |  |
+| `--mod VALUE` | all | only images and uses in this mod or folder (wildcards \* and ?) |  |
+| `--kind VALUE` | `report` | list every image of this kind (a kind the config names, no-record or unclassified) |  |
+| `--all` | `report` | list accepted images and borrowings beside the open ones |  |
+| `--top N` | `report` | rows per table (default 40) | `40` |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

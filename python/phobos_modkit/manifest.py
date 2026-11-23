@@ -50,6 +50,7 @@ def _option(action):
             "repeatable": isinstance(action, argparse._AppendAction) or action.nargs in ("*", "+"),
             "choices": sorted(str(c) for c in action.choices) if action.choices else None,
             "default": default,
+            "metavar": action.metavar if isinstance(action.metavar, str) else None,
             "help": _help(action)}
 
 

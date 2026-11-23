@@ -30,3 +30,29 @@ python -m phobos_modkit claims release --all --by phobos-rimworld-11
 One file, `claims.json` in D'thorga Companion's folder (`claimsPath`, `PHOBOS_CLAIMS`): `{"format": 1, "claims": [...]}`. Every
 change holds `claims.json.lock` (made with exclusive create, waited on for up to ten seconds, broken when a crashed run left it more
 than a minute old) and writes the board whole through `claims.json.partial`.
+
+## Reports and options
+
+<!-- generated: options claims -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `list` | Every claim, oldest first, with its age. | reads only |
+| `take` | Holds a thing for a session. Adds or refreshes one claim on the board. | writes |
+| `release` | Lets a thing go. Removes a session's claims from the board. | writes |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `WHAT` | `take` | the thing, in a few words ("phobos-modkit 1.44.0") |  |
+| `--by VALUE` | `take` | the session, as other sessions address it. Required. |  |
+| `--note VALUE` | `take` | what it is for, in a few words |  |
+| `--force` | `take` | take over a claim a session left behind |  |
+| `WHAT` | `release` | (optional) the thing, as it was taken |  |
+| `--by VALUE` | `release` | the session letting go. Required. |  |
+| `--all` | `release` | everything the session holds |  |
+| `--force` | `release` | let go of a claim another session left behind |  |
+
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Names in capitals are given bare, without a flag, in the order shown.
+<!-- end generated -->

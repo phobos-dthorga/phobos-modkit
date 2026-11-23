@@ -70,3 +70,24 @@ report envelope with every item's group, path, bytes and reason under `data.item
 only the groups named, so a program can let its user keep some, such as install backups; the daemons are then a group of
 their own, "Git file-watcher daemons", stopped only when named. The exit code is 1 when something
 could not be deleted (usually a file another program holds open: run it again later).
+
+## Reports and options
+
+<!-- generated: options cleanup -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+Effect: writes, with `--apply`.
+
+| Option | What it does | Default |
+| --- | --- | --- |
+| `--root VALUE` | the repository whose config/cleanup.json to follow (default: the current folder) |  |
+| `--config VALUE` | a rules file other than ROOT/config/cleanup.json |  |
+| `--settings VALUE` | a JSON settings file with modkitCachePath and the games' paths |  |
+| `--older-than N` | days a cache entry may sit unchanged (default 14) | `14` |
+| `--keep-build` | leave the kit's development build alone |  |
+| `--group NAME` | only this group, as the listing names it; repeatable (1.50.0, so a program can let its user choose) |  |
+| `--apply` | delete; without it, only list what would go |  |
+| `--top N` | rows per detail table (default 15) | `15` |
+
+It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

@@ -47,3 +47,22 @@ python -m phobos_modkit repos status --root ... --online --automatic            
 `when`, `link`; `stale` and `asOf`, the time of the answer given, when it is an earlier one; `why` when unknown) and `nightly[]` (the
 same fields, and `late`). Also `data.allowance` (`remaining`, `size`, `reset`, `seen_at`, `turned`), `asked`, `reused`,
 `revalidated` and `limited`.
+
+## Reports and options
+
+<!-- generated: options repos -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `status` | Each repository's commits not pushed, files changed, and GitHub's checks for its last push. Each repository's commits not pushed and files changed; with `--online`, GitHub's checks for its last push (keyless). | reads public pages online, with `--online` |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | all | a repository (repeatable; default: the current folder) |  |
+| `--online` | all | also ask GitHub for each last push's checks (keyless) |  |
+| `--automatic` | all | a look nobody pressed for: ask GitHub only what may have changed, and keep calls for a press |  |
+| `--cache VALUE` | all | the kit's cache folder (default: the setting, then the temporary folder) |  |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

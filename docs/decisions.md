@@ -42,3 +42,24 @@ refused with its reason, never half-read.
 One JSON line each (`format`, `id`, `option`, `words`, `time` in UTC), appended to `decisions/<repository>.jsonl` in the
 Companion's folder (`companionDecisionsPath`, `PHOBOS_DECISIONS`). The last line for a decision decides, so the owner can change
 their mind until an agent acts on it.
+
+## Reports and options
+
+<!-- generated: options decisions -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `list` | Every decision, open ones first, with any answer. | reads only |
+| `answer` | Records the owner's answer. Appends the owner's answer to the Companion's decisions file. | writes |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | `list` | a repository (repeatable; default: the current folder) |  |
+| `--root VALUE` | `answer` | the repository the decision belongs to. Required. |  |
+| `--id VALUE` | `answer` | the decision. Required. |  |
+| `--option VALUE` | `answer` | the chosen option's id, or 'other' with `--words`. Required. |  |
+| `--words VALUE` | `answer` | anything the owner added |  |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->

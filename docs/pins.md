@@ -19,3 +19,19 @@ python -m phobos_modkit pins status --root ../phobos-rimworld --root ../phobos-c
 Add `--json` for the envelope: `data.pins` holds, for each pin, `repository`, `path`, `commit`, `version`, `kit` (this kit's
 version), `behind` (how many versions newer the kit is), `ahead`, and `versions`, newest first, each `{version, heading, entries}`
 with each entry's opening.
+
+## Reports and options
+
+<!-- generated: options pins -->
+Generated from the command's own parser by `python -m phobos_modkit command-docs --write`: change a help text in the parser, not here.
+
+| Report | What it does | Effect |
+| --- | --- | --- |
+| `status` | Each repository's pin of this kit, and the versions it lacks. Each repository's pin of this kit; needs the repositories. | reads only |
+
+| Option | Reports | What it does | Default |
+| --- | --- | --- | --- |
+| `--root VALUE` | all | a repository (repeatable; default: the current folder) |  |
+
+Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+<!-- end generated -->
