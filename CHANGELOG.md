@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.101.1] - 2026-11-23
+
+### Fixed
+
+- **A short mod name picks the mod it names**: `Framework` is PhobosFramework, not also PhobosRadioFramework (the prefix every
+  mod shares is taken off first). Found on phobos-rimworld's real catalogue.
+- **The upload plan says "Required items"**, not "to set on Steam afterwards": the Steam client route sets them itself, and
+  SteamCMD's reminder still follows its upload.
+
 ## [1.101.0] - 2026-11-23
 
 ### Added

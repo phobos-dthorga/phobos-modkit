@@ -188,7 +188,7 @@ def upload(project, request, say=print, run=run_steamcmd, now=datetime.now, envi
     say(f"Candidate: {candidate}")
     if manifest["itemId"]:
         say("Item: " + ITEM_URL.format(item=manifest["itemId"]))
-    say("Required items to set on Steam afterwards: " + ("; ".join(required) or "none"))
+    say("Required items: " + ("; ".join(required) or "none"))
     covers = "Change note covers: " + ", ".join(manifest["changeNoteVersions"])
     if manifest["changeNoteOmitted"]:
         covers += " (too long for Steam, so it points to CHANGELOG.md for " + ", ".join(manifest["changeNoteOmitted"]) + ")"

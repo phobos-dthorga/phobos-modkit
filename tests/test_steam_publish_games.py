@@ -162,6 +162,14 @@ class MoreGames(unittest.TestCase):
         self.assertEqual(stage.with_footer("Text\n", manifest, "3900000001"),
                          "Text\n\nWorkshop ID: 3900000001\nMod ID: ExampleMod\n")
 
+    def test_a_short_name_prefers_the_one_without_more_words(self):
+        for mod in ("PhobosFramework", "PhobosRadioFramework"):
+            self.write(f"mods/{mod}/About/About.xml", f"<ModMetaData><name>{mod}</name><modVersion>1.0.0</modVersion></ModMetaData>")
+        project = self.repo({"appId": "294100", "mods": {m: {"itemId": None, "requires": []} for m in
+                                                          ("PhobosFramework", "PhobosRadioFramework")}}, notes_too=False)
+        self.assertEqual(project.resolve("Framework"), "PhobosFramework")
+        self.assertEqual(project.resolve("radioframework"), "PhobosRadioFramework")
+
     def test_png_rules(self):
         self.assertEqual(png_size(png(512, 512)), (512, 512))
         self.assertIsNone(png_size(b"GIF89a"))

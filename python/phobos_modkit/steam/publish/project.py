@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -178,6 +179,12 @@ class Project:
         if name in self.mods:
             return name
         found = [m for m in self.mods if m.lower().endswith(name.lower())]
+        if len(found) > 1:
+            # 1.101.1: the name with the prefix every mod shares taken off wins (Framework is PhobosFramework, not
+            # PhobosRadioFramework).
+            shared = os.path.commonprefix([m.lower() for m in self.mods]) if len(self.mods) > 1 else ""
+            exact = [m for m in found if m.lower()[len(shared):] == name.lower()]
+            found = exact or found
         if len(found) != 1:
             raise PublishError(f"Unknown mod: {name}" if not found else f"{name} matches {', '.join(found)}")
         return found[0]
