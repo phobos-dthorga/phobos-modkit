@@ -53,8 +53,9 @@ as `external`, with the assembly that holds them where the reader knows it.
   and belongs-to, builds-on and built-on-by, overrides and overridden-by, patches and patched-by, uses and used-by, imports and
   imported-by. A group lists up to 80, with `count` for all; each thing carries `connections`, how many it has itself.
 - `flow`: `columns` from the furthest caller (`step` -depth) through the thing (0) to the furthest callee, and `edges` between them.
-- `changed`: the things whose lines a commit changed, read from each file as it stood at that commit, with `linesChanged` and
-  `inGraph` (false for a thing since removed).
+- `changed`: the things whose lines a commit changed, read from each file as it stood at that commit, with `linesChanged`,
+  `inGraph` (false for a thing since removed) and, since 1.112.0, `at`: `{file, line, end}`, where the thing stood at that commit,
+  for a viewer to light its lines in the commit's changes (its `file` and `line` are where it stands now).
 - `history` (1.34.0): `node`, `file`, `lines` (first and last), and `commits`, newest first: `hash`, `time`, `subject` and `entries`,
   each `{changelog, product, text}`, the changelog entries that commit wrote; `more` when there are over 25. The lines are followed
   back through moves by git's line-range log; a thing outside the repository is refused.

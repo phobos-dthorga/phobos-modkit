@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.112.0] - 2026-11-24
+
+### Added
+
+- **`connections changed` says where each changed thing stood at that commit** (`at`: its file and lines then), for D'thorga
+  Companion to light a changed method's lines and its box together (its `docs/code-reading.md`, step 3). `file` and `line` still
+  say where it stands now. See [connections](docs/connections.md).
+
 ## [1.111.0] - 2026-11-24
 
 ### Added

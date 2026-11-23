@@ -199,6 +199,12 @@ class ByNameTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(sorted(t["id"] for t in found["things"]), ["def:RecipeDef/MakeLamp", "lua:Lamps.shine"])
             self.assertTrue(all(t["inGraph"] for t in found["things"]))
+            # Where each changed thing stood at that commit (1.112.0): its file and lines then, for a viewer to light them.
+            shine = next(t for t in found["things"] if t["id"] == "lua:Lamps.shine")
+            self.assertEqual(shine["at"]["file"], "lua/lamps.lua")
+            self.assertLessEqual(shine["at"]["line"], shine["at"]["end"])
+            lines = (root / "lua" / "lamps.lua").read_text(encoding="utf-8").splitlines()
+            self.assertIn("shine", lines[shine["at"]["line"] - 1])
 
     def test_a_things_history_is_its_commits_with_the_entries_they_wrote(self):
         with tempfile.TemporaryDirectory() as tmp:

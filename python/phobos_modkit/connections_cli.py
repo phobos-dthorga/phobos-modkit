@@ -155,7 +155,8 @@ def changed_report(conn, root, args):
             holding = [d for d in declared if d[1] <= line <= d[2]]
             if holding:
                 inner = min(holding, key=lambda d: d[2] - d[1])
-                entry = things.setdefault(inner[0], {"id": inner[0], "file": path, "linesChanged": 0})
+                entry = things.setdefault(inner[0], {"id": inner[0], "file": path, "linesChanged": 0,
+                                                     "at": {"file": path, "line": inner[1], "end": inner[2]}})
                 entry["linesChanged"] += 1
                 counted += 1
         files.append({"file": path, "lines": len(lines), "placed": counted})
@@ -163,7 +164,7 @@ def changed_report(conn, root, args):
     for item in sorted(things.values(), key=lambda t: -t["linesChanged"]):
         current = connections.node(conn, item["id"])
         found.append({**(current or {"id": item["id"], "name": item["id"].split(":", 1)[1].rsplit(".", 1)[-1], "file": item["file"]}),
-                      "linesChanged": item["linesChanged"], "inGraph": current is not None})
+                      "linesChanged": item["linesChanged"], "inGraph": current is not None, "at": item["at"]})
     report = Report(f"Connections: {described.hash[:8]} changed {len(found):,} things")
     report.lines.append(f"{described.subject}.")
     report.section("Changed", Table(["Thing", "Kind", "Lines changed", "Still there"],
