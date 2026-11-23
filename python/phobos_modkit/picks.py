@@ -35,6 +35,7 @@ from pathlib import Path
 import re
 import sys
 
+from . import file_lock
 from .manifest import READS, WRITES
 from .paths import companion_data, resolve
 from .report import Bullets, Report, envelope_text, home_redactor, keep, render_markdown
@@ -134,7 +135,9 @@ def write_file(root, grounds, picks):
     data = {"schemaVersion": SCHEMA_VERSION, "grounds": grounds, "picks": picks}
     partial = path.with_suffix(".json.partial")
     partial.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
-    partial.replace(path)
+    # Retried while another program holds the file a moment (1.103.1: the Companion or a sync reading it refused the swap, and an
+    # art tool's offers stopped part-way).
+    file_lock.patiently(lambda: partial.replace(path))
 
 
 def read_answers(path):
@@ -189,10 +192,14 @@ def answer(root, pick_id, pick, words=None, environ=None, now=None):
 
 def offer(root, item, grounds=None):
     """Adds one waiting pick, or replaces the one with its id (tries made again); grounds, when given, replace the file's. For a
-    repository's art tools. Returns the pick as kept."""
+    repository's art tools. Refuses to replace a pick of the other kind (a sound under a picture's id). Returns the pick as kept."""
     pick = check_pick(item)
     pick["asked"] = pick["asked"] or datetime.now(timezone.utc).date().isoformat()
     kept_grounds, picks = read_file(root)
+    other = next((p for p in picks if p["id"] == pick["id"] and p["kind"] != pick["kind"]), None)
+    if other is not None:
+        # 1.103.1: a sound offered under a picture's id replaced the picture, which then never reached the owner.
+        raise PickError(f"{pick['id']} is already waiting as a {other['kind']}; a {pick['kind']} needs an id of its own")
     if grounds is not None:
         kept_grounds = [g for g in grounds if isinstance(g, dict) and COLOUR.match(str(g.get("colour", "")))][:MAX_GROUNDS]
     picks = [p for p in picks if p["id"] != pick["id"]] + [pick]

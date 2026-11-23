@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.103.1] - 2026-11-23
+
+### Fixed
+
+- **A pick is never replaced by one of the other kind.** `picks offer` refuses a sound under a waiting picture's id (or the
+  reverse), saying so: phobos-rimworld's night 12 made a picture and a sound both named `n12-exhaust-brake`, and the sound's offer
+  replaced the picture, which never reached the owner's Picks page. A repository's art tools give each kind its own ids.
+- **Writing the picks file is tried again while another program holds it**, as the kit's other writers are: one refused swap
+  ("Access is denied", the Companion or a sync reading the file that moment) stopped a run of offers part-way.
+
 ## [1.103.0] - 2026-11-23
 
 ### Added

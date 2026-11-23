@@ -6,7 +6,8 @@
 
 - **A repository's art tools offer a pick whenever they make tries for the owner to choose from** (`picks offer`, or the `offer`
   function): an id, a title, picture or sound, the file in use (if any) and each try's file. It lives in the repository's
-  `config/picks.json`, committed with the tries' records. Offering the same id again replaces it, for tries made again.
+  `config/picks.json`, committed with the tries' records. Offering the same id again replaces it, for tries made again;
+  a pick of the other kind under that id (a sound where a picture waits) is refused, so each kind needs ids of its own (1.103.1).
 - **Apply a pick, then settle it in the same commit** (`picks settle`): export the chosen try, record it as the repository records
   its art, and remove the pick. The answer stays in the answers file as the record of what the owner chose.
 - **"none" is an answer too**, usually with words: what to try next.

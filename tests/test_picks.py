@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import unittest.mock
 
 import support  # noqa: F401  (puts the package on the path)
 from phobos_modkit import picks
@@ -47,6 +48,27 @@ class PicksTests(unittest.TestCase):
         self.assertEqual(picks.listed(self.root, self.environ)[1], [])
         with self.assertRaises(picks.PickError):
             picks.settle(self.root, "billy-kettle")
+
+    def test_a_sound_never_replaces_a_picture_of_the_same_id(self):
+        picks.offer(self.root, kettle())
+        with self.assertRaises(picks.PickError) as caught:
+            picks.offer(self.root, {**kettle(), "kind": "sound"})
+        self.assertIn("already waiting as a picture", str(caught.exception))
+        self.assertEqual([p["kind"] for p in picks.listed(self.root, self.environ)[1]], ["picture"])
+
+    def test_the_file_is_swapped_in_again_while_another_program_holds_it(self):
+        real, calls = Path.replace, []
+
+        def held_once(self_path, target):
+            calls.append(target)
+            if len(calls) == 1:
+                raise PermissionError(5, "Access is denied")
+            return real(self_path, target)
+
+        with unittest.mock.patch.object(Path, "replace", held_once):
+            picks.offer(self.root, kettle())
+        self.assertEqual(len(calls), 2)
+        self.assertEqual([p["id"] for p in picks.listed(self.root, self.environ)[1]], ["billy-kettle"])
 
     def test_the_last_answer_decides_and_answered_picks_come_last(self):
         picks.offer(self.root, kettle())
