@@ -4,6 +4,22 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.108.0] - 2026-11-23
+
+### Added
+
+- **doc-tables: a `mod-settings` kind, a table of one mod's settings generated from its code** (docs rewrite, step 3, the owner's
+  go-ahead of 23 Nov 2026: settings tables generated instead of written by hand in several places). In the order the settings
+  window draws them: the label as the window shows it, what it does (its tooltip or description), its default as a player sees it
+  (On or Off, an option's label, a number), and its page and section; under the table, the saved settings it did not find drawn.
+  The core asks the game's adapter (`mod_settings.py`, game-free); **RimWorld's** (`games/rimworld/mod_settings.py`) reads each
+  `ModSettings` class's `ExposeData` for keys and defaults, constants and enum members followed, and the window's drawing calls by
+  the habit nearly every mod has (a translated label first, the setting's field among the later arguments, a translated tooltip
+  after it), with labels from the mod's `Keyed` language files, pages from calls that pass a translated label beside a drawing method,
+  and sections from the calls `sectionCalls` names. What it cannot resolve shows as its key and is listed in the command's report.
+  **What a next game needs**: a `mod_settings(root, options)` in `games/<game>/mod_settings.py` returning a `SettingsRead`; Project
+  Zomboid's would read a mod's `sandbox-options.txt`. Until then its table says so in words ([doc-tables.md](docs/doc-tables.md)).
+
 ## [1.107.0] - 2026-11-23
 
 ### Added

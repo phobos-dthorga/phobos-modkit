@@ -1,4 +1,4 @@
-"""doc-tables: tables in a repository's own docs, filled from its own files, so they cannot drift from them (1.107.0).
+"""doc-tables: tables in a repository's own docs, filled from its own files, so they cannot drift from them (1.107.0; 1.108.0).
 
     doc-tables --root REPO            check: name each table that is missing or out of date (fails when one is)
     doc-tables --root REPO --write    write every table that is missing or out of date
@@ -10,13 +10,14 @@ the doc is its own and never touched, as with command-docs. Kinds:
   dotnet-projects    every .csproj under the folders named: what it builds into, its references, Harmony, its test projects
   harmony-patches    per project, the methods its C# source patches with Harmony attributes, read from the text
   mod-requirements   per mod folder, through the game's adapter: needs, load order, game versions, optional tie-ins
+  mod-settings       one mod's settings, through the game's adapter: label, what it does, default, page and section
 
 It reads only the repository's files; it writes only the docs' generated blocks, and only with --write.
 """
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from importlib import import_module
 import json
 from pathlib import Path, PurePosixPath
@@ -34,9 +35,9 @@ CONFIG = "config/doc-tables.json"
 CONFIG_FORMAT = 1
 CELL = 10_000  # a doc's cells are never cut
 DEFAULT_RUN = "python -m phobos_modkit doc-tables --write"
-KINDS = ("dotnet-projects", "harmony-patches", "mod-requirements")
+KINDS = ("dotnet-projects", "harmony-patches", "mod-requirements", "mod-settings")
 HEADINGS = {"dotnet-projects": "## Projects", "harmony-patches": "## Harmony patches",
-            "mod-requirements": "## What each mod needs"}
+            "mod-requirements": "## What each mod needs", "mod-settings": "## Settings"}
 RULES = {"any": " or ", "all": " and "}
 
 
@@ -235,7 +236,64 @@ def requirements_table(root, options, config):
     return lines, {"game": game, "adapter": True, "mods": data}
 
 
-BUILDERS = {"dotnet-projects": projects_table, "harmony-patches": patches_table, "mod-requirements": requirements_table}
+# ---- mod-settings ----
+
+def settings_reader(game):
+    """The game adapter's mod_settings(root, options) (games/<game>/mod_settings.py), or None when no adapter reads them."""
+    from .games import mod_list_game
+    row = mod_list_game(game) if game else None
+    if row is None:
+        return None
+    name = f".{row[3].split('.')[1]}.mod_settings"
+    try:
+        module = import_module(name, "phobos_modkit.games")
+    except ModuleNotFoundError as missing:
+        if missing.name != f"phobos_modkit.games{name}":
+            raise
+        return None
+    return getattr(module, "mod_settings", None)
+
+
+def settings_table(root, options, config):
+    """One mod's settings, as its game's adapter reads them from the mod's own files."""
+    game = options.get("game")
+    lines = [_note(config, "the mod's source code and language files"), ""]
+    reader = settings_reader(game)
+    if reader is None:
+        lines += [f"No game adapter reads {game or 'this game'}'s mod settings yet, so this table cannot be made. A next game needs "
+                  "a `mod_settings(root, options)` in its adapter (phobos-modkit's `games/<game>/mod_settings.py`) that returns "
+                  "each setting's label, description, default, page and section from the mod's own files (`docs/doc-tables.md`)."]
+        return lines, {"game": game, "adapter": False, "settings": [], "unresolved": []}
+    read = reader(Path(root), options)
+    shown = [s for s in read.settings if s.shown]
+    hidden = [s for s in read.settings if not s.shown]
+    pages = {s.page for s in shown}
+    with_page = len(pages) > 1
+    with_section = any(s.section for s in shown)
+    headers = ["Setting", "What it does", "Default"] + (["Page"] if with_page else []) + (["Section"] if with_section else [])
+    rows = []
+    for s in shown:
+        default = f"{s.default} ({s.note})" if s.note else s.default
+        row = [s.label or _code(s.label_key or s.key), s.description or "", default]
+        row += [s.page] if with_page else []
+        row += [s.section] if with_section else []
+        rows.append(row)
+    if rows:
+        lines += table(headers, rows, CELL)
+    else:
+        lines += ["No setting was found drawn in the mod's settings window."]
+    count = len(rows)
+    lines += ["", f"{count} setting{'' if count == 1 else 's'}, in the order the settings window draws them. **Default** is what the "
+              "game uses until the setting is changed. A setting the window shows only in some games (another mod active, another "
+              "setting on) is listed all the same."]
+    if hidden:
+        lines += ["", "Saved, but not found drawn in the window by the reader (kept by the window itself, or drawn by code it cannot "
+                  "follow): " + ", ".join(_code(s.key) for s in hidden) + "."]
+    return lines, {"game": game, "adapter": True, "settings": [asdict(s) for s in read.settings], "unresolved": read.unresolved}
+
+
+BUILDERS = {"dotnet-projects": projects_table, "harmony-patches": patches_table, "mod-requirements": requirements_table,
+            "mod-settings": settings_table}
 
 
 # ---- Planning and writing ----
@@ -337,10 +395,14 @@ def report_of(docs, problems, data, written, wrote):
     unread = [f"{u['file']}:{u['line']}: {u['text']}" for t in data if t["kind"] == "harmony-patches" for u in t["found"]["unread"]]
     if unread:
         report.section("Harmony attributes not read", Bullets(unread))
-    no_adapter = [f"{t['doc']}: no adapter reads {t['found']['game']}'s mod requirements yet" for t in data
-                  if t["kind"] == "mod-requirements" and not t["found"]["adapter"]]
+    no_adapter = [f"{t['doc']}: no adapter reads {t['found']['game']}'s mod "
+                  f"{'requirements' if t['kind'] == 'mod-requirements' else 'settings'} yet" for t in data
+                  if t["kind"] in ("mod-requirements", "mod-settings") and not t["found"]["adapter"]]
     if no_adapter:
         report.section("Tables that say they cannot be made", Bullets(no_adapter))
+    partly = [f"{t['doc']}: {u}" for t in data if t["kind"] == "mod-settings" for u in t["found"]["unresolved"]]
+    if partly:
+        report.section("Settings not read in full", Bullets(partly))
     if problems:
         report.section("Cannot generate", Bullets(problems))
     failed = bool(problems) or (bool(out_of_date) and not wrote)
@@ -371,7 +433,7 @@ def main(argv=None, out=None):
 
 MANIFEST = {"game": None, "parser": _parser, "effect": READS,
             "reports": {None: {"effect": WRITES, "when": "--write"}},
-            "question": "Do the tables in my docs still match the repository's projects, patches and mods?",
+            "question": "Do the tables in my docs still match the repository's projects, patches, mods and settings?",
             "note": "fails when a table is missing or out of date; with --write, writes only the generated tables in the docs "
                     "config/doc-tables.json names"}
 

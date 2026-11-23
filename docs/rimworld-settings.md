@@ -12,7 +12,9 @@ to, whether that mod is active, and what the file holds. It reads only.
   when empty, so it shows as "(empty)".
 - **Defaults come from the mod's own source, not from here.** Pass a defaults file (`--defaults`) to see each value
   beside its default, the keys left at default, keys the mod no longer reads, and defaults that disagree between the
-  field's starting value and the one a missing key loads as. phobos-rimworld writes its own from its C# source.
+  field's starting value and the one a missing key loads as. phobos-rimworld writes its own from its C# source. Since 1.108.0
+  the kit reads a mod's keys, defaults and window labels from source too, for [doc-tables](doc-tables.md)' `mod-settings` tables
+  (`games/rimworld/mod_settings.py`).
 - **Files outlive their mods.** The game never deletes a settings file: a mod removed, merged or renamed leaves one.
   They do no harm; the summary lists them so they are not mistaken for live settings.
 - **Other settings systems are only counted**: HugsLib's folder and Mod Settings Framework's files are not this format.

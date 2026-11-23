@@ -2,12 +2,14 @@
 import io
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 
 import support  # noqa: F401  (puts the package on the path)
 from phobos_modkit import command_docs, doc_tables, dotnet_projects, generated_blocks
 from phobos_modkit.code import harmony
+from phobos_modkit.games.rimworld import mod_settings as rimworld_settings
 
 PATCHES = '''using HarmonyLib;
 using Verse;
@@ -114,6 +116,110 @@ LOAD_FOLDERS = '''<loadFolders>
 </loadFolders>
 '''
 
+SETTINGS = """using System.Collections.Generic;
+using Verse;
+
+namespace Example.Settings;
+
+public enum Shelter { AnyRoof, ThickRoof, Nothing }
+
+public static class Budget { public const float DefaultMs = 12f; }
+
+public class PartSettings : ModSettings
+{
+    public bool coughing = true;
+    public override void ExposeData()
+    {
+        Scribe_Values.Look(ref coughing, "Example_Coughing", true);
+    }
+}
+
+public class ExampleSettings : ModSettings
+{
+    public bool spread = true;
+    public float budgetMs = Budget.DefaultMs;
+    public Shelter shelter;
+    public float metres = 1f;
+    public bool secret;
+    public List<string> remembered = new();
+    public PartSettings part = new();
+
+    public override void ExposeData()
+    {
+        base.ExposeData();
+        Scribe_Values.Look(ref spread, "Example_Spread", true);
+        Scribe_Values.Look(ref budgetMs, "Example_BudgetMs", Budget.DefaultMs);
+        Scribe_Values.Look(ref shelter, "Example_Shelter");
+        Scribe_Values.Look(ref metres, "Example_Metres", 1f);
+        Scribe_Values.Look(ref secret, "Example_Secret");
+        Scribe_Collections.Look(ref remembered, "Example_Remembered", LookMode.Value);
+        part.ExposeData();
+    }
+}
+
+public class ExampleMod : Mod
+{
+    public static ExampleSettings Settings = new();
+
+    public ExampleMod(ModContentPack content) : base(content)
+    {
+        // new SettingsPage("commented", 0f, () => "Example_PageCommented".Translate(), DrawLater) is a comment
+        Book.Add(new SettingsPage("later", 20f, () => "Example_PageLater".Translate(), DrawLater))
+            .Add(new SettingsPage("first", 10f, () => "Example_PageFirst".Translate(), Drawing.DrawFirst));
+    }
+
+    static void DrawLater(SettingsList list)
+    {
+        ExampleSettings s = Settings;
+        list.Section("Example_SectionMore".Translate());
+        list.Check("Example_SettingMissing".Translate(), ref s.secret, false);
+        Drawing.DrawPart(list);
+    }
+
+    void Say() => Messages.Message("Example_Said".Translate(Settings.metres.Named("M")), null);
+}
+
+static class Drawing
+{
+    public static void DrawFirst(SettingsList list)
+    {
+        ExampleSettings s = ExampleMod.Settings;
+        list.Section("Example_SectionBlast".Translate());
+        list.Check("Example_SettingSpread".Translate(), ref s.spread, true, "Example_SettingSpreadDesc".Translate());
+        float budget = s.budgetMs;
+        list.Slider("Example_SettingBudget".Translate(budget.Named("MS")), ref budget, ExampleMod.Settings.budgetMs, 2f, 50f);
+        list.Choice("Example_SettingShelter".Translate(), s.shelter, Shelter.AnyRoof, new[] { Shelter.AnyRoof },
+            mode => ("Example_Shelter" + mode).Translate(), mode => ExampleMod.Settings.shelter = mode, tip: "Example_SettingShelterDesc".Translate());
+        list.Label("Example_SettingMetres".Translate(s.metres.ToString("0.0").Named("METRES")), tooltip: "Example_SettingMetresDesc".Translate());
+        s.metres = list.Slider(s.metres, 0.5f, 30f);
+    }
+
+    public static void DrawPart(SettingsList list)
+    {
+        list.Check("Example_SettingCoughing".Translate(), ref ExampleMod.Settings.part.coughing, true);
+    }
+}
+"""
+
+KEYED = """<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+  <Example_PageFirst>Strikes</Example_PageFirst>
+  <Example_PageLater>After-effects</Example_PageLater>
+  <Example_SectionBlast>The blast</Example_SectionBlast>
+  <Example_SectionMore>More</Example_SectionMore>
+  <Example_SettingSpread>Spread a blast | over moments</Example_SettingSpread>
+  <Example_SettingSpreadDesc>Off: &lt;color=#ffaa00&gt;one frame&lt;/color&gt;.\\nSlow.</Example_SettingSpreadDesc>
+  <Example_SettingBudget>Time each moment: {MS} ms</Example_SettingBudget>
+  <Example_SettingShelter>What shelters</Example_SettingShelter>
+  <Example_SettingShelterDesc>Overhead mountain.</Example_SettingShelterDesc>
+  <Example_ShelterAnyRoof>Any overhead mountain</Example_ShelterAnyRoof>
+  <Example_SettingMetres>Metres per cell: {METRES}</Example_SettingMetres>
+  <Example_SettingMetresDesc>Decide before you start.</Example_SettingMetresDesc>
+  <Example_SettingCoughing>Coughing</Example_SettingCoughing>
+  <Example_SettingCoughingDesc>People with smoke in their lungs cough.</Example_SettingCoughingDesc>
+</LanguageData>
+"""
+
 
 def write(path, text, newline="\n"):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -139,12 +245,18 @@ class Repo:
         write(self.root / "docs/building.md", "# Building\n\n<!-- generated: table dotnet-projects -->\nold\n<!-- end generated -->\n\nAfter.\n",
               "\r\n")
         write(self.root / "docs/players.md", "# Players\n\nWords of its own.\n")
+        write(self.root / "src/Core/Settings.cs", SETTINGS)
+        write(self.root / "mods/Core/Languages/English/Keyed/Settings.xml", KEYED)
+        write(self.root / "mods/Core/README.md", "# Core\n\n## Settings\n\n<!-- generated: table mod-settings -->\n"
+              "<!-- end generated -->\n\nA note of its own.\n\n## For modders\n")
         self.config({"schemaVersion": 1, "run": "python scripts/doc-tables.py --write", "tables": [
             {"doc": "docs/building.md", "kind": "dotnet-projects",
              "options": {"folders": ["src"], "testFolders": ["tests"], "output": "mods/{ModFolder}/{TieInFolder}"}},
             {"doc": "docs/building.md", "kind": "harmony-patches", "options": {"folders": ["src"]}},
             {"doc": "docs/players.md", "kind": "mod-requirements",
-             "options": {"game": "rimworld", "folders": ["mods"], "names": {"some.author.thing": "Some Thing"}}}]})
+             "options": {"game": "rimworld", "folders": ["mods"], "names": {"some.author.thing": "Some Thing"}}},
+            {"doc": "mods/Core/README.md", "kind": "mod-settings",
+             "options": {"game": "rimworld", "sources": ["src/Core"], "mod": "mods/Core"}}]})
 
     def config(self, data):
         write(self.root / "config/doc-tables.json", json.dumps(data))
@@ -246,11 +358,12 @@ class Command(unittest.TestCase):
         code, data = self.repo.run()
         self.assertEqual(code, doc_tables.EXIT_FAILED)
         states = {d["path"]: d["state"] for d in data["data"]["docs"]}
-        self.assertEqual(states, {"docs/building.md": "block missing", "docs/players.md": "block missing"})
+        self.assertEqual(states, {"docs/building.md": "block missing", "docs/players.md": "block missing",
+                                  "mods/Core/README.md": "out of date"})
         self.assertEqual(self.repo.text("docs/players.md"), "# Players\n\nWords of its own.\n")
         code, data = self.repo.run("--write")
         self.assertEqual(code, doc_tables.EXIT_OK)
-        self.assertEqual(sorted(data["data"]["written"]), ["docs/building.md", "docs/players.md"])
+        self.assertEqual(sorted(data["data"]["written"]), ["docs/building.md", "docs/players.md", "mods/Core/README.md"])
         self.assertEqual(self.repo.run()[0], doc_tables.EXIT_OK)
 
     def test_projects_table_in_place_keeping_line_endings(self):
@@ -293,6 +406,50 @@ class Command(unittest.TestCase):
         self.assertEqual(code, doc_tables.EXIT_OK)
         self.assertIn("No game adapter reads project-zomboid's mod requirements yet", self.repo.text("docs/players.md"))
         self.assertIn("Tables that say they cannot be made", [s["heading"] for s in data["report"]["sections"]])
+
+    def settings_rows(self):
+        self.repo.run("--write")
+        text = self.repo.text("mods/Core/README.md")
+        rows = [line for line in text.split("\n") if line.startswith("| ") and not line.startswith("| ---")]
+        return text, [[c.strip() for c in re.split(r"(?<!\\)\|", row.strip())[1:-1]] for row in rows]
+
+    def test_settings_in_window_order_with_labels_defaults_pages_and_sections(self):
+        text, rows = self.settings_rows()
+        self.assertEqual(rows[0], ["Setting", "What it does", "Default", "Page", "Section"])
+        self.assertEqual(rows[1], ["Spread a blast \\| over moments", "Off: one frame. Slow.", "On", "Strikes", "The blast"])
+        self.assertEqual(rows[2], ["Time each moment: ... ms", "", "12", "Strikes", "The blast"])
+        self.assertEqual(rows[3], ["What shelters", "Overhead mountain.", "Any overhead mountain", "Strikes", "The blast"])
+        self.assertEqual(rows[4], ["Metres per cell: ...", "Decide before you start.", "1", "Strikes", "The blast"])
+        self.assertEqual(rows[5], ["`Example_SettingMissing`", "", "Off", "After-effects", "More"])
+        self.assertEqual(rows[6], ["Coughing", "People with smoke in their lungs cough.", "On", "After-effects", "More"])
+        self.assertEqual(len(rows), 7)
+        self.assertLess(text.index("end generated"), text.index("A note of its own."))
+        self.assertIn("follow): `Example_Remembered`.", text)
+
+    def test_settings_not_read_in_full_are_reported(self):
+        code, data = self.repo.run("--write")
+        found = [t for t in data["data"]["tables"] if t["kind"] == "mod-settings"][0]["found"]
+        self.assertEqual(found["unresolved"], ["`Example_Secret`: its label key `Example_SettingMissing` is in no language file"])
+        self.assertIn("Settings not read in full", [s["heading"] for s in data["report"]["sections"]])
+        self.assertFalse({s["key"]: s["shown"] for s in found["settings"]}["Example_Remembered"])
+
+    def test_settings_for_a_game_without_an_adapter_say_so(self):
+        config = json.loads(self.repo.text("config/doc-tables.json"))
+        config["tables"][3]["options"]["game"] = "project-zomboid"
+        self.repo.config(config)
+        code, data = self.repo.run("--write")
+        self.assertEqual(code, doc_tables.EXIT_OK)
+        self.assertIn("No game adapter reads project-zomboid's mod settings yet", self.repo.text("mods/Core/README.md"))
+
+    def test_written_values(self):
+        enums = {"Shelter": ["AnyRoof", "ThickRoof"]}
+        constants = {"Budget.DefaultMs": "12f", "DefaultMs": "12f", "AnyRoof": "new()"}
+        self.assertEqual(rimworld_settings.written("Example.Budget.DefaultMs", enums, constants), "12")
+        self.assertEqual(rimworld_settings.written("Shelter.AnyRoof", enums, constants), "AnyRoof")
+        self.assertEqual(rimworld_settings.written("Other.AnyRoof", enums, constants), "Other.AnyRoof")
+        self.assertEqual(rimworld_settings.written("true", enums), "True")
+        self.assertEqual(rimworld_settings.written("0.50f", enums), "0.50")
+        self.assertEqual(rimworld_settings.shown_text("A {X}\\n<b>b</b>"), "A ... b")
 
     def test_config_problems_fail(self):
         self.repo.config({"schemaVersion": 1, "tables": [{"doc": "docs/players.md", "kind": "no-such-kind"},
