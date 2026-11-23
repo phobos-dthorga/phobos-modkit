@@ -4,6 +4,20 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.97.0] - 2026-11-23
+
+### Changed
+
+- **Workshop publishing reads each game from a data file** (the owner, 23 Nov 2026: "The Steam Workshop uploader should be
+  genericized as far as is possible"; first step of D'thorga Companion's Publish page). `games/<game>/workshop.json` says where a
+  game's mods keep their title, version, cover, tags and Workshop ID file, in XML, JSON or key=value form, found in any letter
+  case; `steam/publish/game_data.py` reads it, and the core names no game. RimWorld's and Ostranauts' Python adapters became game
+  files: the titles and versions of all 18 mods in phobos-rimworld and phobos-ostranauts read the same as before.
+- **A catalogue can describe its own game** in a `game` block of the same shape, for a game nobody has written a file for; with
+  `"format": "catalogue"` the title, version and tags come from each mod's catalogue entry, and the folder goes up as it is.
+- **Every candidate records the tags its item is given** (RimWorld: Mod and each supported version). The manifest's format is 4,
+  so candidates prepared before this are refused: prepare a fresh one. Guide: `docs/workshop-publishing.md`, "Games, as data".
+
 ## [1.96.0] - 2026-11-23
 
 ### Added

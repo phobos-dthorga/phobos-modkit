@@ -1,0 +1,12 @@
+{
+  "name": "ostranauts",
+  "title": "Ostranauts",
+  "appId": "1022980",
+  "metadata": {"file": "mod_info.json", "format": "json", "title": "0.strName", "version": "0.strModVersion"},
+  "preview": "preview.png",
+  "facts": [
+    "A mod folder holds mod_info.json, a JSON list whose first object names the mod in strName and gives its version in strModVersion.",
+    "The cover is preview.png at the top of the uploaded folder.",
+    "What a phobos-ostranauts package must hold (BepInEx plugin folders, read-only data headers, sounds) is that project's policy, not a format fact: its wrapper passes it in as the project's payload hook."
+  ]
+}

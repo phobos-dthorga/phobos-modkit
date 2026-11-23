@@ -182,12 +182,41 @@ what Steam returned; never invent one. A mod may carry its own `build` command.
 | `pageRules` | all on | `title`, `version`, `status` lines required on the page |
 | `build` | none | A command run before preparing, `{mod}` replaced |
 
-## Game adapters
+## Games, as data
 
-| Game | App | Title and version | Cover | Also |
-| --- | --- | --- | --- | --- |
-| RimWorld | 294100 | `About/About.xml` `<name>`, `<modVersion>` | `About/Preview.png` | Keeps `About/PublishedFileId.txt` in step; reminds about tags |
-| Ostranauts | 1022980 | `mod_info.json` `strName`, `strModVersion` | `preview.png` | |
+**Each game is a small data file, `python/phobos_modkit/games/<game>/workshop.json`** (1.97.0; the owner, 23 November 2026:
+"The Steam Workshop uploader should be genericized as far as is possible"). The core never names a game; the file says where a
+mod keeps what Steam needs. A repository whose game has no file describes it in its catalogue instead, as a `game` block of the
+same shape. `steam/publish/game_data.py` reads both.
+
+| Game | App | Title and version | Cover | Tags | The game's ID file |
+| --- | --- | --- | --- | --- | --- |
+| RimWorld | 294100 | `About/About.xml` `<name>`, `<modVersion>` | `About/Preview.png` | `Mod`, then each `<supportedVersions><li>` | `About/PublishedFileId.txt` |
+| Ostranauts | 1022980 | `mod_info.json` `0.strName`, `0.strModVersion` | `preview.png` | none | none |
+
+| Key | What it says |
+| --- | --- |
+| `appId`, `name`, `title` | The Steam app number, a short name, and the game's name for people |
+| `metadata` | `file` (relative to the mod folder, any letter case, `{mod}` allowed), `format` and the `title` and `version` fields |
+| `preview` | The cover, relative to the uploaded folder |
+| `tags` | `fixed` tags, then each `fields` value; a catalogue entry's own `tags` are added |
+| `idFile` | Where the game writes the item number: `file` and `format` (`text`, or `keyvalue` with `key` and `separator`) |
+| `layout` | The game's own defaults for the catalogue's layout keys; the catalogue still wins |
+| `reminders` | What the owner must still do on Steam afterwards |
+| `facts` | The format facts, in our own words, with their sources |
+| `hook` | Only where data cannot say it: a module beside the file (`.hook`) whose `read(adapter, folder, item)` gives the title and version |
+
+| Metadata format | A field is |
+| --- | --- |
+| `xml` | Child elements from the root joined by `/`, any letter case (`supportedVersions/li`); bare `&` forgiven |
+| `json` | Keys and list positions joined by `.` (`0.strName`) |
+| `keyvalue` | A key on `key=value` lines (`separator` changes `=`); a repeated key gives several values |
+| `catalogue` | The mod's own catalogue entry (`title`, `version`, `tags`), for mods with no such file |
+
+A game with no file at all, described only by a catalogue block with `"metadata": {"format": "catalogue"}`, uploads its folder as
+it is, with the title and version the catalogue gives. Moving RimWorld and Ostranauts to files changed nothing they read: the
+titles and versions of all 18 mods in phobos-rimworld and phobos-ostranauts came out the same (23 November 2026), and every
+candidate now records its `tags`.
 
 What a package must hold beyond its folder is the repository's policy, not the game's format. A wrapper passes it as
 a payload hook, `payload(project, mod) -> {relative path: bytes}`, which may also raise on a stale build:

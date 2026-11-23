@@ -67,6 +67,7 @@ class PublishError(ValueError):
 class ModInfo:
     title: str
     version: str
+    tags: tuple = ()
 
 
 class Adapter:
@@ -76,8 +77,8 @@ class Adapter:
     metadata = None          # a file, relative to a mod folder, that marks it as a mod
     preview = "preview.png"  # the cover, relative to the content folder
 
-    def read(self, folder):
-        """ModInfo for the mod in folder."""
+    def read(self, folder, item=None, mod=None):
+        """ModInfo for the mod in folder; item is its catalogue entry."""
         raise NotImplementedError
 
     def check(self, project, mod, item):
@@ -89,8 +90,12 @@ class Adapter:
         return []
 
     def after_upload(self, project, mod):
-        """Reminders printed after an upload, for things SteamCMD cannot do for this game."""
+        """Reminders printed after an upload, for things the owner must still do on Steam for this game."""
         return []
+
+    def layout(self):
+        """The game's own defaults for the catalogue's layout keys."""
+        return dict(getattr(self, "spec", {}).get("layout", {}))
 
 
 class Project:
@@ -99,7 +104,7 @@ class Project:
         self.config = config
         self.catalogue_path = catalogue_path
         self.adapter = adapter
-        self.layout = {**LAYOUT, **config.get("layout", {})}
+        self.layout = {**LAYOUT, **adapter.layout(), **config.get("layout", {})}
         self.payload_hook = payload
         self.cache_folder = cache_folder
 
@@ -114,9 +119,18 @@ class Project:
             raise PublishError(f"No Workshop catalogue at {relative(root, path)}")
         config = json.loads(path.read_text(encoding="utf-8-sig"))
         app = str(config.get("appId", ""))
-        if app not in adapters:
-            raise PublishError(f"No game adapter for Steam app {app or '(none)'}; known: {', '.join(sorted(adapters))}")
-        project = cls(root, config, path, adapters[app], payload, cache_folder)
+        if isinstance(config.get("game"), dict):
+            # A game nobody has written a game file for: the catalogue says it as data (steam/publish/game_data.py).
+            from .game_data import DataAdapter
+            adapter = DataAdapter({"appId": app, **config["game"]}, relative(root, path))
+            if adapter.app_id != app:
+                raise PublishError("The catalogue's game block names another Steam app than its appId")
+        elif app in adapters:
+            adapter = adapters[app]
+        else:
+            raise PublishError(f"No game file for Steam app {app or '(none)'}; known: {', '.join(sorted(adapters))}. "
+                               "A catalogue can describe its game itself in a \"game\" block.")
+        project = cls(root, config, path, adapter, payload, cache_folder)
         if validate:
             project.validate()
         return project
@@ -139,8 +153,10 @@ class Project:
         if not template.endswith("/{mod}"):
             raise PublishError('layout "mod" must end in /{mod}')
         parent = inside(self.root, template[: -len("/{mod}")])
+        from .game_data import find
         marker = self.adapter.metadata
-        return sorted(p.name for p in parent.iterdir() if p.is_dir() and (not marker or (p / marker).is_file()))
+        return sorted(p.name for p in parent.iterdir()
+                      if p.is_dir() and (not marker or find(p, marker.format(mod=p.name)).is_file()))
 
     def resolve(self, name):
         """A catalogue name from its full form or a unique ending, ignoring case: Framework for PhobosFramework."""
@@ -158,7 +174,7 @@ class Project:
         return names
 
     def info(self, mod):
-        info = self.adapter.read(self.path("mod", mod))
+        info = self.adapter.read(self.path("mod", mod), self.mods[mod], mod)
         if not VERSION.fullmatch(info.version or ""):
             raise PublishError(f"{mod}: version {info.version!r} is not a number like 1.2.3")
         if not info.title or any(c in info.title for c in "[]\n\r"):

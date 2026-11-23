@@ -14,7 +14,6 @@ from unittest import mock
 
 import support  # noqa: F401
 from phobos_modkit.games import publish_adapters
-from phobos_modkit.games.ostranauts.publish import Ostranauts
 from phobos_modkit.steam import vdf
 from phobos_modkit.steam.publish import cli, notes, pull, stage, upload, worksheets
 from phobos_modkit.steam.publish.project import Project, PublishError
@@ -383,7 +382,7 @@ class Publishing(unittest.TestCase):
         folder = Path(self.tmp.name) / "ostranauts"
         folder.mkdir()
         (folder / "mod_info.json").write_text(json.dumps([{"strName": "Example", "strModVersion": "1.2.3"}]))
-        info = Ostranauts().read(folder)
+        info = publish_adapters()["1022980"].read(folder)
         self.assertEqual((info.title, info.version), ("Example", "1.2.3"))
 
     def test_command_line_reports(self):

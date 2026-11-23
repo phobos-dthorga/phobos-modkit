@@ -2,10 +2,11 @@
 
 
 def publish_adapters():
-    """{Steam app ID: Adapter} for every game whose mods the Workshop publishing tools can read."""
-    from .ostranauts.publish import Ostranauts
-    from .rimworld.publish import RimWorld
-    return {adapter.app_id: adapter for adapter in (RimWorld(), Ostranauts())}
+    """{Steam app ID: Adapter} for every game whose mods the Workshop publishing tools can read: one per
+    games/<game>/workshop.json, a game file of data (steam/publish/game_data.py, 1.97.0)."""
+    from pathlib import Path
+    from ..steam.publish.game_data import load_folder
+    return load_folder(Path(__file__).parent, __name__)
 
 
 # The games whose lists of active mods the mod-list check reads (1.72.0): (id, name, Steam app ID, module with adapter()).

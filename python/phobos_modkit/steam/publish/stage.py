@@ -18,7 +18,7 @@ from .. import vdf
 from . import notes
 from .project import ITEM_ID, VERSION, PublishError
 
-MANIFEST_FORMAT = 3
+MANIFEST_FORMAT = 4  # 4 (1.97.0): the tags the item is given
 PAGE_FILE, NOTE_FILE = "Workshop-page.bbcode", "Release-notes.bbcode"
 PUBLIC_STATUS = "[b]Publication status:[/b] Public on the Steam Workshop"
 UNPUBLISHED_STATUS = re.compile(r"(?m)^\[b\]Publication status:\[/b\] Not published\b.*$")
@@ -91,7 +91,7 @@ def plan(project, mod):
         else:
             blockers.append(f"{dependency} has no published item ID yet; publish it first")
     manifest = {"format": MANIFEST_FORMAT, "mod": mod, "title": info.title, "version": info.version,
-                "appId": str(project.config["appId"]), "itemId": item.get("itemId"),
+                "appId": str(project.config["appId"]), "itemId": item.get("itemId"), "tags": list(info.tags),
                 "operation": "update" if item.get("itemId") else "create", "preview": preview,
                 "blockers": blockers, "requiredItems": required_ids, "requiredItemDetails": required,
                 "uploadedVersion": uploaded, "changeNoteVersions": covered, "changeNoteOmitted": omitted,
