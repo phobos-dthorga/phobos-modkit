@@ -20,6 +20,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 from ...files import inside, sha256
 from ...progress import Progress
@@ -308,9 +309,20 @@ def build(project, mod, run=subprocess.run):
     command = project.mods[mod].get("build") or project.layout["build"]
     if not command:
         return False
-    if run([part.format(mod=mod) for part in command], cwd=project.root).returncode:
+    # The build's own output goes to standard error (1.105.1), so a program reading --json on standard output still gets
+    # one whole answer; progress lines a build writes reach the program there too.
+    if run([part.format(mod=mod) for part in command], cwd=project.root, stdout=build_output()).returncode:
         raise PublishError(f"The build failed for {mod}; no candidate prepared.")
     return True
+
+
+def build_output():
+    """Where a build's standard output goes: this process's standard error, when it is a real stream."""
+    try:
+        sys.stderr.fileno()
+        return sys.stderr
+    except (AttributeError, OSError, ValueError):
+        return subprocess.DEVNULL
 
 
 def update_all(project, mods=None, say=print, no_build=False, what_if=False, acknowledge_hold=False,

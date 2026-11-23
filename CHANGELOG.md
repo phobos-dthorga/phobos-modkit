@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.105.1] - 2026-11-23
+
+### Fixed
+
+- **A build before preparing no longer spoils the JSON answer**: `steam-publish prepare --build` and `update` send the
+  build's own output to standard error, so a program reading `--json` (D'thorga Companion's Build first and Update all
+  waiting) gets one whole answer. Found building a phobos-ostranauts package through its new build command.
+
 ## [1.105.0] - 2026-11-23
 
 ### Changed

@@ -105,6 +105,15 @@ class Editing(unittest.TestCase):
         self.assertTrue(any("What-if" in line for line in data["lines"]))
         self.assertEqual(answer["report"]["lines"], data["lines"])
 
+    def test_a_noisy_build_leaves_the_json_whole(self):
+        import sys
+        config = json.loads((self.root / "config/workshop-publishing.json").read_text(encoding="utf-8"))
+        config["layout"]["build"] = [sys.executable, "-c", "print('build output that must not reach the JSON')"]
+        self.write("config/workshop-publishing.json", json.dumps(config, indent=2) + "\n")
+        code, answer = self.run_cli("prepare", "Base", "--build")
+        self.assertEqual(code, 0)
+        self.assertEqual(answer["data"]["manifest"]["mod"], "Base")
+
     def test_an_upload_answers_with_its_receipt(self):
         import test_steam_publish_client as client_tests
         from phobos_modkit.steam.publish import senders

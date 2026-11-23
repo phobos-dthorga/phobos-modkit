@@ -309,7 +309,7 @@ class Publishing(unittest.TestCase):
         self.project.save()
         self.project.layout["build"] = ["build-tool", "{mod}"]
         built = []
-        build = lambda command, cwd: built.append(command) or subprocess.CompletedProcess(command, 0)
+        build = lambda command, cwd, **_: built.append(command) or subprocess.CompletedProcess(command, 0)
         self.assertEqual(upload.update_all(self.project, say=self.lines.append, what_if=True), [])
         self.assertEqual(built, [])
         steam = SteamCmd(returns=None)
