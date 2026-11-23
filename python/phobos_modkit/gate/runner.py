@@ -14,6 +14,9 @@ config/gate.json:
       ]
     }
 
+A step may say it "holds" a lock by name ("holds": "build", 1.103.0): its lane then runs inside the repository's lock of that name
+(build_lock), so a gate and another tool building the same projects into the same folders never build at once; the second waits.
+
 Placeholders in a step's name, run, cwd and env: {python} (this interpreter), {root}, {cargo_target} (where the kit's
 Rust tools build), {env:NAME}; and for an "each" step {path} (relative, forward slashes), {name}, {stem} and {dir}.
 A step whose "requires" program is not on the PATH is skipped and says so. A failed stage stops the stages after it,
@@ -33,7 +36,7 @@ import subprocess
 import sys
 import time
 
-from .. import native
+from .. import build_lock, native
 from .parsers import PARSERS, Parsed
 
 CONFIG = "config/gate.json"
@@ -56,6 +59,7 @@ class Step:
     env: dict = field(default_factory=dict)
     requires: str = ""
     timeout: int = DEFAULT_TIMEOUT
+    holds: str = ""                   # a lock the step's lane holds while it runs (build_lock; 1.103.0)
 
 
 @dataclass
@@ -121,7 +125,8 @@ def load(root, config=CONFIG, environ=None):
                     cwd=substitute(spec.get("cwd", ""), values, environ),
                     env={k: substitute(v, values, environ) for k, v in spec.get("env", {}).items()},
                     requires=spec.get("requires", ""),
-                    timeout=int(spec.get("timeout", DEFAULT_TIMEOUT))))
+                    timeout=int(spec.get("timeout", DEFAULT_TIMEOUT)),
+                    holds=str(spec.get("holds", ""))))
         stages.append((stage_name, steps))
     return stages
 
@@ -172,7 +177,35 @@ def run_step(step, root, environ, logs=None, which=shutil.which, runner=subproce
     return result
 
 
-def run(stages, root, environ=None, jobs=4, keep_going=False, logs=None, **step_options):
+def run_locked(lane_steps, locks, root, work, lock_options=None):
+    """
+    Runs a lane's steps inside the repository's locks it names (1.103.0), one after another in name order so two gates never wait on
+    each other crosswise. A wait shows as a warning on the lane's first step; a lock held past its wait fails every step of the lane,
+    saying who held it.
+    """
+    options = dict(lock_options or {})
+    waits = []
+
+    def nest(index):
+        if index == len(locks):
+            return work()
+        lane = lane_steps[0].lane
+        with build_lock.held(root, f"a gate ({lane})", name=locks[index], **options) as taken:
+            if taken.waited_for is not None:
+                waits.append(f"waited {taken.waited_s:.0f} s for {build_lock.describe(taken.waited_for)} to let go of the "
+                             f"{locks[index]} lock")
+            return nest(index + 1)
+
+    try:
+        results = nest(0)
+    except build_lock.BuildBusy as busy:
+        return [Result(s, "failed", parsed=Parsed(summary=str(busy), problems=[str(busy)])) for s in lane_steps]
+    if waits and results:
+        results[0].parsed.warnings.extend(waits)
+    return results
+
+
+def run(stages, root, environ=None, jobs=4, keep_going=False, logs=None, lock_options=None, **step_options):
     """Every stage in order; inside one, each lane's steps in order and the lanes side by side. Returns all results."""
     environ = os.environ if environ is None else environ
     results, stopped = [], False
@@ -185,7 +218,11 @@ def run(stages, root, environ=None, jobs=4, keep_going=False, logs=None, **step_
             lanes.setdefault(step.lane, []).append(step)
 
         def run_lane(lane_steps):
-            return [run_step(s, root, environ, logs, **step_options) for s in lane_steps]
+            locks = sorted({s.holds for s in lane_steps if s.holds})
+            if not locks:
+                return [run_step(s, root, environ, logs, **step_options) for s in lane_steps]
+            return run_locked(lane_steps, locks, root, lambda: [run_step(s, root, environ, logs, **step_options) for s in lane_steps],
+                              lock_options)
 
         with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
             done = list(pool.map(run_lane, lanes.values()))

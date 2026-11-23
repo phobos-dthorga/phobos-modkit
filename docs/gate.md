@@ -82,6 +82,7 @@ a consumer's thin script (phobos-rimworld: `python scripts/check-all.py`).
 | `requires` | A program that must be on the PATH, else the step is skipped |
 | `cwd`, `env` | A folder relative to the root; extra environment variables |
 | `timeout` | Seconds before the step is stopped (default 1800) |
+| `holds` | A lock the step's lane holds while it runs, by name, such as `build` (1.103.0): the lane waits while another tool builds the same repository (an install script, another session's gate) and fails, naming the holder, after 15 minutes. Give every step that builds into the repository's own output folders `"holds": "build"`; see [the build lock](#the-build-lock) |
 
 Placeholders work in `name`, `run`, `cwd` and `env`: `{python}` (the interpreter running the gate), `{root}`,
 `{cargo_target}` (where the kit's Rust tools build, outside any repository), `{env:NAME}`; and in an `each` step
@@ -101,6 +102,18 @@ Placeholders work in `name`, `run`, `cwd` and `env`: `{python}` (the interpreter
 The formats are the tools' console output as their authors print it (Microsoft's MSBuild and VSTest, the Python
 project's unittest, the Rust project's cargo); the tests use outputs written by hand in those shapes. Anything a
 parser does not recognise still fails the step by its exit code, with the output's tail.
+
+## The build lock
+
+**One build at a time in a repository** (1.103.0; the owner's report of 23 Nov 2026: an install failed with "being used by another
+process" because another session's gate was building the same projects at the same moment). `phobos_modkit.build_lock.held(root,
+purpose)` holds the repository's lock while a block runs; another holder makes it wait, saying who holds it and since when, then go on.
+It gives up after 15 minutes (`BuildBusy`, naming the holder), and a lock older than an hour is one a stopped run left behind, broken
+on sight. The lock files live in the kit's cache (`locks/`), one per repository and name, never in a repository.
+
+- **The gate** takes it for every lane with a step that `holds` it; a wait shows as a warning on the lane's first step.
+- **A repository's own build scripts** take it around their builds: `with build_lock.held(ROOT, "an install", log=print): ...`.
+- It guards only builds that go through these tools. A build run by hand, or by an editor, can still meet one.
 
 ## Limits
 

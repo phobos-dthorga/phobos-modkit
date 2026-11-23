@@ -25,10 +25,12 @@ def isolated_environ(tmp=None, **extra):
     """An environment for a test that points the history log, the central settings file and D'thorga Companion's own data folder
     into tmp (or the run's folder). Without LOCALAPPDATA and XDG_DATA_HOME, `paths.companion_data` falls back to the home folder,
     so a test reaching the Companion's folder wrote there (seen 23 Nov 2026: safe-copies' run-all record, where two runs at once
-    collided)."""
+    collided). Since 1.103.0 the kit's cache too (PHOBOS_MODKIT_CACHE): the gate runs the tests on two Pythons side by side, and
+    installs' backup peeks, unpacked into the shared cache, were deleted by one run under the other (seen 23 Nov 2026)."""
     folder = Path(tmp) if tmp else _RUN_FOLDER
     return {"PHOBOS_HISTORY": str(folder / "history"), "PHOBOS_SETTINGS": str(folder / "settings.json"),
-            "LOCALAPPDATA": str(folder / "local-app-data"), "XDG_DATA_HOME": str(folder / "data-home"), **extra}
+            "LOCALAPPDATA": str(folder / "local-app-data"), "XDG_DATA_HOME": str(folder / "data-home"),
+            "PHOBOS_MODKIT_CACHE": str(folder / "modkit-cache"), **extra}
 
 
 def fixture_text(relative):

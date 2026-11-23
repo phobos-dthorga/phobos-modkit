@@ -4,6 +4,23 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.103.0] - 2026-11-23
+
+### Added
+
+- **One build at a time in a repository** (the owner's report of 23 Nov 2026, and "Build the lock in phobos-modkit": an install's build
+  failed because another session's gate was building the same projects into the same folders at the same moment). `build_lock.held`
+  holds a repository's build lock, in the kit's cache; a second build waits, saying who holds it and since when, and goes on, or after
+  15 minutes gives up naming the holder; a lock older than an hour is broken. The gate's steps may say `"holds": "build"`, so their
+  lane runs inside the lock and a wait shows as a warning. Consumers add `holds` to their build steps and take the lock in their own
+  install scripts ([gate.md](docs/gate.md), "The build lock").
+
+### Fixed
+
+- **The tests' isolated environment points the kit's cache into the test's own folder too.** The gate runs the tests on two Pythons
+  side by side, and installs' backup peeks, unpacked into the one shared cache, could be deleted by one run under the other, failing
+  `test_status_reads_a_zipped_backup_and_copies_out_a_changed_picture_to_compare` now and then.
+
 ## [1.102.0] - 2026-11-23
 
 ### Added

@@ -40,6 +40,8 @@ class ListTests(unittest.TestCase):
     def test_each_setting_says_where_its_value_comes_from(self):
         with tempfile.TemporaryDirectory() as tmp:
             env = central(tmp, {"assemblyArchivePath": str(Path(tmp))})
+            # The kit's cache left to its default here, so one setting shows that layer (isolated_environ sets it since 1.103.0).
+            env.pop("PHOBOS_MODKIT_CACHE", None)
             repo = Path(tmp) / "repo"
             (repo / "config").mkdir(parents=True)
             (repo / ".local").mkdir()

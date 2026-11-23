@@ -2,7 +2,7 @@
 
 A lock is a file created only if it is not there; whoever created it holds it until it is deleted. A run waits up to `wait_s` for
 another to let go, and breaks a lock older than `stale_s`, which a run that stopped without letting go left behind. The claims
-board, safe copies' destinations and the build of the kit's C# tools each hold one.
+board, safe copies' destinations, the build of the kit's C# tools and a repository's builds (build_lock, 1.103.0) each hold one.
 """
 from __future__ import annotations
 
