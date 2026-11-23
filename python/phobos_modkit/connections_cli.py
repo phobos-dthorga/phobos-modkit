@@ -7,6 +7,7 @@
     connections changed --root REPO --commit HASH        the things a commit changed, by the lines it changed
     connections history --root REPO --node ID           the commits that changed a thing's lines, with the entries they wrote
     connections names --root REPO --file F [--commit HASH]   what every name in one file is, and where it is declared
+    connections calls --root REPO --commit HASH [--game G]   what a commit did to its C# methods' calls; rings made or cut
 
 C# is read exactly from the assemblies the repository builds (calls, fields, inheritance, overrides, Harmony patches), and by
 name from the source where none is built; XML Defs from the files; Lua by name; Python by its own parser. Every connection says
@@ -23,7 +24,7 @@ import re
 import subprocess
 import sys
 
-from . import changes, code_names, connections
+from . import changes, code_calls, code_names, connections
 from .connections import csharp, defs, lineage, lua, pycode
 from .manifest import READS
 from .progress import Progress
@@ -49,7 +50,8 @@ def _parser():
                            ("flow", "who calls one thing and what it calls, a few steps each way"),
                            ("changed", "the things a commit changed"),
                            ("history", "the commits that changed one thing's lines, with the changelog entries they wrote"),
-                           ("names", "what every name in one file is, and where it is declared")):
+                           ("names", "what every name in one file is, and where it is declared"),
+                           ("calls", "what a commit did to its C# methods' calls, and the rings of calls it made or cut")):
         s = sub.add_parser(name, help=helptext)
         s.add_argument("--root", help="the repository (default: the current folder)")
         if name == "find":
@@ -68,6 +70,9 @@ def _parser():
         if name == "names":
             s.add_argument("--file", required=True, help="the file (C#, Lua, Python or XML), relative to the repository")
             s.add_argument("--commit", help="read the file as it stood at this commit (other files as they stand now)")
+        if name == "calls":
+            s.add_argument("--commit", required=True, help="the commit")
+            s.add_argument("--game", help="the game the repository's mods are for (rimworld), to follow a ring through its own code")
         s.add_argument("--rebuild", action="store_true", help="read every file again, whatever the cache holds")
         s.add_argument("--top", type=int, default=60, help="rows per table (default 60)")
         s.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
@@ -239,6 +244,37 @@ def names_report(root, args, environ, progress, run=subprocess.run, tool=None):
     return report, found
 
 
+def _ring_words(ring):
+    return " → ".join(step["display"] for step in ring) + f" → {ring[0]['display']}"
+
+
+def calls_report(root, args, environ, progress, run=subprocess.run, tool=None, reader=None):
+    """What a commit did to its C# methods' calls, and the rings of calls it made or cut (1.116.0)."""
+    if not COMMIT.match(args.commit):
+        raise connections.ConnectionsError(f"{args.commit!r} is not a commit.")
+    try:
+        found = code_calls.read(root, args.commit, args.game, environ, run, progress, tool, reader)
+    except code_names.NamesError as error:
+        raise connections.ConnectionsError(str(error)) from None
+    made, cut = found["rings"]["made"], found["rings"]["cut"]
+    report = Report(f"Calls: {found['commit']['hash'][:8]} changed {len(found['methods']):,} methods' calls"
+                    + (f"; made {len(made)} ring{'s' if len(made) != 1 else ''}" if made else "")
+                    + (f"; cut {len(cut)} ring{'s' if len(cut) != 1 else ''}" if cut else ""))
+    if found["commit"]["subject"]:
+        report.lines.append(f"{found['commit']['subject']}.")
+    for limit in found["limits"]:
+        report.lines.append(limit)
+    report.section("Methods", Table(
+        ["Method", "What happened", "Calls gone", "Calls new", "Kept"],
+        [[m["display"], m["status"], f"{len(m['gone']):,}", f"{len(m['new']):,}", f"{len(m['kept']):,}"]
+         for m in found["methods"][:args.top]], total=len(found["methods"])))
+    if made:
+        report.section("Rings this commit made", Bullets([_ring_words(r) for r in made]))
+    if cut:
+        report.section("Rings this commit cut", Bullets([_ring_words(r) for r in cut]))
+    return report, found
+
+
 def main(argv=None, environ=None, out=None):
     out = out or sys.stdout
     environ = os.environ if environ is None else environ
@@ -255,8 +291,8 @@ def main(argv=None, environ=None, out=None):
             raise connections.ConnectionsError(f"{root} is not a folder.")
         if getattr(args, "node", None) and not NODE.match(args.node):
             raise connections.ConnectionsError(f"{args.node!r} is not a thing's id.")
-        if args.report == "names":
-            report, data = names_report(root, args, environ, progress)
+        if args.report in ("names", "calls"):
+            report, data = (names_report if args.report == "names" else calls_report)(root, args, environ, progress)
             data = {"repository": root.name, **data}
             out.write((envelope_text("connections", report, redact, data) if args.json else render_markdown(report, redact)) + "\n")
             return code
@@ -295,4 +331,5 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS,
                         "flow": {"note": "the calls around one thing, a few steps each way; needs its id"},
                         "changed": {"note": "the things a commit changed; needs the commit"},
                         "history": {"note": "the commits that changed one thing, with the entries they wrote; needs its id"},
-                        "names": {"note": "what every name in one file is and where it is declared; needs the file"}}}
+                        "names": {"note": "what every name in one file is and where it is declared; needs the file"},
+                        "calls": {"note": "what a commit did to its C# methods' calls, and rings made or cut; needs the commit"}}}

@@ -31,3 +31,23 @@ def mod_list_game(name=None, app_id=None):
 def mod_list_adapter(row, environ=None, settings=None, data=None, steam=None):
     from importlib import import_module
     return import_module(row[3], __name__).adapter(environ, settings, data, steam)
+
+
+# The games whose own .NET assemblies a code tool may read for the method bodies a reference package leaves empty (1.116.0,
+# `connections calls`' rings through the game's code): (id, module with real_assemblies(environ)). A next game adds a row.
+REAL_ASSEMBLY_GAMES = (
+    ("rimworld", ".rimworld.code_bodies"),
+)
+
+
+def real_assemblies(game, environ=None):
+    """The game's own .NET assemblies on this computer, for their method bodies; empty when no game is named, the game has no
+    reader of them yet, or it is not installed here."""
+    from importlib import import_module
+    for row in REAL_ASSEMBLY_GAMES:
+        if game and _plain(game) == _plain(row[0]):
+            try:
+                return list(import_module(row[1], __name__).real_assemblies(environ))
+            except (OSError, ValueError):
+                return []
+    return []

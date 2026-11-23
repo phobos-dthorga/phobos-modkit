@@ -26,7 +26,19 @@ public sealed record ProjectIn(
     string? Defines,
     bool AllowUnsafe);
 
-public sealed record Request(List<ProjectIn> Projects, string Project, string File, string? Text, string Root, int Context);
+/// <summary>
+/// What to read: one file's names (`Project`, `File`, its `Text` at a commit), or, with `Versions`, the calls of every method in
+/// `Files` in each version (1.116.0).
+/// </summary>
+public sealed record Request(
+    List<ProjectIn> Projects,
+    string? Project,
+    string? File,
+    string? Text,
+    string Root,
+    int Context,
+    List<VersionIn>? Versions = null,
+    List<string>? Files = null);
 
 public sealed record Declared(string? File, int? Line, int? End, string? Assembly);
 
@@ -71,7 +83,9 @@ public static class Program
         {
             var request = JsonSerializer.Deserialize<Request>(File.ReadAllText(args[0]), Json)
                 ?? throw new InvalidDataException("the request is empty");
-            Console.Out.Write(JsonSerializer.Serialize(Read(request), Json));
+            Console.Out.Write(request.Versions != null
+                ? JsonSerializer.Serialize(Calls.Read(request), Json)
+                : JsonSerializer.Serialize(Read(request), Json));
             return 0;
         }
         catch (Exception problem) when (problem is IOException or InvalidDataException or JsonException or ArgumentException)
@@ -84,56 +98,19 @@ public static class Program
     public static Answer Read(Request request)
     {
         var clock = Stopwatch.StartNew();
-        var projects = request.Projects.ToDictionary(p => Full(p.Path), StringComparer.OrdinalIgnoreCase);
+        if (request.File == null || request.Project == null) throw new InvalidDataException("names are read from one file of one project");
         var target = Full(request.File);
-        var built = new Dictionary<string, CSharpCompilation>(StringComparer.OrdinalIgnoreCase);
-        var building = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var missing = 0;
-
-        CSharpCompilation Build(ProjectIn project)
-        {
-            var key = Full(project.Path);
-            if (built.TryGetValue(key, out var done)) return done;
-            if (!building.Add(key)) throw new InvalidDataException($"{project.Name} refers to itself through another project");
-            var parse = new CSharpParseOptions(
-                LanguageVersionFacts.TryParse(project.LangVersion ?? "latest", out var version) ? version : LanguageVersion.Latest,
-                preprocessorSymbols: (project.Defines ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-            var trees = new List<SyntaxTree>();
-            foreach (var source in project.Sources.Select(Full).Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                var text = string.Equals(source, target, StringComparison.OrdinalIgnoreCase) && request.Text != null
-                    ? File.ReadAllText(request.Text)
-                    : File.Exists(source) ? File.ReadAllText(source) : null;
-                if (text != null) trees.Add(CSharpSyntaxTree.ParseText(SourceText.From(text), parse, source));
-            }
-            var references = new List<MetadataReference>();
-            foreach (var reference in project.References)
-            {
-                if (reference.Project != null && projects.TryGetValue(Full(reference.Project), out var other))
-                    references.Add(Build(other).ToMetadataReference());
-                else if (File.Exists(reference.Path))
-                    references.Add(MetadataReference.CreateFromFile(reference.Path));
-                else
-                    missing++;
-            }
-            var options = new CSharpCompilationOptions(
-                OutputKind.DynamicallyLinkedLibrary,
-                nullableContextOptions: project.Nullable?.Equals("enable", StringComparison.OrdinalIgnoreCase) == true
-                    ? NullableContextOptions.Enable
-                    : NullableContextOptions.Disable,
-                allowUnsafe: project.AllowUnsafe);
-            var compilation = CSharpCompilation.Create(project.Name, trees, references, options);
-            built[key] = compilation;
-            return compilation;
-        }
-
-        if (!projects.TryGetValue(Full(request.Project), out var asked))
-            throw new InvalidDataException("the project asked for is not among the projects given");
-        var compilation = Build(asked);
+        var texts = new Dictionary<string, string?>();
+        if (request.Text != null) texts[target] = request.Text;
+        var builder = new Builder(request.Projects, texts);
+        var asked = builder.Project(request.Project)
+            ?? throw new InvalidDataException("the project asked for is not among the projects given");
+        var compilation = builder.Build(asked);
         var tree = compilation.SyntaxTrees.FirstOrDefault(t => string.Equals(t.FilePath, target, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidDataException($"{Relative(request.Root, target)} is not one of {asked.Name}'s source files");
         var model = compilation.GetSemanticModel(tree);
-        var ours = new HashSet<SyntaxTree>(built.Values.SelectMany(c => c.SyntaxTrees));
+        var ours = new HashSet<SyntaxTree>(builder.Built.SelectMany(c => c.SyntaxTrees));
+        var missing = builder.Missing;
 
         var names = new List<Name>();
         var snippets = new Dictionary<string, Snippet>();

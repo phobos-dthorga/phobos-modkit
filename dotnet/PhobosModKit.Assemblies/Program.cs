@@ -11,16 +11,23 @@ using Phobos.ModKit.Assemblies;
 // PhobosModKit.Assemblies refs FILE...                one JSON object per assembly: its own name and version, the names of
 //                                                     the assemblies it is built on (its AssemblyRef table, 1.84.0), and
 //                                                     those its types inherit from.
+// PhobosModKit.Assemblies calls-of @METHODS FILE...   as calls, but only the methods METHODS names, one "Type<TAB>Name" a line
+//                                                     (1.116.0: a game's own methods a change hands on to, for rings).
 // FILE may be @LISTFILE, one path per line. Reads metadata only: an assembly is opened as a file and never loaded or run.
 // A file that is not a readable .NET assembly gives an object with an error instead of stopping the run.
-if (args.Length < 1 || (args[0] != "patches" && args[0] != "members" && args[0] != "calls" && args[0] != "refs"))
+string[] commands = ["patches", "members", "calls", "refs", "calls-of"];
+if (args.Length < 1 || !commands.Contains(args[0]) || (args[0] == "calls-of" && (args.Length < 3 || !args[1].StartsWith('@'))))
 {
     Console.Error.WriteLine("usage: PhobosModKit.Assemblies patches FILE...   (or patches @LISTFILE, one path per line)");
     Console.Error.WriteLine("       PhobosModKit.Assemblies members @TYPESFILE FILE...");
     Console.Error.WriteLine("       PhobosModKit.Assemblies calls FILE...");
     Console.Error.WriteLine("       PhobosModKit.Assemblies refs FILE...");
+    Console.Error.WriteLine("       PhobosModKit.Assemblies calls-of @METHODSFILE FILE...");
     return 2;
 }
+HashSet<(string, string)> wantedMethods = args[0] == "calls-of"
+    ? File.ReadAllLines(args[1][1..]).Select(line => line.Split('\t')).Where(p => p.Length == 2).Select(p => (p[0], p[1])).ToHashSet()
+    : [];
 var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 using Stream stdout = Console.OpenStandardOutput();
 using var writer = new StreamWriter(stdout, new System.Text.UTF8Encoding(false));
@@ -39,7 +46,7 @@ if (args[0] == "members")
     return 0;
 }
 
-foreach (string file in Files(args.Skip(1)))
+foreach (string file in Files(args.Skip(args[0] == "calls-of" ? 2 : 1)))
 {
     object result;
     try
@@ -66,6 +73,17 @@ foreach (string file in Files(args.Skip(1)))
             var callReader = new CallReader(pe);
             var (types, methods) = callReader.Read();
             result = new { path = file, assembly = callReader.AssemblyName, types, methods };
+        }
+        else if (args[0] == "calls-of")
+        {
+            var callReader = new CallReader(pe);
+            var (_, methods) = callReader.Read();
+            result = new
+            {
+                path = file,
+                assembly = callReader.AssemblyName,
+                methods = methods.Where(m => wantedMethods.Contains((m.Type, m.Name))).ToList(),
+            };
         }
         else
         {

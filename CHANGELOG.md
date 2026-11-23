@@ -4,6 +4,20 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.116.0] - 2026-11-24
+
+### Added
+
+- **`connections calls` says what a commit did to its C# methods' calls, and the rings of calls it made or cut** (the owner's go
+  for D'thorga Companion's step 6, 24 Nov 2026: "proceed with steps 5 and 6"). The names reader (Roslyn) reads every method in
+  the C# files the commit changed twice, before and after it, and gives each changed method's calls gone, new and kept, and calls
+  that moved whole into another method. A ring is followed through our code, a virtual call on the same object into an override
+  of ours, and, with `--game`, a game method a change hands on to whose own body calls back into ours: the game's real assemblies
+  are read for it (`calls-of`, a new command of the assembly reader; a game's adapter offers them through
+  `games.real_assemblies`, RimWorld's now), since the reference package mods build against has empty bodies. On phobos-rimworld's
+  stove-bills fix it finds exactly the cut ring behind the crashes of 23 Nov 2026 (`AvailableOnNow → AvailableReport → the game's
+  RecipeWorker.AvailableReport`), in about 7 s. See [connections](docs/connections.md).
+
 ## [1.115.0] - 2026-11-24
 
 ### Added

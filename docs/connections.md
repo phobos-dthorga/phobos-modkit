@@ -28,6 +28,7 @@ python -m phobos_modkit connections flow --root REPO --node cs:Phobos.Framework.
 python -m phobos_modkit connections changed --root REPO --commit 3352e4da
 python -m phobos_modkit connections history --root REPO --node cs:Phobos.Framework.TopUp.Seen.Note [--limit 100]
 python -m phobos_modkit connections names --root REPO --file src/Mod/Sail.cs [--commit 3352e4da]
+python -m phobos_modkit connections calls --root REPO --commit 5c122faf [--game rimworld]
 ```
 
 Add `--json` for the envelope ([common options](common-options.md)); `--rebuild` reads every file again.
@@ -46,6 +47,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `changed` | The things a commit changed. The things a commit changed; needs the commit. | reads only |
 | `history` | The commits that changed one thing's lines, with the changelog entries they wrote. The commits that changed one thing, with the entries they wrote; needs its id. | reads only |
 | `names` | What every name in one file is, and where it is declared. What every name in one file is and where it is declared; needs the file. | reads only |
+| `calls` | What a commit did to its C# methods' calls, and the rings of calls it made or cut. What a commit did to its C# methods' calls, and rings made or cut; needs the commit. | reads only |
 
 | Option | Reports | What it does | Default |
 | --- | --- | --- | --- |
@@ -57,13 +59,14 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--outside` | `find` | also the game's and other mods' things the code uses |  |
 | `--node VALUE` | `around`, `flow`, `history` | a thing's id, as find gives it (cs:..., def:..., lua:..., py:...). Required. |  |
 | `--depth N` | `flow` | steps each way (default 2). One of `1`, `2`, `3`. | `2` |
-| `--commit VALUE` | `changed` | the commit. Required. |  |
+| `--commit VALUE` | `changed`, `calls` | the commit. Required. |  |
 | `--limit N` | `history` | commits to give, newest first (default 25, at most 500) | `25` |
 | `--file VALUE` | `names` | the file (C#, Lua, Python or XML), relative to the repository. Required. |  |
 | `--commit VALUE` | `names` | read the file as it stood at this commit (other files as they stand now) |  |
+| `--game VALUE` | `calls` | the game the repository's mods are for (rimworld), to follow a ring through its own code |  |
 
 - Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
-- [Common options](common-options.md) explains `--root`, `--top`, `--json` and `--no-redact`, which many commands share.
+- [Common options](common-options.md) explains `--root`, `--game`, `--top`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->
 
 ## Inputs
@@ -101,6 +104,29 @@ of 24 Nov 2026: "Roslyn for C#"). It reads differently from the rest of this too
   lists the things it may stand for; the file is read as it stood at `--commit`, the things as they stand now. Checked on
   phobos-rimworld (a Def file, a Python script) and Project Zomboid's PhobosLib (Lua).
 
+### What a commit did to its calls (`calls`, 1.116.0)
+
+**For a change's calls gone and added, and the rings of calls it made or cut** (Companion's `docs/code-reading.md` step 6; the
+owner's go of 24 Nov 2026). C# only, through the names reader:
+
+- **Read twice, from source**: every method in the C# files the commit changed (at most 12 files), as they stood before the commit
+  and after it, each a build of its own with those files swapped in; every other file as it stands now, and `limits` says so.
+  A method of ours the changed methods call through `base`, or override, is read one level deep for its calls.
+- **Calls gone, new and kept** for each method whose calls changed, a method added or removed, and calls that moved whole from
+  one of its methods to another (`movedTo`, `movedFrom`).
+- **Rings**: a loop of calls holding a method the commit changed, followed through our code, through a virtual call on the same
+  object landing in an override of ours (a call through `base` never does), and through a game method a changed method hands on
+  to (through `base`, or virtually on the same object) whose body calls back into an override of ours. **That last needs the
+  game's own assemblies**: a mod builds against a reference package whose method bodies are empty, so `--game` names the game and
+  its adapter finds its install (`games.real_assemblies`; RimWorld's reads the settings, then Steam's default folder). The
+  assembly reader's `calls-of` reads only the methods wanted. Without a game, or one with no such reader yet, `limits` says the
+  game's code was not read. **A next game adds one row to `games.REAL_ASSEMBLY_GAMES` and a `real_assemblies(environ)`.**
+- On phobos-rimworld's stove-bills fix (`5c122faf`, Framework 0.273.2) with `--game rimworld`: 3 methods' calls changed; 6 calls
+  moved from `AvailableReport` into the new `Check`; and one ring cut, `AvailableOnNow → AvailableReport → RecipeWorker.AvailableReport
+  (the game's) → AvailableOnNow`, the loop behind the crashes of 23 Nov 2026. About 7 s; reading the game's `Assembly-CSharp` for
+  two methods about 2 s of it.
+- A ring is not always a fault: it is shown for a person to judge.
+
 ## Outputs
 
 The answers (`data`):
@@ -126,6 +152,12 @@ The answers (`data`):
   cut}`, at most 60 lines, its comment above it included. Read by name (a Lua, Python or XML file), the answer has `exact: false`
   and each name also `node` (the first thing's connections id), `exact: false`, `candidates` (up to 8 things, `{id, name, kind,
   file, line, end}`) and `more` (how many beyond them); `declared` is the first candidate's place.
+- `calls` (1.116.0): `commit` `{hash, subject}`, `files` (`{before, after}` paths, null where a file did not exist), `methods`,
+  `rings`, `game`, `gameRead` (the game's assemblies read), `seconds` and `limits`. Each method is `{key, id, node, display, file,
+  line, end, status, gone, new, kept}`, `status` changed, added or removed, with `movedTo` and `movedFrom` (`{key, display,
+  calls}`) where calls moved whole; each call `{key, display, viaBase}` and either `{file, line, node}` (ours) or `{assembly}`.
+  `rings` holds `made`, `cut` and `standing`, each a list of rings, each ring its steps in order `{key, display, outside}`
+  (`outside` for a game method), from its first changed method; the last step calls the first.
 
 ## Effects
 
