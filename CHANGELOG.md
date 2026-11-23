@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.113.2] - 2026-11-24
+
+### Changed
+
+- **One page for the owner's three queues: [owner queues](docs/owner-queues.md)** (docs rewrite, step 7; the owner's decision D7
+  of 23 Nov 2026). How decisions, picks and screen notes all work, said once: what waits is kept beside the work, answers in
+  D'thorga Companion's folder, act then settle in one commit; then the three side by side and a short section each.
+  `decisions.md`, `picks.md` and `screen-notes.md` become short pages to the tool page template that link to it.
+
 ## [1.113.1] - 2026-11-24
 
 ### Changed
