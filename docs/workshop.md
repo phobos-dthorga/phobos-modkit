@@ -43,15 +43,9 @@ python -m phobos_modkit rimworld-workshop collection 3497770083 --grep "*hover*"
 names up among the installed Workshop mods; it reads the game's version from ModsConfig.xml and flags comments that
 mention it. `steam-workshop` takes IDs or URLs for any game.
 
-| Option | What it does |
-| --- | --- |
-| `--max-age H` | Hours fetched comments and collections stay fresh (default 24) |
-| `--details-max-age H` | Hours fetched details (update date, version tags, subscribers) stay fresh (default 1): one request per 100 items, so an update made since shows |
-| `--refresh` | Fetch again even when fresh |
-| `--offline` | Use the cache only, never contact Steam |
-| `--days N` | How far back "recent" comments go (default 90) |
-| `--game-version V` | Also flag comments that mention V |
-| `--top`, `--json`, `--cache`, `--no-redact` | As for the other tools |
+Every option, with its default, is in [Reports and options](#reports-and-options) at the end. Details are fetched one
+request per 100 items and stay fresh for an hour (`--details-max-age`), so an update made since shows; comments and
+collections stay fresh for a day (`--max-age`).
 
 Problem words: crashes, errors, exceptions, bugs, broken, not working, incompatible, conflicts, red text, freezes,
 lag, stutter, abandoned, outdated, no longer, null reference, stuck, corrupt, plus the game's version.

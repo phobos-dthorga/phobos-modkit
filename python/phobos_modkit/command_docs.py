@@ -13,11 +13,13 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass, field
 import json
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 import sys
 
+from . import generated_blocks as blocks
 from . import manifest as kit_manifest
+from .generated_blocks import END, append_section, replace_block, start  # noqa: F401  (END and start: callers' names)
 from .manifest import READS, WRITES
 from .markdown import table
 from .report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
@@ -26,7 +28,6 @@ EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 CONFIG = "config/command-docs.json"
 CONFIG_FORMAT = 1
 KIT_ROOT = Path(__file__).resolve().parents[2]
-END = "<!-- end generated -->"
 INDEX_KEY = "command index"
 SECTION = "## Reports and options"
 INDEX_SECTION = "## Commands"
@@ -37,10 +38,6 @@ EFFECTS = {kit_manifest.READS: "reads only", kit_manifest.ONLINE: "reads public 
            kit_manifest.WRITES: "writes", kit_manifest.RUNS: "runs other programs",
            kit_manifest.OWNER_PRESS: "only on the owner's own press", kit_manifest.OWNER_ONLY: "only the owner runs it"}
 _DEFAULT_IN_HELP = re.compile(r"\(default:? ([^)]+)\)")
-
-
-def start(key):
-    return f"<!-- generated: {key} -->"
 
 
 def options_key(command):
@@ -137,13 +134,7 @@ def _brief(command, config):
     return said
 
 
-def _relative(target, doc):
-    """A link from doc to target, both relative to the repository, with forward slashes on every system."""
-    there, here = PurePosixPath(target).parts, PurePosixPath(doc).parent.parts
-    same = 0
-    while same < min(len(there), len(here)) and there[same] == here[same]:
-        same += 1
-    return "/".join([".."] * (len(here) - same) + list(there[same:]))
+_relative = blocks.relative
 
 
 def mismatched_defaults(command):
@@ -246,31 +237,7 @@ def index_block(commands, config):
             f"option its command takes.", "", *table(["Command", "Game", "What it is for"], rows, CELL)]
 
 
-# ---- Blocks in a file ----
-
-def replace_block(text, key, body):
-    """(text with the block's lines replaced by body, whether the block was there). Text uses LF."""
-    mark = start(key)
-    at = text.find(mark)
-    if at < 0:
-        return text, False
-    end = text.find(END, at)
-    if end < 0:
-        return text, False
-    return text[:at] + mark + "\n" + "\n".join(body) + "\n" + text[end:], True
-
-
-def append_section(text, heading, blocks):
-    """text with (key, subheading or None, body) blocks added under heading at its end; heading only if not there yet."""
-    out = text.rstrip("\n") + "\n"
-    if not re.search(rf"^{re.escape(heading)}\s*$", text, re.MULTILINE):
-        out += f"\n{heading}\n"
-    for key, sub, body in blocks:
-        if sub:
-            out += f"\n{sub}\n"
-        out += "\n" + start(key) + "\n" + "\n".join(body) + "\n" + END + "\n"
-    return out
-
+# ---- Blocks in a file: the marks, reading and writing are generated_blocks', shared with doc-tables ----
 
 @dataclass
 class Doc:
@@ -299,9 +266,7 @@ def load_config(root):
     return config
 
 
-def _read(path):
-    raw = path.read_bytes().decode("utf-8")
-    return raw.replace("\r\n", "\n"), "\r\n" in raw
+_read = blocks.read
 
 
 def plan(root, commands=None, config=None):
@@ -357,16 +322,7 @@ def plan(root, commands=None, config=None):
     return found, problems
 
 
-def write(root, docs):
-    """Write every doc whose text changed, in its own line endings. Returns the paths written."""
-    written = []
-    for doc in docs:
-        if doc.before is None or doc.after == doc.before:
-            continue
-        text = doc.after.replace("\n", "\r\n") if doc.crlf else doc.after
-        (Path(root) / doc.path).write_bytes(text.encode("utf-8"))
-        written.append(doc.path)
-    return written
+write = blocks.write_changed
 
 
 # ---- The command ----

@@ -11,6 +11,7 @@ Summarised in our own words from the 1.7 game code (Verse.ModMetaData and Verse.
 """
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from html import unescape
 import json
@@ -21,13 +22,13 @@ import sys
 from xml.etree import ElementTree
 
 from ...game_files import libraries, parse_vdf, steam_root
-from ...mod_list import Mod, ModList, Need
+from ...mod_list import Mod, ModList, Need, TieIn
 from ...installs import game_running
 from ...steam.client import library_path as steam_library_path
 from ...mod_lists import FILE, MANAGER, SAVE, SavedList
 from ...mod_sort import CODE, COMMUNITY, WORKSHOP, YOURS, RuleSet
 from .installs import PROCESSES
-from .loading import STEAM_SUFFIX, bare_id, load_folders, read_mods_config
+from .loading import STEAM_SUFFIX, _version_key, bare_id, conditional_folders, load_folders, read_mods_config
 from .mods import _about_root, _child, _text
 from .paths import LOG_NAME, PREVIOUS_LOG_NAME, config_path, game_path, logs_path, saves_path, workshop_path
 
@@ -360,6 +361,25 @@ def read_about(folder, source, workshop_id, version):
                _items(_versioned(root, "loadBefore", version)) + _items(_child(root, "forceLoadBefore")),
                _items(_versioned(root, "incompatibleWith", version)),
                _items(_child(root, "supportedVersions")), preview=_preview(folder))
+
+
+def mod_requirements(folder):
+    """(Mod, [TieIn]) for one mod folder, from its own files only (1.107.0, for doc-tables): About.xml as the game reads it for
+    the newest version the mod supports (a version's own lists replace the plain ones), with the package ID as written, and the
+    folders of LoadFolders.xml's block for that version that wait for other mods. None without an About.xml with a packageId."""
+    mod = read_about(folder, "local", "", None)
+    if mod is None:
+        return None
+    versions = sorted((v for v in mod.versions if re.fullmatch(r"\d+\.\d+", v)), key=_version_key)
+    newest = versions[-1] if versions else None
+    if newest:
+        mod = read_about(folder, "local", "", newest)
+    mod = replace(mod, id=_text(_about_root(Path(folder)), "packageId"))
+    _, found = conditional_folders(folder, newest)
+    grouped = {}
+    for sub, conditions in found:
+        grouped.setdefault(conditions, []).append(sub)
+    return mod, [TieIn(tuple(subs), conditions) for conditions, subs in grouped.items()]
 
 
 def _preview(folder):

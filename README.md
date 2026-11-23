@@ -116,6 +116,7 @@ Generated from the manifest by `python -m phobos_modkit command-docs --write`. E
 | [`connections`](docs/connections.md) | any | how a repository's code fits together: calls, holds, builds on, overrides, patches, uses |
 | [`crash-dump`](docs/crash-dump.md) | any | what a Windows crash dump says failed, whether a call loop ran away, and its methods from a full dump |
 | [`decisions`](docs/decisions.md) | any | the questions waiting for the owner, with options and the agent's lean; records answers |
+| [`doc-tables`](docs/doc-tables.md) | any | tables in a repository's own docs filled from its files: projects, Harmony patches, mod requirements |
 | [`feeds`](docs/feeds.md) | any | a feed folder's index and checks, and reading feeds from GitHub with the last good copy kept |
 | [`game-files`](docs/game-files.md) | any | what a game writes and what Steam records: what changed since you last played, saves, screenshots, space |
 | [`gate`](docs/gate.md) | any | run a repository's checks before a commit and report only what failed |

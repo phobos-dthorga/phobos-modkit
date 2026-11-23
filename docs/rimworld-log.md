@@ -29,19 +29,10 @@ python -m phobos_modkit rimworld-log old.log --no-previous --json report.json
 Run it from the `python` folder of this repository, or put that folder on `PYTHONPATH`. Game repositories that pin
 this kit provide their own short command (phobos-rimworld: `python scripts/triage-log.py`).
 
-| Option | What it does |
-| --- | --- |
-| `LOG` | The log to read. Default: `Player.log` in the logs folder |
-| `--previous FILE` / `--no-previous` | Compare with another log, or with none. Default: `Player-prev.log` beside a `Player.log` |
-| `--show ID` | Print one signature in full: its first message as written, every clue, the lines it occurs on |
-| `--top N` | How many signatures to list (default 20) |
-| `--levels ERROR,WARN` | Which levels to list; add `INFO` for everything |
-| `--json FILE` | Also write everything as JSON, in the envelope with the signatures under `data`; `--json -` prints only JSON |
-| `--brief` | With `--json`: only the `--top` signatures of the listed levels, without the list of lines each occurs on, and as many of each comparison list (with `counts` for all): a page's worth, about 300 KB from a 200,000-line log. D'thorga Companion's Logs page reads this (1.35.0) |
-| `--logs`, `--game`, `--workshop` | Where the logs, the game and the Workshop folder are |
-| `--settings FILE` | A JSON file with `rimworldLogsPath`, `rimworldPath` and `workshopPath` |
-| `--no-mods` | Do not read installed mods; clues stay unnamed |
-| `--no-redact` | Show the home folder instead of `~` |
+Every option, with its default, is in [Reports and options](#reports-and-options) at the end. `--json FILE` also
+writes everything as JSON, in the envelope with the signatures under `data`, and `--json -` prints only JSON. With
+`--brief` the JSON keeps as many of each comparison list too (with `counts` for all): about 300 KB from a
+200,000-line log, which D'thorga Companion's Logs page reads (1.35.0).
 
 Each folder comes from the option, then an environment variable (`RIMWORLD_LOGS_PATH`, `RIMWORLD_PATH`,
 `RIMWORLD_WORKSHOP_PATH`), then the settings file, then Steam's usual place on Windows. The Linux and macOS

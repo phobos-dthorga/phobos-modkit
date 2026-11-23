@@ -200,14 +200,14 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | Report | What it does | Effect |
 | --- | --- | --- |
 | `report` | A recording: phases, who caused the time, busiest methods, garbage collection. | reads only |
-| `record` | Record the running game, then report it. | runs other programs |
+| `record` | Record the running game, then report it. Attaches Microsoft's dotnet-trace and dotnet-counters to the running game; it changes nothing in it. | runs other programs |
 | `index` | Index a speedscope file recorded by hand with dotnet-trace. | reads only |
 | `mod` | One mod in a recording. | reads only |
 | `compare` | Two recordings, as shares of the main thread and of ticking. | reads only |
 | `list` | Every recording and snapshot kept. | reads only |
-| `stack` | A frozen or stuck game: every thread's stack, a few times. | runs other programs |
+| `stack` | A frozen or stuck game: every thread's stack, a few times. Attaches Microsoft's dotnet-stack to the running game a few times; it changes nothing in it. | runs other programs |
 | `stack-report` | Stack snapshots taken earlier. | reads only |
-| `heap` | What holds the game's memory, by type and by mod (pauses the game). Forces a full garbage collection: the game pauses until it is done. | runs other programs |
+| `heap` | What holds the game's memory, by type and by mod (pauses the game). Attaches Microsoft's dotnet-gcdump to the running game, which forces a full garbage collection: the game pauses until it is done. | runs other programs |
 | `heap-report` | A heap taken earlier. | reads only |
 | `heap-compare` | Two heaps: who grew. | reads only |
 | `watch` | The game's memory over time, without pausing it; Ctrl+C ends it early. Reads Windows' memory figures without pausing the game; attaches dotnet-counters once unless `--no-counters`. Ends early when watch-stop asks. | runs other programs |
@@ -219,8 +219,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `look-kind` | One kind's objects in the running game, each described. Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own memory-reading library from its install folder; nothing is written to the game. | runs other programs |
 | `look-why` | Why a kind is still in memory: paths from a root to its largest objects. Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own memory-reading library from its install folder; nothing is written to the game. | runs other programs |
 | `look-serve` | Hold a snapshot and answer JSON requests a line at a time, for a program. Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own memory-reading library from its install folder; nothing is written to the game. Holds the snapshot and answers one JSON request a line on standard input until it closes or the time limit passes; for a program's page, not a person's console. | runs other programs |
-
-Unless its row says otherwise, each report: Attaches Microsoft's dotnet-trace, dotnet-counters, dotnet-stack or dotnet-gcdump to the running game; it changes nothing in it.
 
 | Option | Reports | What it does | Default |
 | --- | --- | --- | --- |

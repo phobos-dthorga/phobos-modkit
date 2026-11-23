@@ -126,6 +126,34 @@ def load_folders(mod_folder, version, active):
     return folders
 
 
+CONDITIONS = (("IfModActive", "any"), ("IfModActiveAll", "all"), ("IfModNotActive", "none"))
+
+
+def conditional_folders(mod_folder, version=None):
+    """(the version block read, [(folder, ((rule, (package IDs as written)), ...))]) for each folder in a mod's LoadFolders.xml
+    that loads only while other mods are (rule "any" or "all") or are not ("none") active. The block is the game's choice for
+    version (the newest not above it), or the newest of all without one. (None, []) without a readable LoadFolders.xml."""
+    load_file = _child_file(Path(mod_folder), "loadfolders.xml")
+    if load_file is None:
+        return None, []
+    try:
+        root = ET.parse(load_file).getroot()
+    except ET.ParseError:
+        return None, []
+    blocks = {child.tag[1:]: child for child in root
+              if isinstance(child.tag, str) and child.tag.startswith("v") and VERSION_FOLDER.match(child.tag[1:])}
+    usable = sorted((v for v in blocks if not version or _version_key(v) <= _version_key(version)), key=_version_key)
+    if not usable:
+        return None, []
+    found = []
+    for li in blocks[usable[-1]].findall("li"):
+        conditions = tuple((rule, tuple(i.strip() for i in li.get(attribute).split(",") if i.strip()))
+                           for attribute, rule in CONDITIONS if li.get(attribute))
+        if conditions:
+            found.append(((li.text or "").strip().strip("/").replace("\\", "/"), conditions))
+    return usable[-1], found
+
+
 def files_the_game_loads(folder_files):
     """Which files load when several load folders hold the same relative path.
 

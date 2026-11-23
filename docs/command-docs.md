@@ -67,6 +67,8 @@ and the JSON gives the same under `data.mismatchedDefaults`.
 - **Which report runs when none is named** is not in the manifest, so the block does not say it; the doc's own text does.
 - **What another repository would need** to use it for its own scripts: a manifest of its scripts (each script's argparse parser,
   as the kit's commands declare one), and its own `config/command-docs.json`. The writer and the marks are game-free already.
+- **The marks are shared with [doc-tables](doc-tables.md)** (1.107.0, `generated_blocks.py`), which fills a repository's own
+  docs with tables of its projects, Harmony patches and mods from its files.
 
 ## Reports and options
 

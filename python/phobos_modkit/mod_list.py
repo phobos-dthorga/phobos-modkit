@@ -80,6 +80,14 @@ class Mod:
     preview: str = ""            # its own picture, as the game's mod menu or the Workshop shows it; "" when it has none (1.82.0)
 
 
+@dataclass(frozen=True)
+class TieIn:
+    """Folders of a mod that load only while other mods are, or are not, active (1.107.0, for doc-tables' requirements table).
+    conditions: ((rule, ids), ...), rule "any" (one of the ids), "all" (every one) or "none" (none of them), all of which hold."""
+    folders: tuple
+    conditions: tuple
+
+
 @dataclass
 class ModList:
     """One list of active mods the game reads, in load order."""

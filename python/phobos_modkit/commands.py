@@ -57,6 +57,7 @@ COMMANDS = {
     "test-pass": (".testpass_cli", "what a repository's in-game test list is waiting for, from the game's notes and the owner's verdicts"),
     "art-audit": (".artaudit_cli", "every shipped image with its record and how it was made, and every borrowed picture"),
     "command-docs": (".command_docs", "each command's doc lists its reports and options, and the README its commands, from the manifest"),
+    "doc-tables": (".doc_tables", "tables in a repository's own docs filled from its files: projects, Harmony patches, mod requirements"),
     "gate": (".gate.cli", "run a repository's checks before a commit and report only what failed"),
     "manifest": (".manifest", "every command, its reports and options, and what each one reads or changes"),
 }

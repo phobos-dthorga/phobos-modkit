@@ -696,18 +696,21 @@ CACHE_POLICIES = [{"folder": CACHE_FOLDER,
 LOOK_NOTE = ("Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own "
              "memory-reading library from its install folder; nothing is written to the game.")
 
+# Only the reports that run another program attach to the game, and each says how in its own note; the rest read files (1.107.0).
 MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
-            "note": "Attaches Microsoft's dotnet-trace, dotnet-counters, dotnet-stack or dotnet-gcdump to the running game; it changes nothing in it.",
             "reports": {
     "report": {"question": "Where does my game spend its time, and which mods cause it?"},
-    "record": {"effect": RUNS, "question": "What is my running game doing right now?"},
+    "record": {"effect": RUNS, "question": "What is my running game doing right now?",
+               "note": "Attaches Microsoft's dotnet-trace and dotnet-counters to the running game; it changes nothing in it."},
     "index": {"question": "What does a trace I recorded by hand say?"},
     "mod": {"question": "What does one mod cost while the game runs?"},
     "compare": {"question": "Did a change make the game faster?"},
-    "stack": {"effect": RUNS, "question": "My game froze: where is it stuck, and whose code is it?"},
+    "stack": {"effect": RUNS, "question": "My game froze: where is it stuck, and whose code is it?",
+              "note": "Attaches Microsoft's dotnet-stack to the running game a few times; it changes nothing in it."},
     "stack-report": {"question": "What did the stack snapshots show?"},
     "heap": {"effect": RUNS, "question": "What is holding my game's memory, and which mods?",
-             "note": "Forces a full garbage collection: the game pauses until it is done."},
+             "note": "Attaches Microsoft's dotnet-gcdump to the running game, which forces a full garbage collection: the game "
+                     "pauses until it is done."},
     "heap-report": {"question": "What did a heap snapshot show?"},
     "heap-compare": {"question": "Is my game's memory growing, and whose?"},
     "watch": {"effect": RUNS, "question": "Does my game's memory climb steadily or in bursts, and is it .NET's or the engine's?",

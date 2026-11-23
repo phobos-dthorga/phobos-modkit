@@ -4,6 +4,32 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.107.0] - 2026-11-23
+
+### Added
+
+- **doc-tables: tables in a repository's own docs, filled from its own files** (docs rewrite, step 3, the owner's go-ahead of
+  23 Nov 2026). `config/doc-tables.json` names each table's doc, kind and options; `doc-tables --write` writes it between
+  `<!-- generated: table NAME -->` marks, and without `--write` it checks, for a repository's gate. Three kinds:
+  `dotnet-projects` (every `.csproj`: what it builds into from its own properties, its project and assembly references, whether
+  its C# uses Harmony, its test projects), `harmony-patches` (per project, the methods its `[HarmonyPatch]` attributes name, class
+  and method attributes combined, with their kinds; `TargetMethod` patches and manual `.Patch(` calls counted; any attribute form
+  it cannot read listed with its file and line) and `mod-requirements` (needs, load order, game versions and optional tie-ins,
+  through the game's adapter: RimWorld's reads About.xml and LoadFolders.xml). **What a next game needs**: a
+  `mod_requirements(folder)` in its `games/<game>/mod_list.py`; until then its table says so in words
+  ([doc-tables.md](docs/doc-tables.md)).
+- **command-docs and doc-tables share one block mechanism**, `generated_blocks.py`: the marks, replacing and appending a block,
+  and keeping a doc's own line endings.
+
+### Fixed
+
+- **rimworld-perf's manifest no longer says every report attaches to the running game.** Only `record` (dotnet-trace and
+  dotnet-counters), `stack` (dotnet-stack), `heap` (dotnet-gcdump), `watch` (dotnet-counters, unless `--no-counters`) and the
+  `look` reports (a Windows snapshot) do, and each now says so in its own note; `report`, `index`, `mod`, `compare`, `list` and the
+  other reports read files only.
+- **workshop.md and rimworld-log.md drop their hand-written options tables**, which repeated their generated blocks; the few
+  facts only they held (how often Workshop details are fetched, what `--json` and `--brief` give) move into the text.
+
 ## [1.106.0] - 2026-11-23
 
 ### Added
