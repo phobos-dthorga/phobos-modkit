@@ -35,10 +35,19 @@ class TheFolderItself(unittest.TestCase):
         self.assertTrue(files[0].read and files[0].covers)
 
     def test_a_design_to_edit_holds_no_rules(self):
-        designs = {f.name: f for f in rules.rule_files() if f.design}
-        self.assertIn("first-class.md", designs)
-        self.assertEqual(designs["first-class.md"].rules, 0)
         self.assertFalse(rules.rule_files()[0].design)
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "every-session.md").write_text("# Rules\n\n- **One.** Text.\n", encoding="utf-8")
+            (folder / "idea.md").write_text("# An idea\n\n**Status (1 Jan 2026):** a design to edit, **not yet rules**.\n\n"
+                                            "- **A principle.** Text.\n", encoding="utf-8")
+            designs = {f.name: f for f in rules.rule_files(folder) if f.design}
+            self.assertEqual(list(designs), ["idea.md"])
+            self.assertEqual(designs["idea.md"].rules, 0)
+
+    def test_the_first_class_design_lives_in_docs_not_rules(self):
+        self.assertFalse((rules.FOLDER / "first-class.md").exists())
+        self.assertTrue((rules.FOLDER.parent / "docs" / "first-class.md").is_file())
 
     def test_this_repository_reads_its_own_rules(self):
         found = rules.uptake(rules.FOLDER.parent)

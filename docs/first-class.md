@@ -2,10 +2,10 @@
 
 **Status (19 Nov 2026):** a design for the owner to edit, **not yet rules**. Written at the owner's request ("because we are
 implementing such a large, shared, framework that spans multiple games and paradigms, we need to start thinking about ideologies
-like first-class citizens"). Nothing here binds a session until the owner moves a principle into `every-session.md` or another
-rules file. The history tool (kit 1.30.0) and D'thorga Companion's Timeline page are built on the first five citizens below;
-Setting is the eleventh, added the same day with the central settings file. Agent-drafted throughout; every choice is the
-owner's to change.
+like first-class citizens"). Nothing here binds a session until the owner moves a principle into `rules/every-session.md` or
+another rules file. It lived in `rules/` until 24 Nov 2026, when it moved here as the design it is (docs rewrite, step 7). The
+history tool (kit 1.30.0) and D'thorga Companion's Timeline page are built on the first five citizens below; Setting is the
+eleventh, added the same day with the central settings file. Agent-drafted throughout; every choice is the owner's to change.
 
 ## Read this first (gotchas)
 

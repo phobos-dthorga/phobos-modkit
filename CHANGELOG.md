@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.112.1] - 2026-11-24
+
+### Changed
+
+- **The first-class design moves from `rules/` to [docs/first-class.md](docs/first-class.md)** (docs rewrite, step 7, the owner's
+  go-ahead of 24 Nov 2026). It says itself it is a design, not yet rules, so `rules/` now holds rules only; the rules index drops
+  its row. A file in `rules/` whose status says "not yet rules" is still counted as a design holding none.
+
 ## [1.112.0] - 2026-11-24
 
 ### Added

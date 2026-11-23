@@ -29,7 +29,6 @@ on the owner's word ("Move all 12 now"): ten into `every-session.md`, and two fi
 | [licences.md](licences.md) | Before writing or changing a `LICENSE`, starting a repository, or preparing a mod's first public page | Code MIT, our art and sound CC BY 4.0, our names kept out of both grants, and the paragraphs a `LICENSE` carries |
 | [reports.md](reports.md) | Before drafting a report of another author's fault, and when the owner says one is posted | Find it with the tools and look for an existing report; a plain draft in the owner's private tracker, ready to paste; the owner posts; check how it shows, then mark it posted everywhere |
 | [safe-copies.md](safe-copies.md) | Before making something that cannot be made again, and before starting on a new game | List it when it is made, in the same commit; a game's own files once, for the game; each kind said truthfully, the narrower when unsure; the numbers and every removal the owner's |
-| [first-class.md](first-class.md) | Before adding a new kind of thing to the tools or the Companion | A design to edit, not yet rules: the things every tool and page treats as real, and what makes them first-class |
 
 `python -m phobos_modkit rules list` prints this with each file's rules counted, and `tests/test_rules.py` fails if a file here is
 missing from the table.
