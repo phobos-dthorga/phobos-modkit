@@ -2,7 +2,8 @@
 
 Two inputs, both the repository's own:
 
-- **Images and their records.** A record is a file beside the image whose name is the image's stem plus a record suffix
+- **Images and their records.** A record is a file beside the image, or in the same place under a folder the config's
+  `records.mirrors` names, whose name is the image's stem plus a record suffix
   (`.record.md`, `.export.json`, as the repository's config names them). An image without one of its own takes the record of the
   name before its last underscore, then the one before that (`Tank_DamageBody_east.png` -> `Tank_DamageBody` -> `Tank`), then
   the record named after its folder. The record's text says how the image was made: the kind whose pattern matches **first** in
@@ -173,17 +174,51 @@ def group_of(path, group_globs):
     return ""
 
 
-def record_index(root, images, suffixes):
-    """{folder: {name: [record paths]}} for every folder holding an image."""
+def record_folders(folder, mirrors=None):
+    """The folders a record of an image in `folder` may sit in: beside the image, then the same place under each mirror.
+
+    `mirrors` maps a leading folder to the folder its records are kept in ({"mods": "assets/records"}), so a repository can keep
+    records out of the folders it ships: mods/A/Textures/X.png finds assets/records/A/Textures/X.record.md."""
+    found = [folder]
+    parts = PurePosixPath(folder).parts
+    for source, target in (mirrors or {}).items():
+        depth = len(PurePosixPath(source).parts)
+        if parts[:depth] == PurePosixPath(source).parts:
+            found.append(PurePosixPath(target, *parts[depth:]).as_posix())
+    return found
+
+
+def record_home(path, mirrors=None):
+    """Where a new record for the file at `path` (repository-relative) is written: the same place under the first mirror whose
+    folder leads the path, else beside the file. `record_home("mods/A/X.png", {"mods": "assets/records"})` is
+    `assets/records/A/X.png`; add the record's suffix to the stem the writer chooses."""
+    parts = PurePosixPath(path).parts
+    for source, target in (mirrors or {}).items():
+        lead = PurePosixPath(source).parts
+        if parts[:len(lead)] == lead and len(parts) > len(lead):
+            return PurePosixPath(target, *parts[len(lead):]).as_posix()
+    return PurePosixPath(path).as_posix()
+
+
+def mirrors_of(root):
+    """The `records.mirrors` of the repository's art-audit config, or none when it has no config; a broken config raises."""
+    if not (Path(root) / CONFIG).is_file():
+        return {}
+    return load_config(root).get("records", {}).get("mirrors", {})
+
+
+def record_index(root, images, suffixes, mirrors=None):
+    """{folder: {name: [record paths]}} for every folder holding an image, its records found beside it or in a mirror."""
     root = Path(root)
     index = {}
     for folder in sorted({str(PurePosixPath(p).parent) for p in images}):
         names = {}
-        directory = root / folder
-        for entry in sorted(directory.iterdir()) if directory.is_dir() else ():
-            for suffix in suffixes:
-                if entry.is_file() and entry.name.endswith(suffix) and len(entry.name) > len(suffix):
-                    names.setdefault(entry.name[:-len(suffix)], []).append(f"{folder}/{entry.name}")
+        for place in record_folders(folder, mirrors):
+            directory = root / place
+            for entry in sorted(directory.iterdir()) if directory.is_dir() else ():
+                for suffix in suffixes:
+                    if entry.is_file() and entry.name.endswith(suffix) and len(entry.name) > len(suffix):
+                        names.setdefault(entry.name[:-len(suffix)], []).append(f"{place}/{entry.name}")
         index[folder] = names
     return index
 
@@ -311,10 +346,11 @@ def audit(root, config):
     suffixes = records_config.get("suffixes", [".record.md"])
     prefixes = records_config.get("sharedByPrefix", True)
     folder_record = records_config.get("folderRecord", True)
+    mirrors = records_config.get("mirrors", {})
     game = adapter(config.get("game"))
 
     paths = find_images(root, config.get("images", ["**/*.png"]))
-    index = record_index(root, paths, suffixes)
+    index = record_index(root, paths, suffixes, mirrors)
     images = []
     for path in paths:
         image = Image(path, group_of(path, config.get("groupBy", "")))

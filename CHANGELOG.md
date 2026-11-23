@@ -4,6 +4,17 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.104.0] - 2026-11-23
+
+### Added
+
+- **Records can be kept out of the folders a repository ships** (the owner's choice of 23 Nov 2026, docs rewrite D6: phobos-rimworld's
+  deploy copied about 492 `*.record.md` notes beside their images and sounds into the game's Mods folder). The art audit's config
+  takes `records.mirrors`, mapping a leading folder to where its records are kept (`{"mods": "assets/records"}`), and looks for an
+  image's record beside it first, then in the same place under the mirror, so a record not yet moved still pairs. A tool that writes
+  records asks `artaudit.record_home(path, artaudit.mirrors_of(root))` where a new one goes. Without `mirrors`, nothing changes
+  ([art-audit.md](docs/art-audit.md)).
+
 ## [1.103.2] - 2026-11-23
 
 ### Fixed

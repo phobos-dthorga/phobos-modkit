@@ -37,13 +37,20 @@ tries, in order, and reads every record it finds, nearest first and Markdown bef
 
 The report says how many images were paired each way.
 
+**Records may be kept out of the shipped folders** (1.104.0, for phobos-rimworld, whose deploy copied every record beside its
+image into the game's Mods folder): `records.mirrors` maps a leading folder to the folder its records live in, and the tool
+looks in the same place under it as well as beside the image. With `{"mods": "assets/records"}`, `mods/A/Textures/X.png` finds
+`assets/records/A/Textures/X.record.md`. Beside the image is looked in first, so a record not yet moved still pairs.
+**A tool that writes records asks the kit where**: `artaudit.record_home(path, artaudit.mirrors_of(root))` gives the place for
+a file's record (the same place under the first matching mirror, else beside it), and the writer adds its suffix.
+
 ## The repository's config: `config/art-audit.json`
 
 | Field | What it holds |
 | --- | --- |
 | `images` | Globs, from the repository root, for the images to audit |
 | `groupBy` | Globs whose last part names an image's or file's group, the mod (`mods/*`); `--mod` matches it |
-| `records` | `suffixes` that make a record, and whether records are shared by a name before an underscore (`sharedByPrefix`) or named after the folder (`folderRecord`); both default on |
+| `records` | `suffixes` that make a record, and whether records are shared by a name before an underscore (`sharedByPrefix`) or named after the folder (`folderRecord`); both default on. `mirrors` (default none) maps a leading folder to where its records are kept |
 | `kinds` | Each kind's `kind`, `label` and regular-expression `patterns`; `listed: true` gives the kind a section of its own (drawn in code) |
 | `standIn` | Patterns by which a record calls its own image a stand-in; a generated image so called gets its own section |
 | `game` | The game adapter that reads Defs and code (`rimworld`); without it no uses are read |

@@ -149,6 +149,39 @@ class Pairing(unittest.TestCase):
         self.assertEqual(artaudit.classify("**AI-generated**; its reference was drawn in code.", kinds)[0], "generated")
         self.assertEqual(artaudit.classify("Painted by hand.", kinds), (artaudit.UNCLASSIFIED, ""))
 
+    def test_record_folders_add_each_matching_mirror(self):
+        self.assertEqual(artaudit.record_folders("mods/A/Textures/X", {"mods": "assets/records", "src": "elsewhere"}),
+                         ["mods/A/Textures/X", "assets/records/A/Textures/X"])
+        self.assertEqual(artaudit.record_folders("modsextra/A", {"mods": "assets/records"}), ["modsextra/A"])
+        self.assertEqual(artaudit.record_folders("mods/A"), ["mods/A"])
+
+    def test_a_new_record_is_written_under_the_first_matching_mirror(self):
+        mirrors = {"mods": "assets/records"}
+        self.assertEqual(artaudit.record_home("mods/A/Sounds/Idle.ogg", mirrors), "assets/records/A/Sounds/Idle.ogg")
+        self.assertEqual(artaudit.record_home("assets/x/Draft.png", mirrors), "assets/x/Draft.png")
+        self.assertEqual(artaudit.record_home("mods/A/X.png"), "mods/A/X.png")
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertEqual(artaudit.mirrors_of(folder), {})
+            (Path(folder) / "config").mkdir()
+            (Path(folder) / "config" / "art-audit.json").write_text(json.dumps({"records": {"mirrors": mirrors}}),
+                                                                     encoding="utf-8")
+            self.assertEqual(artaudit.mirrors_of(folder), mirrors)
+
+    def test_a_record_kept_under_a_mirror_pairs_with_its_image(self):
+        config = dict(CONFIG, records={"suffixes": [".record.md", ".export.json"], "mirrors": {"mods": "assets/records"}})
+        files = {"mods/ModA/Textures/Phobos/Things/Lamp.png": "png",
+                 "mods/ModA/Textures/Phobos/Things/Lamp.export.json": "{}",
+                 "assets/records/ModA/Textures/Phobos/Things/Lamp.record.md": "**Drawn in code** with Pillow."}
+        repo = Repo(config=config, files=files)
+        try:
+            result = artaudit.audit(repo.root, artaudit.load_config(repo.root))
+        finally:
+            repo.close()
+        (lamp,) = result.images
+        self.assertEqual(lamp.records, ["mods/ModA/Textures/Phobos/Things/Lamp.export.json",
+                                        "assets/records/ModA/Textures/Phobos/Things/Lamp.record.md"])
+        self.assertEqual((lamp.kind, lamp.paired_by), ("code-drawn", "own"))
+
     def test_a_bad_pattern_is_reported(self):
         with self.assertRaises(artaudit.ArtAuditError):
             artaudit.kinds_of({"kinds": [{"kind": "x", "patterns": ["("]}]})
