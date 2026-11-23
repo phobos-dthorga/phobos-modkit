@@ -223,6 +223,8 @@ what Steam returned; never invent one. A mod may carry its own `build` command.
 | `pageMaxBytes`, `previewMaxBytes` | 7,500 and 1,000,000 | Our budgets, not Valve figures |
 | `pageRules` | all on | `title`, `version`, `status` lines required on the page |
 | `build` | none | A command run before preparing, `{mod}` replaced |
+| `payloadHook` | none | `"scripts/file.py:function"` inside the repository: builds the item's files (1.102.0) |
+| `contentPrefix`, `previewSource` | none | A folder in the item the content goes under; the cover's file when it is not in the content (1.100.0) |
 
 ## Games, as data
 
@@ -280,7 +282,10 @@ it is, with the title and version the catalogue gives. Moving RimWorld and Ostra
 titles and versions of all 18 mods in phobos-rimworld and phobos-ostranauts came out the same (23 November 2026), and every
 candidate now records its `tags`.
 
-What a package must hold beyond its folder is the repository's policy, not the game's format. A wrapper passes it as
+What a package must hold beyond its folder is the repository's policy, not the game's format. **Name it in the catalogue**
+(`"layout": {"payloadHook": "scripts/workshop_payload.py:payload"}`, 1.102.0), so every runner, a console or D'thorga
+Companion, builds the same package; the file must be inside the repository, and is loaded as the repository's own wrapper would
+run it. A wrapper may still pass one in, which wins. A wrapper passes it as
 a payload hook, `payload(project, mod) -> {relative path: bytes}`, which may also raise on a stale build:
 
 ```python

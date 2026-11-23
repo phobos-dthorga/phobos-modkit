@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.102.0] - 2026-11-23
+
+### Added
+
+- **A catalogue can name its own payload hook** (`layout.payloadHook`, `"scripts/file.py:function"` inside the repository), so a
+  repository whose package is built (phobos-ostranauts: its dist package, plugin assemblies, read-only data headers) gives the
+  same package to every runner, D'thorga Companion's Publish page included, not only to its own wrapper. A wrapper's hook still
+  wins.
+
 ## [1.101.1] - 2026-11-23
 
 ### Fixed

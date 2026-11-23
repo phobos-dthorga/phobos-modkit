@@ -170,6 +170,21 @@ class MoreGames(unittest.TestCase):
         self.assertEqual(project.resolve("Framework"), "PhobosFramework")
         self.assertEqual(project.resolve("radioframework"), "PhobosRadioFramework")
 
+    def test_the_catalogue_names_its_own_payload_hook(self):
+        self.write("mods/Thing/About/About.xml", "<ModMetaData><name>Thing</name><modVersion>1.0.0</modVersion></ModMetaData>")
+        self.write("mods/Thing/CHANGELOG.md", CHANGELOG)
+        self.write("workshop/Thing/page.bbcode", PAGE.format(title="Thing"))
+        self.write("scripts/package.py", "def build(project, mod):\n    return {'About/Preview.png': b'x', 'Built/' + mod + '.txt': b'y'}\n")
+        project = self.repo({"appId": "294100", "layout": {"payloadHook": "scripts/package.py:build"},
+                             "mods": {"Thing": {"itemId": None, "requires": []}}})
+        self.assertEqual(sorted(stage.plan(project, "Thing")[1]), ["About/Preview.png", "Built/Thing.txt"])
+        project.layout["payloadHook"], project._hook = "../outside.py:build", None
+        with self.assertRaises(Exception):
+            project.payload("Thing")
+        project.layout["payloadHook"], project._hook = "scripts/package.py:nothing", None
+        with self.assertRaisesRegex(PublishError, "no function nothing"):
+            project.payload("Thing")
+
     def test_png_rules(self):
         self.assertEqual(png_size(png(512, 512)), (512, 512))
         self.assertIsNone(png_size(b"GIF89a"))

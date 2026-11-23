@@ -59,7 +59,8 @@ LAYOUT = {
     "pageRules": {"title": True, "version": True, "status": True},
     "build": None,                           # a command run before preparing, e.g. ["python", "scripts/build.py", "{mod}"]
     "contentPrefix": None,                   # 1.100.0: a folder in the item the content goes under, e.g. Contents/mods/{mod}
-    "previewSource": None,                   # 1.100.0: the cover's file in the repository, when it is not in the content
+    "previewSource": None,
+    "payloadHook": None,                     # 1.102.0: "scripts/x.py:function" building the item's files (see catalogue_hook)                   # 1.100.0: the cover's file in the repository, when it is not in the content
 }
 
 
@@ -267,10 +268,33 @@ class Project:
 
     # ---- content ----
 
+    def catalogue_hook(self):
+        """The payload hook the catalogue names (1.102.0): layout "payloadHook" as "path/inside/repository.py:function", so
+        every runner (a console, D'thorga Companion) builds the same package. Only a file inside the repository is loaded:
+        the repository's own code, as its own wrapper would run it."""
+        named = self.layout.get("payloadHook")
+        if not named:
+            return None
+        if getattr(self, "_hook", None) is not None:
+            return self._hook
+        file, _, function = str(named).partition(":")
+        path = inside(self.root, file)
+        if not path.is_file() or path.suffix != ".py" or not function.isidentifier():
+            raise PublishError(f'layout "payloadHook" must be "a/file.py:function" inside the repository; got {named}')
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(f"_phobos_payload_{abs(hash(str(path)))}", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self._hook = getattr(module, function, None)
+        if not callable(self._hook):
+            raise PublishError(f"{file} has no function {function}")
+        return self._hook
+
     def payload(self, mod):
         """{relative path: bytes} the item will hold: the project's own payload, or its content folder."""
-        if self.payload_hook:
-            return dict(self.payload_hook(self, mod))
+        hook = self.payload_hook or self.catalogue_hook()
+        if hook:
+            return dict(hook(self, mod))
         tree = read_tree(self.path("content", mod), [".git", *self.layout["exclude"]])   # version control never ships
         prefix = self.layout.get("contentPrefix")
         if prefix:
