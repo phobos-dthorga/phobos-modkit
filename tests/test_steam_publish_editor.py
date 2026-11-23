@@ -84,6 +84,54 @@ class Editing(unittest.TestCase):
         code, answer = self.run_cli("pending")
         self.assertEqual([m["needsUpload"] for m in answer["data"]["mods"]], [False, False])
 
+    # ---- 1.101.0: every answer a program reads carries data ----
+
+    def test_a_refusal_is_data(self):
+        code, answer = self.run_cli("upload", "Nothing", "--update")
+        self.assertEqual(code, 1)
+        self.assertEqual(answer["data"]["ok"], False)
+        self.assertIn("Unknown mod: Nothing", answer["data"]["refusal"])
+
+    def test_prepare_notes_and_what_if_carry_data(self):
+        code, answer = self.run_cli("notes", "--check")
+        self.assertEqual((code, answer["data"]["state"], answer["data"]["files"]), (0, "valid", []))
+        code, answer = self.run_cli("prepare", "Base")
+        self.assertEqual(answer["data"]["manifest"]["mod"], "Base")
+        self.assertTrue(answer["data"]["candidate"])
+        code, answer = self.run_cli("upload", "Base", "--create", "--what-if", "--via", "steamcmd", "--steam-user", "x",
+                                    "--steamcmd", str(self.steamcmd))
+        data = answer["data"]
+        self.assertEqual((code, data["ok"], data["whatIf"], data["receipt"]), (0, True, True, None))
+        self.assertTrue(any("What-if" in line for line in data["lines"]))
+        self.assertEqual(answer["report"]["lines"], data["lines"])
+
+    def test_an_upload_answers_with_its_receipt(self):
+        import test_steam_publish_client as client_tests
+        from phobos_modkit.steam.publish import senders
+        self.run_cli("prepare", "Base")
+        fake = client_tests.FakeUgc()
+        sender = senders.SteamClient(library=lambda path: fake, environ={}, find_install=lambda app, environ: None)
+        out = io.StringIO()
+        code = cli.main(["upload", "Base", "--create", "--root", str(self.root), "--cache", str(self.cache), "--json"],
+                        out=out, environ={}, sender=sender)
+        data = json.loads(out.getvalue())["data"]
+        self.assertEqual((code, data["ok"], data["itemId"], data["status"]), (0, True, base.NEW_ID, "created-unverified"))
+        self.assertTrue(data["receipt"])
+        fake = client_tests.FakeUgc(submit=2)
+        sender = senders.SteamClient(library=lambda path: fake, environ={}, find_install=lambda app, environ: None)
+        self.commit()
+        self.write("mods/Base/About/About.xml", base.ABOUT.format(mod="Base", version="0.3.1"))
+        self.write("workshop/Base/page.bbcode", base.PAGE.format(mod="Base", version="0.3.1"))
+        self.write("mods/Base/CHANGELOG.md", base.CHANGELOG.format(mod="Base").replace(
+            "## [0.3.0]", "## [0.3.1] - 2026-11-23 - Draft\n\n- Fix.\n\n## [0.3.0]"))
+        self.run_cli("notes", "--write")
+        self.run_cli("prepare", "Base")
+        out = io.StringIO()
+        code = cli.main(["upload", "Base", "--update", "--root", str(self.root), "--cache", str(self.cache), "--json"],
+                        out=out, environ={}, sender=sender)
+        data = json.loads(out.getvalue())["data"]
+        self.assertEqual((code, data["ok"], data["status"]), (1, False, "submitted-unverified"))
+
     def test_show_names_what_is_not_ready(self):
         self.write("workshop/Base/page.bbcode", "[h1]Nope[/h1]\n")
         found = editor.show(self.load(), "Base")

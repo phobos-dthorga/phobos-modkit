@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.101.0] - 2026-11-23
+
+### Added
+
+- **Every steam-publish answer a program reads carries JSON data** (asked for by D'thorga Companion's Publish page): a refusal
+  says `ok: false` and why; `upload` and `update` with `--json` give their lines, the receipt, the item, its status and whether
+  the sender said it went up, instead of loose lines; `prepare`, `pull` and `notes` give the candidate and manifest, the rows
+  and files written, and the notes' state. Receipts keep the sender's word as `senderOk`. Guide: `docs/workshop-publishing.md`.
+
 ## [1.100.0] - 2026-11-23
 
 ### Added

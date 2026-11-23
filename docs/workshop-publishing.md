@@ -170,6 +170,13 @@ holds everything it shows, and `status` and `pending` carry their rows there too
   items it would set, **the change note exactly as Steam would get it**, the item and what was last sent, whether an update is
   due, the game's reminders, and every receipt, newest first. A mod that is not ready says why in `error` and shows the rest.
 
+**Every answer a program reads carries data** (1.101.0, the shapes the Companion's Publish page asked for): a refusal is
+`{"ok": false, "refusal", "lines"}`; `upload --json` and `update --json` put what the uploader says in the report and give
+`{"ok", "receipt", "itemId", "status", "lines"}` (`update` adds `updated`; a what-if adds `whatIf`), where `ok` means nothing
+was due, a what-if, or a receipt whose sender said the files went up (still not proof); `prepare` gives `{"candidate",
+"manifest"}`, `pull` `{"rows", "written"}` and `notes` `{"state", "checked", "files"}`. Receipts record the sender's word as
+`senderOk`.
+
 ### Tidying change notes
 
 Steam has no tool route to edit or delete a change note: [ISteamUGC](https://partner.steamgames.com/doc/api/ISteamUGC)

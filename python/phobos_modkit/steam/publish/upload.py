@@ -231,6 +231,7 @@ def upload(project, request, say=print, run=run_steamcmd, now=datetime.now, envi
     job = Job(candidate, manifest, operation, visibility, receipt_dir, started, created)
     outcome = sender.send(job, Speaker(say, progress))
     receipt.update(outcome.fields)
+    receipt["senderOk"] = bool(outcome.ok)     # the sender's own word (1.101.0); still not proof
     receipt["finishedAt"] = now().astimezone().isoformat()
 
     # 5. What Steam said. The sender's word is not proof: receipts stay unverified until the owner looks.

@@ -132,7 +132,8 @@ def notes_report(project, args):
         for path, _, text in rows:
             report.section(path, Code(text.splitlines(), "bbcode"), level=3)
         report.lines.append("Nothing written. Add --write to save them.")
-    return report, EXIT_FAILED if state == "stale" else EXIT_OK
+    data = {"state": state, "checked": checked, "files": [r[0] for r in rows]}
+    return report, EXIT_FAILED if state == "stale" else EXIT_OK, data
 
 
 def status_report(project):
@@ -193,7 +194,8 @@ def pull_report(project, args, post):
         report.lines.append("Nothing written. Add --write to apply, then review and commit.")
     elif state == "written":
         report.lines.append("Written: " + ", ".join(sorted(project.rel(p) for p in changes)) + ". Review and commit.")
-    return report, EXIT_OK
+    written = sorted(project.rel(p) for p in changes) if state == "written" else []
+    return report, EXIT_OK, {"rows": rows, "written": written}
 
 
 def page_report(project, args, stdin):
@@ -251,7 +253,13 @@ def main(argv=None, root=None, payload=None, settings_file=None, environ=None, o
         parser.print_help(out)
         return EXIT_USAGE
     redact = keep if args.no_redact else home_redactor()
-    say = lambda line: print(redact(str(line)), file=out, flush=True)
+    lines = []      # with --json, what the uploader says goes into the envelope instead of loose lines (1.101.0)
+
+    def say(line):
+        if args.json:
+            lines.append(redact(str(line)))
+        else:
+            print(redact(str(line)), file=out, flush=True)
     if adapters is None:
         from ...games import publish_adapters
         adapters = publish_adapters()
@@ -259,17 +267,29 @@ def main(argv=None, root=None, payload=None, settings_file=None, environ=None, o
         cache = derived.folder(STAGING_CACHE, args.cache, environ, args.settings or settings_file)
         project = Project.load(args.root or root or Path.cwd(), adapters, args.catalogue, payload, cache)
         result = dispatch(project, args, say, post or workshop.http_post, run or upload.run_steamcmd,
-                          build_run or subprocess.run, environ, sender, stdin or sys.stdin)
+                          build_run or subprocess.run, environ, sender, stdin or sys.stdin, lines)
         report, code, data = (*result, None) if len(result) == 2 else result
     except (PublishError, ValueError, OSError, KeyError, subprocess.SubprocessError, workshop.WorkshopError) as error:
-        report, code, data = Report("steam-publish: error", [str(error)]), EXIT_FAILED, None
+        report, code = Report("steam-publish: error", [*lines, str(error)]), EXIT_FAILED
+        data = {"ok": False, "refusal": redact(str(error)), "lines": lines}
     if report is not None:
         print(envelope_text("steam-publish", report, redact, data) if args.json
               else render_markdown(report, redact), file=out)
     return code
 
 
-def dispatch(project, args, say, post, run, build_run, environ, sender=None, stdin=None):
+def sent_report(title, receipt_dir, lines, what_if, extra=None):
+    """An upload's answer as data: ok means nothing was due, a what-if, or a receipt whose sender said it went up."""
+    receipt = upload.read_receipt(receipt_dir) if receipt_dir else None
+    ok = receipt is None or bool(receipt.get("senderOk"))
+    data = {"ok": ok, "receipt": str(receipt_dir) if receipt_dir else None, "itemId": (receipt or {}).get("itemId"),
+            "status": (receipt or {}).get("status"), "lines": lines, **(extra or {})}
+    if what_if:
+        data["whatIf"] = True
+    return Report(title, list(lines)), EXIT_OK if ok else EXIT_FAILED, data
+
+
+def dispatch(project, args, say, post, run, build_run, environ, sender=None, stdin=None, lines=None):
     command = args.command
     if command == "notes":
         return notes_report(project, args)
@@ -282,7 +302,8 @@ def dispatch(project, args, say, post, run, build_run, environ, sender=None, std
         if args.build and not upload.build(project, mod, build_run):
             raise PublishError("--build needs a build command in the catalogue")
         folder, manifest = stage.prepare(project, mod)
-        return manifest_report("Candidate prepared (offline)", folder, manifest), EXIT_OK
+        return (manifest_report("Candidate prepared (offline)", folder, manifest), EXIT_OK,
+                {"candidate": str(folder), "manifest": manifest})
     if command == "verify":
         manifest = stage.verify(Path(args.candidate))
         return manifest_report("Candidate verified (offline)", args.candidate, manifest), EXIT_OK
@@ -290,13 +311,17 @@ def dispatch(project, args, say, post, run, build_run, environ, sender=None, std
         request = upload.Request(args.mod, args.operation, args.visibility, args.candidate, args.steam_user,
                                  args.steamcmd, args.acknowledge_hold, args.confirm_public, args.what_if, args.force,
                                  args.via, args.steam_library, args.new_console)
-        upload.upload(project, request, say, run, environ=environ, sender=sender, progress=Progress(environ))
-        return None, EXIT_OK
+        receipt_dir = upload.upload(project, request, say, run, environ=environ, sender=sender, progress=Progress(environ))
+        if not args.json:
+            return None, EXIT_OK
+        return sent_report("Workshop upload", receipt_dir, lines, args.what_if)
     if command == "update":
-        upload.update_all(project, args.mods, say, args.no_build, args.what_if, args.acknowledge_hold,
-                          args.steam_user, args.steamcmd, run, build_run, environ, args.via, sender, args.steam_library,
-                          args.new_console, Progress(environ))
-        return None, EXIT_OK
+        done = upload.update_all(project, args.mods, say, args.no_build, args.what_if, args.acknowledge_hold,
+                                 args.steam_user, args.steamcmd, run, build_run, environ, args.via, sender,
+                                 args.steam_library, args.new_console, Progress(environ))
+        if not args.json:
+            return None, EXIT_OK
+        return sent_report("Workshop updates", None, lines, args.what_if, {"updated": done})
     if command == "reconcile":
         state = upload.reconcile(project, args.receipt, args.item_id, args.not_created)
         return Report("Receipt reconciled", [f"Marked {state}."]), EXIT_OK
