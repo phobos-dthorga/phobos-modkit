@@ -6,9 +6,10 @@ questions in a short summary instead of a long read. One shared home for code th
 
 ## Read this first (gotchas)
 
-- **Ten tools are built**: RimWorld log triage, save index, Def index (with Defs as patched, 0.15.0), Workshop research,
-  Workshop publishing, release chores, the gate (0.11.0), mod settings (0.12.0), the code index (0.13.0) and Harmony
-  patches (0.14.0), startup sessions and the version readiness scan (0.17.0), and the target check (0.18.0). See [log triage](docs/rimworld-log.md),
+- **48 commands are built**; `python -m phobos_modkit manifest` lists every one with what it reads and changes, and the
+  [Tools](#tools) table below says what each is for. The first were RimWorld log triage, the save index, the Def index,
+  Workshop research and publishing, release chores, the gate, mod settings, the code index, Harmony patches, startup sessions,
+  the version readiness scan and the target check. See [log triage](docs/rimworld-log.md),
   [the save index](docs/rimworld-save.md), [the Def index](docs/rimworld-defs.md), [Workshop research](docs/workshop.md),
   [Workshop publishing](docs/workshop-publishing.md), [release chores](docs/release.md), [the gate](docs/gate.md),
   [mod settings](docs/rimworld-settings.md), [the code index](docs/code.md), [Harmony patches](docs/rimworld-patches.md),
@@ -39,8 +40,9 @@ questions in a short summary instead of a long read. One shared home for code th
   writes encoded textures (`.dds`) into the mod folders it is named, Workshop ones included, as RimSort does.
 - **Only the owner uploads to Steam.** Workshop research and `steam-publish pull` read Steam's public, keyless
   pages and APIs, slowly. The one tool that uploads, `steam-publish upload` (and `update`), is run by the owner in
-  their own console: SteamCMD asks for the login in its own prompt, so the tool never sees a password, and new items
-  are always created Private. Agents, tests and CI never run a real upload.
+  their own console or by their own press in D'thorga Companion. It sends through the Steam client already running and signed
+  in (`--via steam`, the default since 1.98.0), or through SteamCMD (`--via steamcmd`), which asks for the login in its own
+  prompt; either way the tool never sees a password, and new items are always created Private. Agents, tests and CI never run a real upload.
 - **Nothing from the games is committed.** No game files, saves, logs, assemblies, decompiled code or other
   authors' mod files. Test fixtures are written by hand.
 
@@ -201,7 +203,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/heap-reader.md](docs/heap-reader.md) | The heap reader: looking inside a running game from a snapshot, what it answers, which memory-reading library it trusts, and its limits |
 | [docs/screen-notes.md](docs/screen-notes.md) | Screen notes: a note's folder, its files, and resolving one |
 | [docs/gate.md](docs/gate.md) | The gate: a repository's checks from config/gate.json, and what each output parser keeps |
-| `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `sampling.py` and `dotnet_diagnostics.py` (sampled call stacks and Microsoft's diagnostics tools), `query.py` (report filters), `steam/` (Workshop research; `publish/` for publishing), `release/` (changelogs, constants, history screen), `gate/` (the check runner and its output parsers), `code/` (the C# declaration scanner and index), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema), `games/ostranauts/` (publishing only), `games/zomboid/` (the mod list) |
+| `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `sampling.py` and `dotnet_diagnostics.py` (sampled call stacks and Microsoft's diagnostics tools), `query.py` (report filters), `steam/` (Workshop research; `publish/` for publishing), `release/` (changelogs, constants, history screen), `gate/` (the check runner and its output parsers), `code/` (the C# declaration scanner and index), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema), `games/zomboid/` (the mod list and publishing), `games/ostranauts/`, `games/kenshi/` and `games/wrsr/` (publishing only: each a `workshop.json`) |
 | `crates/xml-index/` | Rust: streams any large XML file into SQLite, driven by a schema file; `cargo test` |
 | `dotnet/` | C# tools: `PhobosModKit.Assemblies`, the assembly metadata reader (System.Reflection.Metadata; builds outside the repository) |
 | `fixtures/`, `tests/` | Hand-written test data and the tests: `python -m unittest discover -s tests` |

@@ -15,7 +15,7 @@ game adapters living here, the tool list and order, and the language of each too
 flowchart LR
     subgraph modkit["phobos-modkit"]
         core["Core<br/>no game in it"]
-        adapters["Game adapters<br/>games/rimworld, games/fs25, ..."]
+        adapters["Game adapters<br/>games/rimworld, games/zomboid, ..."]
         adapters --> core
     end
     subgraph game["a game repository"]
@@ -62,7 +62,7 @@ Agreed with the owner on 7 November 2026, after two tools had shown what repeats
 | Report model | `phobos_modkit.report` | One way to build a report (paragraphs, bullets, tables, code) and render it as Markdown or JSON, with redaction applied to every piece of text and table cut-offs stated | Built (0.3.0); log triage and the save index use it |
 | Derived-data cache | `phobos_modkit.cache` | The cache folder, provenance stamps and hashes, a staleness check, frozen copies of files another program may be writing, removal of read-only files | Built (0.3.0); the save index uses it |
 | SQLite substrate | convention, in AGENTS.md | Every derived file is SQLite with a `meta` provenance table, so tools can read one another's data with ATTACH | Adopted; the mod and Def index is designed to it |
-| Game adapter contract | not built | Generic commands (`log`, `save`) with a game option, each game registering its adapter, instead of commands named by game | **Waits for a second game adapter** (FS25 log triage is the likely first); building it for one game would guess at the shape |
+| Game adapter contract | not built | Generic commands (`log`, `save`) with a game option, each game registering its adapter, instead of commands named by game | **Waits for a second game whose logs or saves are read.** Five games have adapters now (RimWorld; Project Zomboid's mod list; Workshop publishing data for Ostranauts, Kenshi and Workers & Resources), but only RimWorld's logs and saves are read, so building the contract would still guess at its shape |
 
 Not adopted, and why: outside Python frameworks (click, pandas, rich) would break the standard-library rule that
 lets every Phobos repository run the kit with nothing installed; clap for Rust is not worth it for one command;

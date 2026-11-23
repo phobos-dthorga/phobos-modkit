@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.103.2] - 2026-11-23
+
+### Fixed
+
+- **The README's facts match the kit again** (the owner's docs rewrite, step 1, 23 Nov 2026). It said "Ten tools are built"
+  where 48 commands are, and that the uploader goes through SteamCMD, where the Steam client has been the default since 1.98.0;
+  its project map now names the Kenshi and Workers & Resources publishing data. `project-direction.md` no longer draws a
+  `games/fs25` that never existed, and says why the game adapter contract still waits now that five games have adapters.
+
 ## [1.103.1] - 2026-11-23
 
 ### Fixed
