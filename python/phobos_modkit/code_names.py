@@ -218,6 +218,8 @@ def read_by_name(conn, root, file, text, commit=None):
             for column, piece, things in pieces:
                 if not things:
                     continue
+                # A name at its own declaration means that thing, whatever else shares the name (1.117.0).
+                things = [t for t in things if t["file"] == file and t["line"] == number] or things
                 first = things[0]
                 names.append({
                     "line": number, "column": column, "length": len(piece), "text": piece, "kind": first["kind"],
@@ -228,7 +230,7 @@ def read_by_name(conn, root, file, text, commit=None):
                 for thing in things[:MAX_CANDIDATES]:
                     key = f"{thing['file']}:{thing['line']}"
                     if key not in snippets:
-                        snippets[key] = _snippet(root, thing, files)
+                        snippets[key] = snippet(root, thing, files)
     return {"file": file, "project": None, "projects": [], "names": names,
             "snippets": {k: v for k, v in snippets.items() if v}, "errors": 0, "missingReferences": 0, "seconds": 0,
             "commit": commit, "exact": False,
@@ -236,7 +238,7 @@ def read_by_name(conn, root, file, text, commit=None):
                        "things listed with it."] + (["The file is read as it stood at that commit."] if commit else [])}
 
 
-def _snippet(root, thing, files):
+def snippet(root, thing, files):
     """A thing's lines as its file now stands, at most `CONTEXT`; None when the file cannot be read."""
     path = Path(root) / thing["file"]
     if thing["file"] not in files:

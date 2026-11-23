@@ -10,6 +10,9 @@ overrides, patches, uses, imports), each marked exact or by name. Four readers f
 - Lua, by name: Lua cannot be read exactly without running it (`lua.py`).
 - Python, read by Python's own parser; calls by name (`pycode.py`).
 
+When the game is named and has a table of them (`data_names`, 1.117.0), a fifth adds the names that cross between its data
+files and its code: the things its data files declare (a translation key, a data object) and what names each (`datanames.py`).
+
 The graph is kept per repository in the kit's cache, rebuilt when any file it was read from changes.
 """
 from __future__ import annotations
@@ -108,7 +111,7 @@ def source_files(root, suffixes):
 
 def fingerprint(paths):
     digest = hashlib.sha256()
-    for path in sorted(str(p) for p in paths):
+    for path in sorted({str(p) for p in paths}):
         try:
             stat = os.stat(path)
         except OSError:
@@ -119,23 +122,29 @@ def fingerprint(paths):
 
 # ---------------------------------------------------------------- the store
 
-def _cache_file(root, environ=None, settings=None):
+def _cache_file(root, environ=None, settings=None, table=None):
+    """One store a repository, and one more for each game whose table of data names it is read with."""
     root = Path(root).resolve()
     tag = hashlib.sha1(str(root).lower().encode("utf-8")).hexdigest()[:10]
     safe = re.sub(r"[^A-Za-z0-9._-]+", "-", root.name)
-    return derived.folder(CACHE_NAMESPACE, None, environ, settings) / f"{safe}-{tag}.sqlite"
+    game = f"-{re.sub(r'[^A-Za-z0-9]+', '', table.source)}" if table else ""
+    return derived.folder(CACHE_NAMESPACE, None, environ, settings) / f"{safe}-{tag}{game}.sqlite"
 
 
-def _inputs(root):
-    from . import csharp, defs, lua, pycode
-    return csharp.inputs(root) + defs.inputs(root) + lua.inputs(root) + pycode.inputs(root)
+def _inputs(root, table=None):
+    from . import csharp, datanames, defs, lua, pycode
+    found = csharp.inputs(root) + defs.inputs(root) + lua.inputs(root) + pycode.inputs(root)
+    return found + (datanames.inputs(root, table) if table else [])
 
 
-def read_graph(root, environ=None, progress=None):
-    """Every reader's part of the graph, freshly read."""
-    from . import csharp, defs, lua, pycode
+def read_graph(root, environ=None, progress=None, table=None):
+    """Every reader's part of the graph, freshly read. `table` is a game's table of the names that cross between its data files
+    and its code (`data_names.table_for`), read last, over what the others found."""
+    from . import csharp, datanames, defs, lua, pycode
     graph = Graph()
     steps = [("C#", csharp.read), ("XML Defs", defs.read), ("Lua", lua.read), ("Python", pycode.read)]
+    if table:
+        steps.append(("data names", lambda root, graph, environ: datanames.read(root, graph, environ, table)))
     for position, (label, reader) in enumerate(steps, 1):
         if progress:
             progress(f"Reading the {label} code", position, len(steps))
@@ -147,11 +156,16 @@ def read_graph(root, environ=None, progress=None):
     return graph
 
 
-def open_graph(root, environ=None, settings=None, progress=None, rebuild=False):
-    """The repository's graph in the cache, read again when any file it came from changed. Returns an open connection."""
+def open_graph(root, environ=None, settings=None, progress=None, rebuild=False, game=None):
+    """The repository's graph in the cache, read again when any file it came from changed. Returns an open connection. With a
+    `game` that has a table of data names, the graph holds those too, in a store of its own."""
+    from .. import data_names
     root = Path(root).resolve()
-    path = _cache_file(root, environ, settings)
-    wanted = {"schema": SCHEMA, "inputs": fingerprint(_inputs(root))}
+    table = data_names.table_for(game)
+    path = _cache_file(root, environ, settings, table)
+    wanted = {"schema": SCHEMA, "inputs": fingerprint(_inputs(root, table))}
+    if table:
+        wanted["data_names"] = hashlib.sha1(table.sha.encode("utf-8")).hexdigest()
     if not rebuild and path.is_file():
         conn = sqlite3.connect(path)
         meta = dict(conn.execute("SELECT key, value FROM meta").fetchall()) if _has_meta(conn) else {}
@@ -159,7 +173,7 @@ def open_graph(root, environ=None, settings=None, progress=None, rebuild=False):
             return conn
         conn.close()
     started = time.monotonic()
-    graph = read_graph(root, environ, progress)
+    graph = read_graph(root, environ, progress, table)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".building")
     derived.remove(temporary)

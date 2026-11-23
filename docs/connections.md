@@ -17,6 +17,9 @@ viewing". D'thorga Companion's code viewer and Code map page are its first consu
   `node_modules`, `target`, `dist`, and every folder whose name starts with a dot.
 - **The graph is kept in the kit's cache**, one file a repository, and read again when any file it came from changes: about 7 s
   for phobos-rimworld or phobos-ostranauts the first time, under a second after.
+- **Name the game (`--game`) to see across its data files** (1.117.0): translation keys and data objects become things, and
+  what names them is connected, by the game's table of rules. Without it every report is as it was. RimWorld and Ostranauts
+  have a table; "Names between a game's data files and its code" below.
 
 ## Examples
 
@@ -29,6 +32,8 @@ python -m phobos_modkit connections changed --root REPO --commit 3352e4da
 python -m phobos_modkit connections history --root REPO --node cs:Phobos.Framework.TopUp.Seen.Note [--limit 100]
 python -m phobos_modkit connections names --root REPO --file src/Mod/Sail.cs [--commit 3352e4da]
 python -m phobos_modkit connections calls --root REPO --commit 5c122faf [--game rimworld]
+python -m phobos_modkit connections jumps --root REPO --game rimworld
+python -m phobos_modkit connections names --root REPO --file src/Mod/Sail.cs --game rimworld
 ```
 
 Add `--json` for the envelope ([common options](common-options.md)); `--rebuild` reads every file again.
@@ -48,10 +53,12 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `history` | The commits that changed one thing's lines, with the changelog entries they wrote. The commits that changed one thing, with the entries they wrote; needs its id. | reads only |
 | `names` | What every name in one file is, and where it is declared. What every name in one file is and where it is declared; needs the file. | reads only |
 | `calls` | What a commit did to its C# methods' calls, and the rings of calls it made or cut. What a commit did to its C# methods' calls, and rings made or cut; needs the commit. | reads only |
+| `jumps` | What each rule for names between data files and code reads in this repository. What each rule for names between data files and code reads; needs the game. | reads only |
 
 | Option | Reports | What it does | Default |
 | --- | --- | --- | --- |
 | `--root VALUE` | all | the repository (default: the current folder) |  |
+| `--game VALUE` | all but `jumps` | the game the repository's mods are for (rimworld, ostranauts): adds the names its table says cross between data files and code; for calls, also follows a ring through the game's own code |  |
 | `--rebuild` | all | read every file again, whatever the cache holds |  |
 | `--top N` | all | rows per table (default 60) | `60` |
 | `--name VALUE` | `find` | a name or pattern (\* and ?). Required. |  |
@@ -63,7 +70,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--limit N` | `history` | commits to give, newest first (default 25, at most 500) | `25` |
 | `--file VALUE` | `names` | the file (C#, Lua, Python or XML), relative to the repository. Required. |  |
 | `--commit VALUE` | `names` | read the file as it stood at this commit (other files as they stand now) |  |
-| `--game VALUE` | `calls` | the game the repository's mods are for (rimworld), to follow a ring through its own code |  |
+| `--game VALUE` | `jumps` | the game the repository's mods are for (rimworld, ostranauts): adds the names its table says cross between data files and code; for calls, also follows a ring through the game's own code. Required. |  |
 
 - Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
 - [Common options](common-options.md) explains `--root`, `--game`, `--top`, `--json` and `--no-redact`, which many commands share.
@@ -127,6 +134,77 @@ owner's go of 24 Nov 2026). C# only, through the names reader:
   two methods about 2 s of it.
 - A ring is not always a fault: it is shown for a person to judge.
 
+### Names between a game's data files and its code (`--game`, `jumps`, 1.117.0)
+
+**For jumping between a game's data files and its code** (Companion's `docs/code-reading.md` step 7; the owner's go of
+24 Nov 2026): a translation key the code asks for opens its English line, a class a Def names opens the class, a Def named in
+code opens the Def. `phobos_modkit.data_names` reads them, and knows no game:
+
+- **Which pieces of text count is a table of the game's adapter**, `games/<game>/data-names.json`. Its **things** are what a
+  name may stand for: things the graph already holds (a Def, a class), or things declared in files the table names (a line of an
+  English translation file, a data object). Its **rules** say where a name of one is written: a pattern over a file's text, the
+  first argument of a call, or what a call is made on.
+- **A rule reads any name its place holds, or only names that are things** (`known`). The first kind says so when no thing of
+  this repository has the name: the game's own, another mod's, or a mistake (a key asked for that no English line declares). The
+  second kind is for places where most text is something else (any string in code).
+- **Rules are tried in the table's order.** A `known` rule adds what it finds and lets later known rules add theirs; any other
+  rule ends the search.
+- **Comments are never read; a string joined to more text is a piece of a name, not one** (`"Bottler." + what`), and a string
+  tested against something is being asked about, not used (`verb == "export"`).
+- **With `--game`, every report takes them in.** The graph (a store of its own beside the plain one) gains the things data
+  files declare and a `uses` connection from whatever holds a line that names one: `around` on a translation key says which
+  methods ask for it. `names` gains each rule's names (below); `changed` gives a changed translation line as its key.
+- **`jumps` is the count every rule passed before it was kept**, and the one to run on a next game's table: for each rule, the
+  names it read, and how many stand for one thing, for several, or for nothing here, with the most common of those.
+
+**What the count found** (24 Nov 2026; phobos-rimworld and phobos-ostranauts). Matches read in full for wrong ones are marked;
+the rest were read by sample:
+
+| Game | Rule | Names read | One thing | Several | Nothing here | Wrong |
+| --- | --- | --- | --- | --- | --- | --- |
+| RimWorld | `translate-call`: what `.Translate(` is called on | 3,026 | 3,011 | 0 | 15 | 0 of the 15 (all the game's or another mod's keys) |
+| RimWorld | `name-in-code`: any other string that is a key's or a Def's name | 233 | 231 | 2 | 0 | 0, read in full |
+| RimWorld | `def-database`: `DefDatabase<T>.GetNamed…("X")` | 33 | 7 | 0 | 26 | 0, read in full |
+| RimWorld | `defof-field`: a field of a `[DefOf]` class | 198 | 192 | 0 | 6 | 0 of the 6 (the game's Defs) |
+| RimWorld | `class-element`, `class-attribute` | 3,331 | 1,670 | 0 | 1,661 | 0 by sample (the game's and other mods' classes) |
+| RimWorld | `def-value`: an element's text that is a Def's name | 1,595 | 1,563 | 32 | 0 | 0 by sample |
+| RimWorld | `key-value`: an element's text that is a key | 104 | 104 | 0 | 0 | 0 by sample |
+| RimWorld | `def-parent`: `ParentName="X"` | 344 | 174 | 0 | 170 | 0 by sample (the game's parents) |
+| RimWorld | `patch-def`: `defName="X"` in a patch's path | 507 | 133 | 0 | 374 | 0 by sample (other mods' Defs) |
+| Ostranauts | `text-call`: the first argument of `Text.Get`, `Pick`, `Has` | 4,210 | 4,209 | 0 | 1 | 0 (the one is a test that the key is gone) |
+| Ostranauts | `key-property`: a `…Key` property of a data file | 74 | 74 | 0 | 0 | 0, read in full |
+| Ostranauts | `object-in-code`, `object-in-data` | 80 | 29 | 51 | 0 | 0, read in full |
+
+**What the count threw out or narrowed**, which is why it is run first:
+
+- **`.Named("X")` as a Def's name**: 2,013 of 2,019 were the arguments of translations (`.Named("METRES")`). Left out.
+- **Any string that is a Def's name**: 9 of 37 wrong, 7 of them save labels (`Scribe_Values.Look(ref x, "Label")`). Kept with
+  save labels ruled out and the translation rule first.
+- **Any string that is a translation key**: fine in RimWorld, whose keys must differ across every mod (3 of 367 wrong, all save
+  labels); **wrong often in Ostranauts**, whose keys are per mod and short (`status`, `pause`, `close`). Left out there: only the
+  first argument of the call is read, a choice inside it included (`Text.Get(on ? "A" : "B")`).
+- **A string tested inside that call** (`Text.Get(verb == "export" ? …)`): 10 wrong, so a tested string is never read; 139 keys
+  built from pieces are not read at all.
+- **A data file's value that is a key**: wrong (`"art": "meal"`). Only a `…Key` property is read.
+- **A `…Class` element**: 13 hold a Def's name (`cropClass`), so the Def rule is tried first.
+- **`SomeDefOf.X` by its text**: 30 of 322 could be either of two Defs of one name. Left out: the names reader's exact reading
+  of the field is used, and the field's own line gives its Def (`also`, below).
+- **`ThingDef.Named("X")`**: matched nothing in either repository, so it could not be counted. Left out until a repository uses it.
+
+**A table's parts.** A thing: `id`, `kind` (the word shown), and either `graph` (`{language, kinds}`, a thing the graph holds;
+`namespaces` to try before a bare class name) or `files` with `declared` (a pattern with a `name` group), and optionally `except`,
+`ends` (the words that close it, `</{name}>`), `block` (`braces`), `scope` (a pattern over the path with a `scope` group, where
+names belong to one part of a repository) or `aliasOf` (another name for the graph thing that starts at or next after it, as a
+Def's `Name` is). A rule: `id`, `words`, `in` (file suffixes), `names` (thing ids), one of `match` (a pattern with a `name`
+group, and a `type` group where the place says which kind is meant), `argumentOf` and `receiverOf`, and optionally `inside` (a
+pattern ending at an opening brace), `known`, `minLength`, `unlessBefore`, `files`, `notFiles`, `scope`, `their` (a name of
+nothing here is a class another author's code may hold) and `graph: false` (the Def reader links these already). `prose` names
+the files that hold words for people, where only declarations and rules are read.
+
+**A next game needs only its own `data-names.json`**, then `connections jumps` and a reading of what it names. Project Zomboid
+would declare its script items and translation lines and read `getText("X")` in Lua (Lua's strings and comments are already
+read; a script file's own comment style would need one row in the reader's tokens).
+
 ## Outputs
 
 The answers (`data`):
@@ -151,7 +229,16 @@ The answers (`data`):
   each of this repository's declarations the file names (not parameters or locals) by `file:line`: `{file, start, end, lines,
   cut}`, at most 60 lines, its comment above it included. Read by name (a Lua, Python or XML file), the answer has `exact: false`
   and each name also `node` (the first thing's connections id), `exact: false`, `candidates` (up to 8 things, `{id, name, kind,
-  file, line, end}`) and `more` (how many beyond them); `declared` is the first candidate's place.
+  file, line, end}`) and `more` (how many beyond them); `declared` is the first candidate's place. **With `--game`** (1.117.0) the
+  answer has `game`, and a name a rule read also has `rule` and `ruleWords` (which rule, in words), `outside` (true when no thing
+  here has the name: `declared` is then empty and `candidates` none) and `their` (the name to look for in another author's code,
+  for a class). A thing a data file declares is a name at its own place, `here` true. A C# name read exactly keeps that reading
+  and may gain `also`: `{rule, ruleWords, candidates, more}`, the data thing its declaration stands for (a DefOf field's Def). A
+  data file (`.json`) is read only this way, and one no rule of the game reads has no names and a line in `limits`, not a
+  refusal; a C# file whose project cannot be read gives the rules' names alone, and says so.
+- `jumps` (1.117.0): `game`, `seconds`, `things` (`{id, kind, from, count, shared}`) and `rules`, each `{id, words, in, names,
+  known, matches, one, several, none, noneDistinct, noneTop, samples}`: `noneTop` the names of nothing here read most often,
+  `samples` some of each group as `{file, line, name}`.
 - `calls` (1.116.0): `commit` `{hash, subject}`, `files` (`{before, after}` paths, null where a file did not exist), `methods`,
   `rings`, `game`, `gameRead` (the game's assemblies read), `seconds` and `limits`. Each method is `{key, id, node, display, file,
   line, end, status, gone, new, kept}`, `status` changed, added or removed, with `movedTo` and `movedFrom` (`{key, display,
@@ -169,3 +256,8 @@ The answers (`data`):
   reader cannot follow a method chosen while the game runs.
 - Patches of the repository's methods by other mods are not read here; `rimworld-patches` answers that for RimWorld.
 - A Def whose defName is also a word other Defs use for something else (a stat's name, say) may be counted as used.
+- **A rule reads text, not meaning.** A name passed about in a variable is read where its string is written, not where it is
+  used; a key built from pieces is not read; and a name a rule finds may be wrong, which is why each says its rule.
+- A name of nothing here opens nothing: the game's own Defs and translation lines are not read by this tool (RimWorld's are
+  `rimworld-defs`' to answer).
+- With `--game`, the graph is a second store for the repository: the first report of each kind reads it once.

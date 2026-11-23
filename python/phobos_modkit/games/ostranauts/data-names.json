@@ -1,0 +1,61 @@
+{
+  "ids": ["ostranauts"],
+  "about": "Ostranauts mods laid out as phobos-ostranauts lays them out: a mod's C# under src/<Mod>/, its English words in translations/<Mod>/en.json (one object, a key to its words), and the game's own JSON data under a data/ folder (objects named by strName). Read by phobos_modkit.data_names; every rule was counted on phobos-ostranauts before it was kept (docs/connections.md). The translation layout is this project's own, not the game's.",
+  "things": [
+    {
+      "id": "key",
+      "kind": "translation key",
+      "files": ["**/translations/*/en.json"],
+      "declared": "^[ \\t]*\"(?P<name>(?:\\\\.|[^\"\\\\\\n])+)\"\\s*:",
+      "scope": "translations/(?P<scope>[^/]+)/"
+    },
+    {
+      "id": "object",
+      "kind": "data object",
+      "files": ["**/data/**/*.json"],
+      "declared": "\"strName\"\\s*:\\s*\"(?P<name>[^\"\\\\\\n]+)\"",
+      "block": "braces"
+    }
+  ],
+  "rules": [
+    {
+      "id": "text-call",
+      "words": "a translation key the code asks for",
+      "in": [".cs"],
+      "argumentOf": "\\bText\\s*\\.\\s*(?:Get|Pick|Has)\\s*\\(",
+      "names": ["key"],
+      "scope": "^src/(?P<scope>[^/]+)/"
+    },
+    {
+      "id": "key-property",
+      "words": "a translation key a data file names",
+      "in": [".json"],
+      "files": ["mods/**", "examples/**"],
+      "notFiles": ["**/translations/**"],
+      "match": "\"\\w*[kK]ey\"\\s*:\\s*\"(?P<name>(?:\\\\.|[^\"\\\\\\n])+)\"",
+      "names": ["key"],
+      "scope": "^(?:mods|examples/addons)/(?P<scope>[^/]+)/"
+    },
+    {
+      "id": "object-in-code",
+      "words": "a string that is a data object's name",
+      "in": [".cs"],
+      "match": "\"(?P<name>[A-Za-z_]\\w*)\"",
+      "names": ["object"],
+      "known": true,
+      "minLength": 8
+    },
+    {
+      "id": "object-in-data",
+      "words": "a value that is a data object's name",
+      "in": [".json"],
+      "files": ["mods/**", "examples/**"],
+      "notFiles": ["**/translations/**"],
+      "match": "\"(?P<name>[A-Za-z_]\\w*)\"(?!\\s*:)",
+      "names": ["object"],
+      "known": true,
+      "minLength": 8,
+      "unlessBefore": ["\"strName\"\\s*:\\s*$"]
+    }
+  ]
+}

@@ -1,0 +1,213 @@
+{
+  "ids": [
+    "rimworld"
+  ],
+  "about": "RimWorld: where its XML Defs, its English translation files and a mod's C# name each other. Read by phobos_modkit.data_names; every rule was counted on phobos-rimworld before it was kept (docs/connections.md). Facts about the game's formats are stated in our own words.",
+  "prose": [
+    "**/Languages/**",
+    "**/About/**"
+  ],
+  "things": [
+    {
+      "id": "class",
+      "kind": "class",
+      "graph": {
+        "language": "csharp",
+        "kinds": [
+          "class",
+          "struct",
+          "interface",
+          "enum",
+          "delegate"
+        ]
+      },
+      "namespaces": [
+        "RimWorld",
+        "Verse"
+      ]
+    },
+    {
+      "id": "def",
+      "kind": "def",
+      "graph": {
+        "language": "xml",
+        "kinds": [
+          "def"
+        ]
+      }
+    },
+    {
+      "id": "parent",
+      "kind": "parent def",
+      "files": [
+        "**/Defs/**/*.xml"
+      ],
+      "declared": "<[\\w.]+\\s[^<>]*?\\bName\\s*=\\s*\"(?P<name>[^\"<>]+)\"",
+      "aliasOf": {
+        "language": "xml",
+        "kinds": [
+          "def",
+          "abstract def"
+        ]
+      }
+    },
+    {
+      "id": "key",
+      "kind": "translation key",
+      "files": [
+        "**/Languages/English/Keyed/*.xml"
+      ],
+      "declared": "^[ \\t]*<(?P<name>[A-Za-z_][\\w.\\-]*)>",
+      "except": [
+        "LanguageData"
+      ],
+      "ends": "</{name}>"
+    }
+  ],
+  "rules": [
+    {
+      "id": "def-parent",
+      "words": "the parent a Def builds on",
+      "in": [
+        ".xml"
+      ],
+      "match": "\\bParentName\\s*=\\s*\"(?P<name>[^\"<>]+)\"",
+      "names": [
+        "parent"
+      ],
+      "graph": false
+    },
+    {
+      "id": "def-value",
+      "words": "a value that is a Def's name",
+      "in": [
+        ".xml"
+      ],
+      "notFiles": [
+        "**/Languages/**",
+        "**/About/**"
+      ],
+      "match": "<(?!defName>)[\\w.\\-]+(?:\\s[^<>]*)?>\\s*(?P<name>[A-Za-z_][\\w\\-]*)\\s*</",
+      "names": [
+        "def"
+      ],
+      "known": true,
+      "minLength": 3,
+      "graph": false
+    },
+    {
+      "id": "key-value",
+      "words": "a value that is a translation key",
+      "in": [
+        ".xml"
+      ],
+      "notFiles": [
+        "**/Languages/**",
+        "**/About/**"
+      ],
+      "match": "<(?!defName>)[\\w.\\-]+(?:\\s[^<>]*)?>\\s*(?P<name>[A-Za-z_][\\w.\\-]*)\\s*</",
+      "names": [
+        "key"
+      ],
+      "known": true,
+      "minLength": 8
+    },
+    {
+      "id": "patch-def",
+      "words": "a Def a patch names",
+      "in": [
+        ".xml"
+      ],
+      "match": "(?:(?P<type>[A-Za-z_][\\w.]*)\\s*\\[\\s*)?\\bdefName\\s*=\\s*(?:\"|&quot;|')(?P<name>[\\w\\-]+)",
+      "names": [
+        "def"
+      ],
+      "graph": false
+    },
+    {
+      "id": "class-element",
+      "words": "a class a Def names",
+      "in": [
+        ".xml"
+      ],
+      "notFiles": [
+        "**/Languages/**",
+        "**/About/**"
+      ],
+      "match": "<\\w*Class>\\s*(?P<name>[A-Za-z_][\\w.+]*)\\s*</",
+      "names": [
+        "class"
+      ],
+      "their": true,
+      "graph": false
+    },
+    {
+      "id": "class-attribute",
+      "words": "a class a Def names",
+      "in": [
+        ".xml"
+      ],
+      "notFiles": [
+        "**/Languages/**",
+        "**/About/**"
+      ],
+      "match": "\\bClass\\s*=\\s*\"(?P<name>[A-Za-z_][\\w.+]*)\"",
+      "names": [
+        "class"
+      ],
+      "their": true,
+      "graph": false
+    },
+    {
+      "id": "translate-call",
+      "words": "a translation key the code asks for",
+      "in": [
+        ".cs"
+      ],
+      "receiverOf": "\\.\\s*(?:Translate\\w*|CanTranslate|TryTranslate)\\s*\\(",
+      "names": [
+        "key"
+      ]
+    },
+    {
+      "id": "def-database",
+      "words": "a Def the code asks the game for by name",
+      "in": [
+        ".cs"
+      ],
+      "match": "\\bDefDatabase\\s*<\\s*(?P<type>[\\w.]+)\\s*>\\s*\\.\\s*GetNamed\\w*\\s*\\(\\s*\"(?P<name>[\\w\\-]+)\"",
+      "names": [
+        "def"
+      ]
+    },
+    {
+      "id": "defof-field",
+      "words": "a Def a DefOf class holds",
+      "in": [
+        ".cs"
+      ],
+      "inside": "\\[DefOf\\]\\s*(?:(?:public|internal)\\s+)?static\\s+(?:partial\\s+)?class\\s+\\w+\\s*\\{",
+      "match": "\\bpublic\\s+static\\s+(?P<type>[\\w.]+)\\s+(?P<name>[A-Za-z_]\\w*)\\s*(?:=[^;()]*)?;",
+      "names": [
+        "def"
+      ]
+    },
+    {
+      "id": "name-in-code",
+      "words": "a string that is the name of a translation key or a Def",
+      "in": [
+        ".cs"
+      ],
+      "match": "\"(?P<name>[A-Za-z_][\\w.\\-]*)\"",
+      "names": [
+        "key",
+        "def"
+      ],
+      "known": true,
+      "minLength": 8,
+      "unlessBefore": [
+        "\\bScribe_\\w+\\s*\\.\\s*Look\\w*\\s*(?:<[^<>;]*>)?\\s*\\(\\s*ref\\s+[^,;()]+,\\s*$"
+      ]
+    }
+  ]
+}

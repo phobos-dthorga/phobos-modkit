@@ -8,12 +8,14 @@
     connections history --root REPO --node ID           the commits that changed a thing's lines, with the entries they wrote
     connections names --root REPO --file F [--commit HASH]   what every name in one file is, and where it is declared
     connections calls --root REPO --commit HASH [--game G]   what a commit did to its C# methods' calls; rings made or cut
+    connections jumps --root REPO --game G               what each rule for names between data files and code reads here
 
 C# is read exactly from the assemblies the repository builds (calls, fields, inheritance, overrides, Harmony patches), and by
 name from the source where none is built; XML Defs from the files; Lua by name; Python by its own parser. Every connection says
 whether it is exact. The graph is kept in the kit's cache and read again when a file it came from changes (docs/connections.md).
 `names` reads a C# file's project from source with Roslyn instead (the names reader; needs the .NET SDK), and a Lua, Python or
-XML file by name from the graph. It only reads.
+XML file by name from the graph. With `--game`, a game that has a table of them (data_names) adds the names that cross between
+its data files and its code: to the graph as things and uses, and to `names` as names to follow. It only reads.
 """
 from __future__ import annotations
 
@@ -23,8 +25,9 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 
-from . import changes, code_calls, code_names, connections
+from . import changes, code_calls, code_names, connections, data_names
 from .connections import csharp, defs, lineage, lua, pycode
 from .manifest import READS
 from .progress import Progress
@@ -32,7 +35,7 @@ from .report import Bullets, Report, Table, envelope_text, home_redactor, keep, 
 
 EXIT_OK, EXIT_REFUSED, EXIT_USAGE = 0, 1, 2
 COMMIT = re.compile(r"^[0-9a-f]{7,40}$")
-NODE = re.compile(r"^(cs|def|lua|py):[^\n\r\0]{1,400}$")
+NODE = re.compile(r"^(cs|def|lua|py|data):[^\n\r\0]{1,400}$")
 READERS = {".cs": csharp, ".xml": defs, ".lua": lua, ".py": pycode}
 RELATION_WORDS = {
     "calls": "Calls", "called-by": "Called by", "holds": "Holds", "belongs-to": "Belongs to", "builds-on": "Builds on",
@@ -51,7 +54,8 @@ def _parser():
                            ("changed", "the things a commit changed"),
                            ("history", "the commits that changed one thing's lines, with the changelog entries they wrote"),
                            ("names", "what every name in one file is, and where it is declared"),
-                           ("calls", "what a commit did to its C# methods' calls, and the rings of calls it made or cut")):
+                           ("calls", "what a commit did to its C# methods' calls, and the rings of calls it made or cut"),
+                           ("jumps", "what each rule for names between data files and code reads in this repository")):
         s = sub.add_parser(name, help=helptext)
         s.add_argument("--root", help="the repository (default: the current folder)")
         if name == "find":
@@ -72,7 +76,9 @@ def _parser():
             s.add_argument("--commit", help="read the file as it stood at this commit (other files as they stand now)")
         if name == "calls":
             s.add_argument("--commit", required=True, help="the commit")
-            s.add_argument("--game", help="the game the repository's mods are for (rimworld), to follow a ring through its own code")
+        s.add_argument("--game", required=name == "jumps",
+                       help="the game the repository's mods are for (rimworld, ostranauts): adds the names its table says "
+                            "cross between data files and code; for calls, also follows a ring through the game's own code")
         s.add_argument("--rebuild", action="store_true", help="read every file again, whatever the cache holds")
         s.add_argument("--top", type=int, default=60, help="rows per table (default 60)")
         s.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
@@ -143,7 +149,7 @@ def _changed_lines(root, commit):
     return found
 
 
-def changed_report(conn, root, args):
+def changed_report(conn, root, args, table=None):
     if not COMMIT.match(args.commit):
         raise connections.ConnectionsError(f"{args.commit!r} is not a commit.")
     described = changes.describe(root, args.commit)
@@ -152,10 +158,13 @@ def changed_report(conn, root, args):
     things, files = {}, []
     for path, lines in sorted(_changed_lines(root, args.commit).items()):
         reader = READERS.get(Path(path).suffix.lower())
-        if reader is None:
+        declares = bool(table) and any(thing.holds(path) for thing in table.things.values() if not thing.alias_of)
+        if reader is None and not declares:
             continue
         text = changes.git(root, "show", f"{args.commit}:{path}", check=False)
-        declared = reader.declared_in(text, path) if text else []
+        declared = list(reader.declared_in(text, path)) if (text and reader) else []
+        if text and declares:      # the things a game's data files declare (a translation key, a data object), 1.117.0
+            declared += [(item["id"], item["line"], item["end"]) for item in data_names.declared_in(table, text, path)]
         counted = 0
         for line in lines:
             holding = [d for d in declared if d[1] <= line <= d[2]]
@@ -194,41 +203,137 @@ def history_report(conn, root, args):
     return report, {"node": found, **data}
 
 
-def _names_by_name(root, args, environ, progress):
-    """Every name in a Lua, Python or XML file that names one of this repository's things, by name (1.115.0)."""
-    target = (root / args.file).resolve()
+def _file_text(root, file, commit):
+    """A file of the repository as it stands, or as it stood at a commit."""
+    target = (root / file).resolve()
     if root not in target.parents:
-        raise connections.ConnectionsError(f"{args.file} is not inside the repository.")
-    if args.commit:
-        text = changes.git(root, "show", f"{args.commit}:{Path(args.file).as_posix()}", check=False)
+        raise connections.ConnectionsError(f"{file} is not inside the repository.")
+    if commit:
+        text = changes.git(root, "show", f"{commit}:{Path(file).as_posix()}", check=False)
         if not text:
-            raise connections.ConnectionsError(f"{args.file} did not exist at {args.commit[:8]}.")
-    else:
-        try:
-            text = target.read_text(encoding="utf-8", errors="replace")
-        except OSError as error:
-            raise connections.ConnectionsError(f"{args.file} could not be read: {error}") from None
-    conn = connections.open_graph(root, environ, None, progress, args.rebuild)
+            raise connections.ConnectionsError(f"{file} did not exist at {commit[:8]}.")
+        return text
     try:
-        return code_names.read_by_name(conn, root, Path(args.file).as_posix(), text, args.commit)
-    finally:
-        conn.close()
+        return target.read_text(encoding="utf-8", errors="replace")
+    except OSError as error:
+        raise connections.ConnectionsError(f"{file} could not be read: {error}") from None
+
+
+def _no_names(file, commit):
+    return {"file": file, "project": None, "projects": [], "names": [], "snippets": {}, "errors": 0, "missingReferences": 0,
+            "seconds": 0, "commit": commit, "exact": False, "limits": []}
+
+
+def _also(ruled):
+    """What a C# name also stands for in the game's data, as a rule read it: a DefOf field's Def."""
+    return {"rule": ruled["rule"], "ruleWords": ruled["ruleWords"], "candidates": ruled["candidates"], "more": ruled["more"]}
+
+
+#: The C# names that may be declared where a rule reads a data thing's name (a DefOf field), and how many files are read for them.
+_ALSO_KINDS = {"field", "property", "constant"}
+_ALSO_FILES = 60
+
+
+def _add_rule_names(found, table, conn, root, file, text, exact_base):
+    """Adds the names a game's table reads in the file (1.117.0) to what was read from it. Over names read by name, a rule's
+    reading takes their place. A C# name keeps its own exact reading and gains what the rule says it `also` stands for: at its own
+    place, and wherever it is used, by the rule's reading of the line that declares it."""
+    held = data_names.index(table, root, data_names.store_nodes(conn))
+    ruled = data_names.as_names(data_names.read(table, held, file, text), file) + data_names.declarations(table, file, text)
+    by_line = {}
+    for name in ruled:
+        by_line.setdefault(name["line"], []).append(name)
+    kept = []
+    for name in found["names"]:
+        over = [r for r in by_line.get(name["line"], ())
+                if r["column"] < name["column"] + name["length"] and name["column"] < r["column"] + r["length"]]
+        if over and not exact_base:
+            continue
+        for rule_name in over:
+            rule_name["dropped"] = True
+            if rule_name["candidates"] and (rule_name["column"], rule_name["length"]) == (name["column"], name["length"]):
+                name["also"] = _also(rule_name)
+        kept.append(name)
+    ruled = [name for name in ruled if not name.pop("dropped", False)]
+    if exact_base:
+        wanted = {}
+        for name in kept:
+            where = name["declared"].get("file")
+            if where and "also" not in name and name["kind"] in _ALSO_KINDS:
+                wanted.setdefault(where, []).append(name)
+        for where, names in list(wanted.items())[:_ALSO_FILES]:
+            try:
+                other = text if where == file else (root / where).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            declared = {(r["line"], r["text"]): r for r in data_names.as_names(data_names.read(table, held, where, other), where)
+                        if r["candidates"]}
+            for name in names:
+                rule_name = declared.get((name["declared"].get("line"), name["text"]))
+                if rule_name:
+                    name["also"] = _also(rule_name)
+    files = {}
+    for name in ruled + [n for n in kept if "also" in n]:
+        for thing in (name["also"]["candidates"] if "also" in name else name["candidates"]):
+            key = f"{thing['file']}:{thing['line']}"
+            if key not in found["snippets"]:
+                snippet = code_names.snippet(root, thing, files)
+                if snippet:
+                    found["snippets"][key] = snippet
+    found["names"] = sorted(kept + ruled, key=lambda n: (n["line"], n["column"]))
+    found["game"] = table.source
+    found["limits"].append(f"Names between data files and code are read by the rules for {table.source}, from the text: each "
+                           "says which rule read it, and one may be wrong.")
 
 
 def names_report(root, args, environ, progress, run=subprocess.run, tool=None):
-    """Every name in one file and where it is declared: exactly in C# (the names reader); by name in Lua, Python and XML."""
+    """Every name in one file and where it is declared: exactly in C# (the names reader); by name in Lua, Python and XML; and,
+    with a game that has a table of them, the names that cross between its data files and its code, by its rules (1.117.0)."""
     if args.commit and not COMMIT.match(args.commit):
         raise connections.ConnectionsError(f"{args.commit!r} is not a commit.")
-    by_name = Path(args.file).suffix.lower() in code_names.BY_NAME
+    file, suffix = Path(args.file).as_posix(), Path(args.file).suffix.lower()
+    game = getattr(args, "game", None)
+    table = data_names.table_for(game)
+    by_name = suffix in code_names.BY_NAME
+    ruled = bool(table) and any(rule.reads(file) for rule in table.rules) or \
+        bool(table) and any(thing.holds(file) for thing in table.things.values() if not thing.alias_of)
+    unread = suffix != ".cs" and not by_name and not ruled
+    if unread and suffix not in data_names.read_suffixes():
+        raise connections.ConnectionsError(f"{args.file} is not a file whose names are read: C#, Lua, Python or XML, or a data "
+                                           "file a game's rules read.")
+    conn = None
     try:
-        found = (_names_by_name(root, args, environ, progress) if by_name
-                 else code_names.read(root, args.file, args.commit, environ, run, progress, tool))
+        if unread:                 # a data file no rule of this game reads: it has no names, and that is the answer
+            found = _no_names(file, args.commit)
+            found["limits"].append("No rule reads this file's names" + (f" for {table.source}." if table else
+                                   ": name the game its repository is for (--game)."))
+        elif suffix == ".cs":
+            try:
+                found = code_names.read(root, args.file, args.commit, environ, run, progress, tool)
+            except code_names.NamesError as error:
+                if not ruled:
+                    raise
+                found = _no_names(file, args.commit)
+                found["limits"].append(f"The C# names were not read ({error}): only what the rules for {table.source} read is "
+                                       "given.")
+        if not unread and (suffix != ".cs" or ruled):
+            text = _file_text(root, args.file, args.commit)
+            conn = connections.open_graph(root, environ, None, progress, args.rebuild, game)
+            if suffix != ".cs":
+                found = (code_names.read_by_name(conn, root, file, text, args.commit)
+                         if by_name and not (table and table.is_prose(file)) else _no_names(file, args.commit))
+            if ruled:
+                _add_rule_names(found, table, conn, root, file, text, exact_base=suffix == ".cs")
     except code_names.NamesError as error:
         raise connections.ConnectionsError(str(error)) from None
+    finally:
+        if conn is not None:
+            conn.close()
+    by_name = suffix != ".cs"
     kinds, ours = code_names.counts(found)
     when = f" as it stood at {args.commit[:8]}" if args.commit else ""
     report = Report(f"Names: {found['file']}{when}, {len(found['names']):,} names, {ours:,} declared in this repository")
-    if not by_name:
+    if not by_name and found["projects"]:
         report.lines.append(f"Read with Roslyn from {', '.join(found['projects'])} in {found['seconds']:.1f} s; "
                             f"{found['errors']:,} errors in the file as the reader built it.")
     for limit in found["limits"]:
@@ -275,6 +380,36 @@ def calls_report(root, args, environ, progress, run=subprocess.run, tool=None, r
     return report, found
 
 
+def jumps_report(conn, root, args, table, progress):
+    """What each of a game's rules for names between data files and code reads in this repository (1.117.0): how many names, and
+    how many stand for one thing, for several, or for nothing here. The count a rule passes before it is kept, and the one to run
+    on a next game's table."""
+    started = time.monotonic()
+    held = data_names.index(table, root, data_names.store_nodes(conn))
+    found = data_names.count(table, held, root, samples=max(1, min(args.top, 40)), progress=progress)
+    found["game"] = table.source
+    found["seconds"] = round(time.monotonic() - started, 2)
+    rules = found["rules"]
+    total = sum(rule["matches"] for rule in rules)
+    report = Report(f"Jumps: {Path(root).name}, {total:,} names read by the {len(rules)} rules for {table.source}")
+    report.lines.append("A rule reads text. One thing: the name has one thing to stand for. Several: more than one has the name. "
+                        "Nothing here: no thing of this repository has it (the game's, another mod's, or a mistake).")
+    report.section("Things a name may stand for", Table(
+        ["Thing", "From", "How many", "Names shared"],
+        [[thing["kind"], "the connections" if thing["from"] == "graph" else "the files the table names", f"{thing['count']:,}",
+          f"{thing['shared']:,}"] for thing in found["things"]]))
+    report.section("Rules", Table(
+        ["Rule", "What it reads", "In", "Names read", "One thing", "Several", "Nothing here"],
+        [[rule["id"], rule["words"] + (" (only names that are things)" if rule["known"] else ""), ", ".join(rule["in"]),
+          f"{rule['matches']:,}", f"{rule['one']:,}", f"{rule['several']:,}", f"{rule['none']:,}"] for rule in rules]))
+    for rule in rules:
+        if rule["noneTop"]:
+            more = f" ({rule['noneDistinct']:,} names in all)" if rule["noneDistinct"] > len(rule["noneTop"]) else ""
+            report.section(f"{rule['id']}: named nothing here{more}",
+                           Bullets([f"{n['name']} ({n['count']:,})" for n in rule["noneTop"]]))
+    return report, found
+
+
 def main(argv=None, environ=None, out=None):
     out = out or sys.stdout
     environ = os.environ if environ is None else environ
@@ -296,7 +431,11 @@ def main(argv=None, environ=None, out=None):
             data = {"repository": root.name, **data}
             out.write((envelope_text("connections", report, redact, data) if args.json else render_markdown(report, redact)) + "\n")
             return code
-        conn = connections.open_graph(root, environ, None, progress, args.rebuild)
+        table = data_names.table_for(args.game)
+        if args.report == "jumps" and table is None:
+            raise connections.ConnectionsError(f"No game named {args.game!r} has a table of the names between its data files and "
+                                               f"its code yet. Those that have: {', '.join(data_names.tables())}.")
+        conn = connections.open_graph(root, environ, None, progress, args.rebuild, args.game)
         try:
             if args.report == "summary":
                 report, data = summary_report(conn, root)
@@ -308,12 +447,14 @@ def main(argv=None, environ=None, out=None):
                 report, data = flow_report(conn, args)
             elif args.report == "history":
                 report, data = history_report(conn, root, args)
+            elif args.report == "jumps":
+                report, data = jumps_report(conn, root, args, table, progress)
             else:
-                report, data = changed_report(conn, root, args)
+                report, data = changed_report(conn, root, args, table)
         finally:
             conn.close()
         data = {"repository": root.name, **data}
-    except (connections.ConnectionsError, changes.ChangesError, OSError) as error:
+    except (connections.ConnectionsError, data_names.DataNamesError, changes.ChangesError, OSError) as error:
         if not args.json:
             print(redact(str(error)), file=sys.stderr)
             return EXIT_REFUSED
@@ -332,4 +473,5 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS,
                         "changed": {"note": "the things a commit changed; needs the commit"},
                         "history": {"note": "the commits that changed one thing, with the entries they wrote; needs its id"},
                         "names": {"note": "what every name in one file is and where it is declared; needs the file"},
-                        "calls": {"note": "what a commit did to its C# methods' calls, and rings made or cut; needs the commit"}}}
+                        "calls": {"note": "what a commit did to its C# methods' calls, and rings made or cut; needs the commit"},
+                        "jumps": {"note": "what each rule for names between data files and code reads; needs the game"}}}

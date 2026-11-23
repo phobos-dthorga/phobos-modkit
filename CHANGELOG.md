@@ -4,6 +4,22 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.117.0] - 2026-11-24
+
+### Added
+
+- **`connections` reads the names that cross between a game's data files and its code** (the owner's go for D'thorga
+  Companion's step 7, 24 Nov 2026). With `--game`, a translation key the code asks for, a class or a Def a data file names and a
+  Def named in code become names to follow in `names` and connections in the graph, by a table of rules in the game's adapter
+  (`games/<game>/data-names.json`; RimWorld's and Ostranauts' now), read by the game-free `data_names`. Every rule was counted on
+  phobos-rimworld and phobos-ostranauts first, and the new `connections jumps` repeats that count on any repository. See
+  [connections](docs/connections.md).
+
+### Fixed
+
+- **A name at its own declaration means that thing**, in `connections names` by name: a Def whose name another Def shares was
+  given as either of them on its own line.
+
 ## [1.116.0] - 2026-11-24
 
 ### Added
