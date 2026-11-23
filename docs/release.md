@@ -106,5 +106,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 
 - Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
 - Names in capitals are given bare, without a flag, in the order shown.
+- [Common options](common-options.md) explains `--root`, `--json` and `--no-redact`, which many commands share.
 - Only one of `--list`, `--check`, `--apply` at a time (`constants`).
 <!-- end generated -->

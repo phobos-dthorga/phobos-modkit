@@ -64,5 +64,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--automatic` | all | a look nobody pressed for: ask GitHub only what may have changed, and keep calls for a press |  |
 | `--cache VALUE` | all | the kit's cache folder (default: the setting, then the temporary folder) |  |
 
-Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--root`, `--cache`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

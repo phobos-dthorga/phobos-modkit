@@ -78,5 +78,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--screenshots VALUE` | `report`, `screenshots` | its own screenshots folder (default: inside the data folder) |  |
 | `--since VALUE` | `report` | list Workshop items updated since this time (default: the last launch); 'previous' for the launch before the last, as far as the kit has seen (1.51.0: while the game runs) |  |
 
-Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

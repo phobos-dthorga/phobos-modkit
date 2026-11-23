@@ -141,5 +141,6 @@ Effect: runs other programs. Builds the repository and runs its tests.
 | `--verify-staged` | run nothing: exit 0 only when a full passing run saw every staged file as it is staged (a pre-commit hook) |  |
 | `--verbose` | list every step, not only the failed ones |  |
 
-It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--root`, `--config`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

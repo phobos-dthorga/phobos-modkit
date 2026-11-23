@@ -76,5 +76,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--clear` | `set` | take it out of the central file |  |
 
 - Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--root`, `--json` and `--no-redact`, which many commands share.
 - Only one of `--value`, `--clear` at a time (`set`).
 <!-- end generated -->

@@ -111,6 +111,15 @@ class OneBlock(unittest.TestCase):
         gamma = "\n".join(command_docs.command_block(commands()[2], "docs/shared.md", CONFIG))
         self.assertIn("It takes `--json`", gamma)
 
+    def test_common_options_point_to_their_page_in_the_configs_order(self):
+        config = dict(CONFIG, commonDoc="docs/common-options.md", common=["--root", "--game", "--top", "--json", "--no-redact"])
+        alpha = "\n".join(command_docs.command_block(self.alpha, "docs/alpha.md", config))
+        self.assertIn("[Common options](common-options.md) explains `--game`, `--top`, `--json` and `--no-redact`, which many "
+                      "commands share.", alpha)
+        beta = "\n".join(command_docs.command_block(commands()[1], "rules/README.md", config))
+        self.assertIn("[Common options](../docs/common-options.md) explains `--root`, `--json` and `--no-redact`", beta)
+        self.assertNotIn("Common options", self.text)
+
     def test_a_link_from_another_folder_climbs_out(self):
         self.assertEqual(command_docs._relative("docs/settings.md", "rules/README.md"), "../docs/settings.md")
         self.assertEqual(command_docs._relative("docs/alpha.md", "README.md"), "docs/alpha.md")
@@ -188,6 +197,15 @@ class Files(unittest.TestCase):
         self.assertIn("config/command-docs.json names `ghost`, which is not a command", data["problems"])
         self.assertTrue(any(p.startswith("docs/missing.md does not exist") for p in data["problems"]))
 
+    def test_a_common_options_page_not_there_is_a_problem(self):
+        config = dict(CONFIG, commonDoc="docs/common-options.md", common=["--top"])
+        (self.repo.root / "config" / "command-docs.json").write_text(json.dumps(config), encoding="utf-8")
+        code, data = self.repo.run("--write")
+        self.assertEqual(code, command_docs.EXIT_FAILED)
+        self.assertIn("docs/common-options.md does not exist (the common options page)", data["problems"])
+        self.repo.put("docs/common-options.md", "# Common options\n")
+        self.assertEqual(self.repo.run("--write")[0], command_docs.EXIT_OK)
+
 
 class TheKitsOwnConfig(unittest.TestCase):
     def test_every_command_has_a_doc_that_exists(self):
@@ -195,6 +213,7 @@ class TheKitsOwnConfig(unittest.TestCase):
         self.assertEqual(set(config["docs"]), set(COMMANDS))
         for name, doc in config["docs"].items():
             self.assertTrue((command_docs.KIT_ROOT / doc).is_file(), (name, doc))
+        self.assertTrue((command_docs.KIT_ROOT / config["commonDoc"]).is_file())
 
 
 if __name__ == "__main__":

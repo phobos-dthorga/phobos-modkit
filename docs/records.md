@@ -60,5 +60,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--every-hours N` | `status` | also say whether a copy is due: none yet, or the newest this old |  |
 | `--automatic` | `backup` | mark the copy as made by the Companion's own timer |  |
 
-Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

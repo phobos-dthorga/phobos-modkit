@@ -199,6 +199,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--off` | `schedule` | remove the daily run; the copies stay |  |
 
 - Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--root`, `--game`, `--json` and `--no-redact`, which many commands share.
 - Only one of `--local`, `--private-local`, `--repository` at a time (`mark`).
 - Only one of `--at`, `--off` at a time (`schedule`).
 <!-- end generated -->

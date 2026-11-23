@@ -61,5 +61,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--option VALUE` | `answer` | the chosen option's id, or 'other' with `--words`. Required. |  |
 | `--words VALUE` | `answer` | anything the owner added |  |
 
-Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--root`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

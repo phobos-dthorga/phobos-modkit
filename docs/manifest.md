@@ -143,5 +143,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 
 Effect: reads only.
 
-It takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- It takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

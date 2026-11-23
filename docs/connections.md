@@ -121,5 +121,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--file VALUE` | `names` | the C# file, relative to the repository. Required. |  |
 | `--commit VALUE` | `names` | read the file as it stood at this commit (other files as they stand now) |  |
 
-Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--root`, `--top`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

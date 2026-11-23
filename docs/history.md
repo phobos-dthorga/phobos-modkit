@@ -96,5 +96,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--commit VALUE` | `at` | the commit to read it at |  |
 | `--when VALUE` | `at` | the moment to read it at (an ISO date or time) |  |
 
-Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--root`, `--game`, `--settings`, `--top`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

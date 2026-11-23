@@ -89,5 +89,6 @@ Effect: writes, with `--apply`.
 | `--apply` | delete; without it, only list what would go |  |
 | `--top N` | rows per detail table (default 15) | `15` |
 
-It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--root`, `--config`, `--settings`, `--top`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

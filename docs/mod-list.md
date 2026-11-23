@@ -206,6 +206,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--apply` | `unsubscribe` | do it; without it, only say what it would do |  |
 
 - Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--settings`, `--top`, `--json` and `--no-redact`, which many commands share.
 - Only one of `--remove`, `--remove-extra`, `--enable`, `--move` at a time (`fix`).
 - Only one of `--after`, `--before`, `--top`, `--bottom`, `--drop` at a time (`rules`).
 - Only one of `--from`, `--last-clean`, `--file` at a time (`compare`, `load`).

@@ -70,5 +70,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--top N` | all | rows per table (default 25) | `25` |
 | `--days N` | `churn` | how far back (default 30; 0 for every commit) | `30` |
 
-Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--root`, `--top`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

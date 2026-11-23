@@ -45,6 +45,8 @@ The README's index sits between `<!-- generated: command index -->` and the same
 - **Shared options**: `--json` and `--no-redact`, which every report takes with the same help, are named in one line instead
   of a row each (`brief` in the config). Where a path option appears (`paths` in the config), a line points to
   [settings](settings.md) for the order a path left out is looked for in.
+- **Common options**: a line names the options the block's command shares with many others (`common` in the config) and links to
+  [common options](common-options.md) (`commonDoc`), which explains them once.
 - **Options that cannot be used together** are named in a line.
 
 The report also lists any option whose help states a default other than its parser's (`(default 25)` beside a default of 40),
@@ -59,6 +61,8 @@ and the JSON gives the same under `data.mismatchedDefaults`.
 | `settingsDoc` | The doc the path line points to |
 | `brief` | Options said in one line when every report takes them with the same help |
 | `paths` | Options that are paths, read in the settings order |
+| `commonDoc` | The page that explains the options many commands share |
+| `common` | Those options, in the order the line names them |
 
 ## Limits
 
@@ -82,5 +86,6 @@ Effect: writes, with `--write`. Fails when a block is missing or out of date; wi
 | `--root VALUE` | the kit's repository (default: the one this copy of the kit is in) |  |
 | `--write` | write the blocks that are missing or out of date; without it, only check |  |
 
-It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--root`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

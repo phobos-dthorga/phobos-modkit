@@ -96,5 +96,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--mod VALUE` | `pairs` | a package ID or folder name. Required. |  |
 | `--top N` | `pairs` | pairs listed at most (default 2,000) | `2000` |
 
-Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--game`, `--settings`, `--top`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

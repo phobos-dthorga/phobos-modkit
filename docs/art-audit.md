@@ -97,5 +97,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--all` | `report` | list accepted images and borrowings beside the open ones |  |
 | `--top N` | `report` | rows per table (default 40) | `40` |
 
-Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--root`, `--top`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

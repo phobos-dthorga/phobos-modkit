@@ -80,6 +80,7 @@ Effect: reads only.
 
 - It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
 - Names in capitals are given bare, without a flag, in the order shown.
+- [Common options](common-options.md) explains `--top`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->
 
 ### `windows-dumps`
@@ -98,5 +99,6 @@ Effect: reads only. `--apply` and `--off` write the one registry key for the pro
 | `--off` | remove this program's own setting (administrator window) |  |
 
 - It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
+- [Common options](common-options.md) explains `--json` and `--no-redact`, which many commands share.
 - Only one of `--apply`, `--off` at a time.
 <!-- end generated -->

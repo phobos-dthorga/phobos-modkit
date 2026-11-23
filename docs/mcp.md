@@ -102,4 +102,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--tool VALUE` | `call` | the tool the model asked for. Required. One of `ask_report`, `describe_report`, `find_reports`. |  |
 | `--arguments VALUE` | `call` | the model's arguments, as one JSON object (default: {}) | `{}` |
 | `--online` | `call` | also allow the reports that read public pages |  |
+
+[Common options](common-options.md) explains `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

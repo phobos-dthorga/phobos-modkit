@@ -96,4 +96,5 @@ Effect: reads only.
 - It also takes `--json` (also write the full report as JSON to FILE; - prints only JSON) and `--no-redact` (show the home folder instead of ~).
 - Names in capitals are given bare, without a flag, in the order shown.
 - A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+- [Common options](common-options.md) explains `--game`, `--workshop`, `--settings`, `--top`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->

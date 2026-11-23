@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.113.0] - 2026-11-24
+
+### Added
+
+- **One page for the options many commands share: [common options](docs/common-options.md)** (docs rewrite, step 7, the owner's
+  go-ahead of 24 Nov 2026). `--root`, `--game`, `--workshop`, `--config`, `--settings`, `--cache`, `--top`, `--json` and
+  `--no-redact`, what each does and what is read when it is left out, and the commands where a name means something else. Every
+  generated block now ends with a line linking there for the shared options its command takes (`commonDoc` and `common` in
+  `config/command-docs.json`); the check names the page as a problem when it is missing.
+
 ## [1.112.1] - 2026-11-24
 
 ### Changed

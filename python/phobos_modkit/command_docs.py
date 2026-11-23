@@ -134,6 +134,14 @@ def _brief(command, config):
     return said
 
 
+def _common(command, config):
+    """The options named in config's "common" that this command takes, in the config's order: the page "commonDoc" explains them."""
+    if not config.get("commonDoc"):
+        return []
+    taken = {o["name"] for r in command["reports"] for o in r["options"]}
+    return [name for name in config.get("common", []) if name in taken]
+
+
 _relative = blocks.relative
 
 
@@ -209,6 +217,11 @@ def command_block(command, doc, config):
                                          for option, _ in seen.values()):
         after.append(f"A path left out is looked for in the order [settings]({_relative(config['settingsDoc'], doc)}) explains: "
                      "an environment variable, the repository's own settings file, the central settings file, then the default.")
+    shared = _common(command, config)
+    if shared:
+        named_here = [f"`{n}`" for n in shared]
+        listed = ", ".join(named_here[:-1]) + " and " + named_here[-1] if len(named_here) > 1 else named_here[0]
+        after.append(f"[Common options]({_relative(config['commonDoc'], doc)}) explains {listed}, which many commands share.")
     groups = []
     for r in reports:
         for group in r.get("exclusive") or []:
@@ -303,6 +316,8 @@ def plan(root, commands=None, config=None):
         doc.after = text
         doc.stale = [c["name"] for c in doc.commands if c["name"] not in doc.missing] if text != doc.before else []
         found.append(doc)
+    if config.get("commonDoc") and not (root / config["commonDoc"]).is_file():
+        problems.append(f"{config['commonDoc']} does not exist (the common options page)")
     readme = config.get("readme")
     if readme:
         doc = Doc(readme, [{"name": INDEX_KEY}])

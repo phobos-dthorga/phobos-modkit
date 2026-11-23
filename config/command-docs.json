@@ -3,6 +3,8 @@
   "description": "Which doc holds each command's generated reports-and-options block, for command-docs (docs/command-docs.md). Paths are relative to the repository.",
   "readme": "README.md",
   "settingsDoc": "docs/settings.md",
+  "commonDoc": "docs/common-options.md",
+  "common": ["--root", "--game", "--workshop", "--config", "--settings", "--cache", "--top", "--json", "--no-redact"],
   "brief": ["--json", "--no-redact"],
   "paths": ["--game", "--config", "--workshop", "--cache", "--settings", "--archive", "--decompiler"],
   "docs": {

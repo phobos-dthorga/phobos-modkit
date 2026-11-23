@@ -94,4 +94,5 @@ Effect: reads public pages online. Reads GitHub and Steam keyless, paced and cac
 
 - It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
 - A path left out is looked for in the order [settings](settings.md) explains: an environment variable, the repository's own settings file, the central settings file, then the default.
+- [Common options](common-options.md) explains `--root`, `--game`, `--workshop`, `--config`, `--settings`, `--cache`, `--top`, `--json` and `--no-redact`, which many commands share.
 <!-- end generated -->
