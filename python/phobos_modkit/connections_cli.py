@@ -6,11 +6,12 @@
     connections flow --root REPO --node ID [--depth 2]   who calls it and what it calls, a few steps each way
     connections changed --root REPO --commit HASH        the things a commit changed, by the lines it changed
     connections history --root REPO --node ID           the commits that changed a thing's lines, with the entries they wrote
+    connections names --root REPO --file F.cs [--commit HASH]   what every name in one C# file is, and where it is declared
 
 C# is read exactly from the assemblies the repository builds (calls, fields, inheritance, overrides, Harmony patches), and by
 name from the source where none is built; XML Defs from the files; Lua by name; Python by its own parser. Every connection says
 whether it is exact. The graph is kept in the kit's cache and read again when a file it came from changes (docs/connections.md).
-It only reads.
+`names` reads one C# file's project from source with Roslyn instead (the names reader; needs the .NET SDK). It only reads.
 """
 from __future__ import annotations
 
@@ -18,9 +19,10 @@ import argparse
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 
-from . import changes, connections
+from . import changes, code_names, connections
 from .connections import csharp, defs, lineage, lua, pycode
 from .manifest import READS
 from .progress import Progress
@@ -45,7 +47,8 @@ def _parser():
                            ("around", "everything one connection away from one thing"),
                            ("flow", "who calls one thing and what it calls, a few steps each way"),
                            ("changed", "the things a commit changed"),
-                           ("history", "the commits that changed one thing's lines, with the changelog entries they wrote")):
+                           ("history", "the commits that changed one thing's lines, with the changelog entries they wrote"),
+                           ("names", "what every name in one C# file is, and where it is declared")):
         s = sub.add_parser(name, help=helptext)
         s.add_argument("--root", help="the repository (default: the current folder)")
         if name == "find":
@@ -61,6 +64,9 @@ def _parser():
                            help=f"commits to give, newest first (default {lineage.MAX_COMMITS}, at most {lineage.LIMIT_CEILING})")
         if name == "changed":
             s.add_argument("--commit", required=True, help="the commit")
+        if name == "names":
+            s.add_argument("--file", required=True, help="the C# file, relative to the repository")
+            s.add_argument("--commit", help="read the file as it stood at this commit (other files as they stand now)")
         s.add_argument("--rebuild", action="store_true", help="read every file again, whatever the cache holds")
         s.add_argument("--top", type=int, default=60, help="rows per table (default 60)")
         s.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
@@ -181,6 +187,32 @@ def history_report(conn, root, args):
     return report, {"node": found, **data}
 
 
+def names_report(root, args, environ, progress, run=subprocess.run, tool=None):
+    """Every name in one C# file: what it is and where it is declared (the names reader)."""
+    if args.commit and not COMMIT.match(args.commit):
+        raise connections.ConnectionsError(f"{args.commit!r} is not a commit.")
+    try:
+        found = code_names.read(root, args.file, args.commit, environ, run, progress, tool)
+    except code_names.NamesError as error:
+        raise connections.ConnectionsError(str(error)) from None
+    kinds, ours = code_names.counts(found)
+    when = f" as it stood at {args.commit[:8]}" if args.commit else ""
+    report = Report(f"Names: {found['file']}{when}, {len(found['names']):,} names, {ours:,} declared in this repository")
+    report.lines.append(f"Read with Roslyn from {', '.join(found['projects'])} in {found['seconds']:.1f} s; "
+                        f"{found['errors']:,} errors in the file as the reader built it.")
+    for limit in found["limits"]:
+        report.lines.append(limit)
+    report.section("Kinds", Table(["Kind", "Names"], [[kind, f"{count:,}"] for kind, count in kinds.items()]))
+    elsewhere = {}
+    for name in found["names"]:
+        assembly = name["declared"].get("assembly")
+        if assembly:
+            elsewhere[assembly] = elsewhere.get(assembly, 0) + 1
+    report.section("Declared outside this repository", Table(
+        ["Assembly", "Names"], [[a, f"{n:,}"] for a, n in sorted(elsewhere.items(), key=lambda kv: -kv[1])[:args.top]]))
+    return report, found
+
+
 def main(argv=None, environ=None, out=None):
     out = out or sys.stdout
     environ = os.environ if environ is None else environ
@@ -197,6 +229,11 @@ def main(argv=None, environ=None, out=None):
             raise connections.ConnectionsError(f"{root} is not a folder.")
         if getattr(args, "node", None) and not NODE.match(args.node):
             raise connections.ConnectionsError(f"{args.node!r} is not a thing's id.")
+        if args.report == "names":
+            report, data = names_report(root, args, environ, progress)
+            data = {"repository": root.name, **data}
+            out.write((envelope_text("connections", report, redact, data) if args.json else render_markdown(report, redact)) + "\n")
+            return code
         conn = connections.open_graph(root, environ, None, progress, args.rebuild)
         try:
             if args.report == "summary":
@@ -231,4 +268,5 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS,
                         "around": {"note": "everything one connection away from one thing; needs its id"},
                         "flow": {"note": "the calls around one thing, a few steps each way; needs its id"},
                         "changed": {"note": "the things a commit changed; needs the commit"},
-                        "history": {"note": "the commits that changed one thing, with the entries they wrote; needs its id"}}}
+                        "history": {"note": "the commits that changed one thing, with the entries they wrote; needs its id"},
+                        "names": {"note": "what every name in one C# file is and where it is declared; needs the file"}}}

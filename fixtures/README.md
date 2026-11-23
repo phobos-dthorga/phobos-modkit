@@ -73,3 +73,7 @@ nothing holds, made after the last collection, so a snapshot finds them as garba
 `dotnet/ConnectionsFixture/` is C# source the connections tool's tests build and read: a base class with a virtual method and
 its override, a property, a lambda and an iterator (whose calls count as their method's), a field, and calls into .NET's own
 library (left out of the connections).
+
+`dotnet/NamesFixture/` is two C# projects the names reader's tests read from source, never built: `Core` declares a class with a
+constant, a property and a method with a comment above it; `Mod` refers to `Core` and names them, with a parameter, a local and a
+property of .NET's own `string`. Its names are made up.

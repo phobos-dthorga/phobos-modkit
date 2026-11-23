@@ -120,9 +120,11 @@ Core (no game in it) and game adapters (`games/<game>/`) live here; project poli
 - **Python** (`python/phobos_modkit/`): standard library only, Python 3.10 or newer, `unittest`. The default.
 - **Rust** (`crates/`): for large inputs where speed changes how the tool is used. Pinned toolchain, edition
   2024, as Phobos Scope does.
-- **C#** (`dotnet/`): for .NET assembly metadata and the heap reader. .NET 10, no assembly loading, no package references, with
-  **one exception** (owner's yes, 20 November 2026): the heap reader's Microsoft ClrMD, pinned in its project and listed in
-  `THIRD_PARTY_NOTICES.md`. `dotnet/Directory.Build.props`
+- **C#** (`dotnet/`): for .NET assembly metadata, the heap reader and the names reader. .NET 10, no assembly loading, no package
+  references, with **two exceptions**, each pinned in its project and listed in `THIRD_PARTY_NOTICES.md`: the heap reader's
+  Microsoft ClrMD (owner's yes, 20 November 2026), and the names reader's Microsoft Roslyn (`Microsoft.CodeAnalysis.CSharp`; the
+  owner's choice by card, 24 November 2026: "Roslyn for C#"), which parses source and never runs an analyser or a source
+  generator. `dotnet/Directory.Build.props`
   sends `obj/` and `bin/` to the build folder outside the repository; a C# fixture under `fixtures/dotnet/` imports it.
 - A third-party dependency needs a stated reason and an entry in `THIRD_PARTY_NOTICES.md`.
 

@@ -18,6 +18,7 @@ in this repository, and an installer's bundle carries the built files.
 | Package | Licence | Why it is used |
 | --- | --- | --- |
 | [Microsoft.Diagnostics.Runtime](https://www.nuget.org/packages/Microsoft.Diagnostics.Runtime) 4.2.751201 (ClrMD, [microsoft/clrmd](https://github.com/microsoft/clrmd)) | MIT | Reads a running .NET program's memory from a snapshot, through the program's own memory-reading library |
+| [Microsoft.CodeAnalysis.CSharp](https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp) 5.0.0, with Microsoft.CodeAnalysis.Common 5.0.0 (Roslyn, [dotnet/roslyn](https://github.com/dotnet/roslyn)) | MIT | The names reader (1.111.0, read 24 November 2026): reads a C# project's source and says what each name in a file is and where it is declared. Only `dotnet/PhobosModKit.Names` refers to it |
 
 ClrMD brings Microsoft's own packages with it, for fetching symbols and logging: Azure.Core, Azure.Identity, Microsoft.Identity.Client
 and its extensions, Microsoft.IdentityModel.Abstractions, Microsoft.Diagnostics.NETCore.Client, Microsoft.Security.AntiSSRF,

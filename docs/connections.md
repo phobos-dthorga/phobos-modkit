@@ -28,6 +28,7 @@ python -m phobos_modkit connections around --root REPO --node cs:Phobos.Framewor
 python -m phobos_modkit connections flow --root REPO --node cs:Phobos.Framework.TopUp.Seen.Note --depth 2
 python -m phobos_modkit connections changed --root REPO --commit 3352e4da
 python -m phobos_modkit connections history --root REPO --node cs:Phobos.Framework.TopUp.Seen.Note [--limit 100]
+python -m phobos_modkit connections names --root REPO --file src/Mod/Sail.cs [--commit 3352e4da]
 ```
 
 Add `--json` for the envelope; `--rebuild` reads every file again.
@@ -58,6 +59,29 @@ as `external`, with the assembly that holds them where the reader knows it.
   each `{changelog, product, text}`, the changelog entries that commit wrote; `more` when there are over 25. The lines are followed
   back through moves by git's line-range log; a thing outside the repository is refused.
 - `find`: `things`; `summary`: `readers` (each language, how it was read, how much), and counts.
+- `names` (1.111.0): `file`, `project`, `projects` (it and every project it refers to), `names`, `snippets`, `errors`,
+  `missingReferences`, `seconds`, `commit` and `limits`. Each name is `{line, column, length, text, kind, display, id, here,
+  declared}`: `line` counts from 1 and `column` from 0; `kind` is class, struct, interface, enum, delegate, record, method,
+  constructor, property, field, constant, enum member, event, parameter, local, type parameter or namespace; `display` its
+  signature (`Boat.Float(int)`); `id` the documentation id (`M:NamesFixture.Core.Boat.Float(System.Int32)`); `here` true where
+  the name is its own declaration; `declared` either `{file, line, end}` in this repository or `{assembly}`. `snippets` holds
+  each of this repository's declarations the file names (not parameters or locals) by `file:line`: `{file, start, end, lines,
+  cut}`, at most 60 lines, its comment above it included.
+
+## Names in one C# file (`names`, 1.111.0)
+
+**For following a name to where it is declared** (D'thorga Companion, `docs/code-reading.md` step 4; the owner's choice by card
+of 24 Nov 2026: "Roslyn for C#"). It reads differently from the rest of this tool:
+
+- **From source, with Microsoft's Roslyn**, through the kit's names reader (`dotnet/PhobosModKit.Names`), built on first use
+  with the .NET SDK; nothing needs building first. It never loads or runs an assembly, an analyser or a source generator.
+- **MSBuild lists the project's files and references** (`dotnet msbuild -getItem`, `BuildProjectReferences=false`), and those
+  of every project it refers to, so a name declared in another of the repository's projects is placed in its file. A project
+  never restored is restored first, which fetches its packages and builds nothing.
+- **At a commit, only that file is read as it stood**; every other file as it stands now, and `limits` says so.
+- **About 3 to 7 s a file** on phobos-rimworld's vehicles part (two projects, 355 files): MSBuild's listing about half of it.
+  Nothing is cached yet.
+- C# only; other languages go by name through `find`.
 
 ## Limits
 
@@ -79,6 +103,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `flow` | Who calls one thing and what it calls, a few steps each way. The calls around one thing, a few steps each way; needs its id. | reads only |
 | `changed` | The things a commit changed. The things a commit changed; needs the commit. | reads only |
 | `history` | The commits that changed one thing's lines, with the changelog entries they wrote. The commits that changed one thing, with the entries they wrote; needs its id. | reads only |
+| `names` | What every name in one C# file is, and where it is declared. What every name in one C# file is and where it is declared; needs the file. | reads only |
 
 | Option | Reports | What it does | Default |
 | --- | --- | --- | --- |
@@ -92,6 +117,8 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--depth N` | `flow` | steps each way (default 2). One of `1`, `2`, `3`. | `2` |
 | `--commit VALUE` | `changed` | the commit. Required. |  |
 | `--limit N` | `history` | commits to give, newest first (default 25, at most 500) | `25` |
+| `--file VALUE` | `names` | the C# file, relative to the repository. Required. |  |
+| `--commit VALUE` | `names` | read the file as it stood at this commit (other files as they stand now) |  |
 
 Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
 <!-- end generated -->

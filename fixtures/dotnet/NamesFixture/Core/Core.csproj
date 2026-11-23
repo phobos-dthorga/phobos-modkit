@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A made-up library for the names reader's tests: a project another refers to, read from source, never built. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>NamesFixture.Core</AssemblyName>
+  </PropertyGroup>
+
+</Project>

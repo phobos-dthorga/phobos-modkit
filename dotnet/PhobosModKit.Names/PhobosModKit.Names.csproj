@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Reads a C# project's source with Microsoft's Roslyn and says, for every name in one file, what it is and where it is
+       declared (connections names; D'thorga Companion's names to follow, docs/code-reading.md step 4). Read-only: it parses source
+       and reads referenced assemblies' metadata, and never loads or runs an assembly, an analyser or a source generator. The kit's
+       second C# package reference (the owner's choice by card, 24 November 2026: "Roslyn for C#"): Roslyn, MIT, pinned here and
+       listed in THIRD_PARTY_NOTICES.md. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <RootNamespace>Phobos.ModKit.Names</RootNamespace>
+    <AssemblyName>PhobosModKit.Names</AssemblyName>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+  </ItemGroup>
+
+</Project>

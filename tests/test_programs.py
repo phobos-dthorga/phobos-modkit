@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 import support  # noqa: F401  (puts the package on the path)
-from phobos_modkit import assemblies, heap_reader, native, programs
+from phobos_modkit import assemblies, code_names, heap_reader, native, programs
 
 
 def touch(path, data=b"x"):
@@ -61,10 +61,11 @@ class ReadyBuiltTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, "", "")
         out = Path(self.temp.name) / "out"
         made = programs.bundle(out, self.environ, run=run, which=lambda name: name)
-        self.assertEqual([c[:2] for c in commands], [["cargo", "build"], ["dotnet", "publish"], ["dotnet", "publish"]])
+        self.assertEqual([c[:2] for c in commands], [["cargo", "build"]] + [["dotnet", "publish"]] * 3)
         self.assertIn(native.program_name("xml-index"), made["files"])
         self.assertIn(f"assemblies/{native.program_name(assemblies.READER_NAME)}", made["files"])
         self.assertIn(f"heap/{native.program_name(heap_reader.TOOL.project)}", made["files"])
+        self.assertIn(f"names/{native.program_name(code_names.TOOL.project)}", made["files"])
         stamp = json.loads((out / programs.STAMP).read_text(encoding="utf-8"))
         self.assertEqual(stamp["files"], made["files"])
 

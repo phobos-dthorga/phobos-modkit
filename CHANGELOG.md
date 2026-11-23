@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.111.0] - 2026-11-24
+
+### Added
+
+- **`connections names`: what every name in one C# file is, and where it is declared** (the owner's choice by card, 24 Nov 2026:
+  "Roslyn for C#", for D'thorga Companion's names to follow; its `docs/code-reading.md`, step 4). A new C# tool, the names reader
+  (`dotnet/PhobosModKit.Names`), reads the file's project from source with Microsoft's Roslyn, after MSBuild lists its files and
+  references without building it, and every project it refers to as well, so a name declared in another of the repository's
+  projects is placed in its file. For each name: its kind, its signature, its documentation id, and where it is declared, as lines
+  of this repository (with those lines) or as another assembly. `--commit` reads the file as it stood then. On phobos-rimworld's
+  `FieldKitchen.cs`: 350 names, 203 declared in the repository, 0 errors, about 7 s. Roslyn is the kit's second C# package, listed
+  in `THIRD_PARTY_NOTICES.md`; the installer bundle carries the reader. See [connections](docs/connections.md).
+
 ## [1.110.0] - 2026-11-23
 
 ### Added

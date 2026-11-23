@@ -24,7 +24,7 @@ import subprocess
 import sys
 from typing import Callable
 
-from . import __version__, assemblies, heap_reader, native
+from . import __version__, assemblies, code_names, heap_reader, native
 from .dotnet_tools import ToolBuildError
 from .manifest import READS, WRITES
 from .report import Report, Table, envelope_text, home_redactor, keep, render_markdown
@@ -84,7 +84,8 @@ def _dotnet_tool(tool):
 
 
 _reader = _dotnet_tool(assemblies.TOOL)
-DOTNET_TOOLS = (assemblies.TOOL, heap_reader.TOOL)     # what a bundle carries, each in its own folder
+# What a bundle carries, each in its own folder; the names reader since 1.111.0.
+DOTNET_TOOLS = (assemblies.TOOL, heap_reader.TOOL, code_names.TOOL)
 
 
 def dotnet_versions(dotnet):
@@ -150,7 +151,12 @@ CORE = [
             "Looking inside a running game: what is in its memory, any object's values, and why something is still there",
             "Comes with D'thorga Companion's installer and needs the .NET 10 runtime; or the .NET 10 SDK, and the kit builds it",
             _dotnet_tool(heap_reader.TOOL)),
-    Program("dotnet", ".NET 10", "Running the assembly and heap readers; building them and the diagnostics tools needs the SDK",
+    Program("names-reader", "The kit's names reader",
+            "Following a name in C# code to where it is declared: what each name is, read from source with Roslyn",
+            "Comes with D'thorga Companion's installer and needs the .NET 10 runtime; or the .NET 10 SDK, and the kit builds it",
+            _dotnet_tool(code_names.TOOL)),
+    Program("dotnet", ".NET 10",
+            "Running the assembly, heap and names readers; building them and the diagnostics tools needs the SDK",
             "Microsoft, https://dotnet.microsoft.com/download (the runtime, or the SDK to build)", _dotnet),
     Program("dotnet-diagnostics", "Microsoft's .NET diagnostics tools",
             "Watching a running game's memory, and where it spends its time",
