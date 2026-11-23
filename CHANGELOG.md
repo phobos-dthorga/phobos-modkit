@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.113.3] - 2026-11-24
+
+### Changed
+
+- **The README is short again: what the kit is, what it needs, how a repository adds it, and the command index** (docs rewrite,
+  step 7). About 600 words of its own, from 2,600: the per-tool notes and the "Run a tool" list that repeated the index go (each
+  fact was already on its tool's page), and so does the Project map ([architecture](docs/architecture.md) has the module map).
+  It no longer says everything but the save indexer is standard-library Python: the C# readers and `rimworld-perf`'s recorders
+  need the .NET SDK too, and `programs status` says what a PC has.
+
 ## [1.113.2] - 2026-11-24
 
 ### Changed
