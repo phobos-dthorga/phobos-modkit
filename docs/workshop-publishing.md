@@ -228,6 +228,17 @@ same shape. `steam/publish/game_data.py` reads both.
 | --- | --- | --- | --- | --- | --- |
 | RimWorld | 294100 | `About/About.xml` `<name>`, `<modVersion>` | `About/Preview.png` | `Mod`, then each `<supportedVersions><li>` | `About/PublishedFileId.txt` |
 | Ostranauts | 1022980 | `mod_info.json` `0.strName`, `0.strModVersion` | `preview.png` | none | none |
+| Project Zomboid | 108600 | The highest version folder's `mod.info` (`42.15/mod.info`) `name=`, `modversion=` | `preview.png`, a square PNG of 256 or 512 px, at most 1,024,000 bytes | `Build 42` | none (the catalogue) |
+| Kenshi | 233860 | The catalogue (title defaults to the folder name); `<mod>.mod` marks the folder | `_<mod>.img` | the catalogue's | `_<mod>.info` `<id>`, when the game's tool made it |
+| Workers & Resources | 784150 | `workshopconfig.ini` `$ITEM_NAME`; version from the catalogue | `previewimage.png` | none (the game's own are numbers) | `workshopconfig.ini` `$ITEM_ID`, before `$END` |
+
+**Project Zomboid** (1.100.0) suits a repository holding one mod at its top (`"mod": "."`, the game file's default): the item
+is built as the game's own uploader builds it, the repository under `Contents/mods/<mod>/` and the cover from
+`workshop/preview.png`, with dot files, `workshop/`, `docs/`, `scripts/` and `tests/` left out. It refuses what the game's
+uploader refuses (`.exe`, `.dll`, `.zip` and the like) and ends the page with `Workshop ID:` and `Mod ID:` lines, which players
+and servers use. **Kenshi and Workers & Resources** keep no release number the tools can read (Kenshi's `.mod` counts saves;
+Workers & Resources has none), so each mod's catalogue entry gives its `version`. Their facts, with sources, are in their game
+files; Workers & Resources' visibility numbers and tag names, and Kenshi's full tag list, were not found.
 
 | Key | What it says |
 | --- | --- |
@@ -235,6 +246,9 @@ same shape. `steam/publish/game_data.py` reads both.
 | `metadata` | `file` (relative to the mod folder, any letter case, `{mod}` allowed), `format` and the `title` and `version` fields |
 | `preview` | The cover, relative to the uploaded folder |
 | `tags` | `fixed` tags, then each `fields` value; a catalogue entry's own `tags` are added |
+| `required` | Each mod's own Required items from its metadata: `each` element with its `number` and `name` children (XML), or `fields` and `names`; a catalogue entry's `requiredItems` are added (1.100.0) |
+| `previewRules`, `refuse` | The game's cover rules (`format` png, `square`, `sizes`, `maxBytes`) and file endings its uploader refuses: blockers (1.100.0) |
+| `footer` | Lines ending the page as the game's uploader ends it; `{itemId}` and `{field:<name>}` filled in when sending (1.100.0) |
 | `idFile` | Where the game writes the item number: `file` and `format` (`text`, or `keyvalue` with `key` and `separator`) |
 | `layout` | The game's own defaults for the catalogue's layout keys; the catalogue still wins |
 | `reminders` | What the owner must still do on Steam afterwards |
@@ -245,8 +259,14 @@ same shape. `steam/publish/game_data.py` reads both.
 | --- | --- |
 | `xml` | Child elements from the root joined by `/`, any letter case (`supportedVersions/li`); bare `&` forgiven |
 | `json` | Keys and list positions joined by `.` (`0.strName`) |
-| `keyvalue` | A key on `key=value` lines (`separator` changes `=`); a repeated key gives several values |
-| `catalogue` | The mod's own catalogue entry (`title`, `version`, `tags`), for mods with no such file |
+| `keyvalue` | A key on `key=value` lines (`separator` changes `=`; a space splits at the first space); a repeated key gives several values; `quoted` strips double quotes |
+| `catalogue` | The mod's own catalogue entry (`title`, `version`, `tags`), for mods with no such file; the title defaults to the folder name |
+
+In any format a field written `catalogue:<key>` comes from the catalogue entry. A metadata `file` may hold `*`; with `"pick":
+"highest"` the match in the highest version-numbered folder wins, and `fallback` names a file for when nothing matches. ID files
+may also be `xmltag` (one element's text, kept only in a file the game made). A catalogue's `layout` may set `"mod": "."` for a
+repository of one mod, `contentPrefix` (a folder in the item the content goes under) and `previewSource` (the cover's file in
+the repository). Mod names may hold single spaces.
 
 A game with no file at all, described only by a catalogue block with `"metadata": {"format": "catalogue"}`, uploads its folder as
 it is, with the title and version the catalogue gives. Moving RimWorld and Ostranauts to files changed nothing they read: the

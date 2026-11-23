@@ -4,6 +4,28 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.100.0] - 2026-11-23
+
+### Added
+
+- **Workshop publishing for Project Zomboid, Kenshi and Workers & Resources** (the owner's choice of 23 Nov 2026), each a game
+  file of data in `games/<game>/workshop.json`, with its format facts and sources. Project Zomboid builds the item as the game's
+  own uploader does (the mod under `Contents/mods/<mod>/`, the cover's rules checked, refused files named, `Workshop ID` and
+  `Mod ID` lines ending the page) from a repository holding one mod; Kenshi and Workers & Resources take each mod's version from
+  the catalogue, as their files keep no release number, and keep the game's own record of the item number in step. Read against
+  the owner's own PZ, Kenshi and Workers & Resources repositories; **none has published through it yet**.
+- **Each mod's own Required items** are read from its metadata (RimWorld: every `<modDependencies>` entry with a Workshop link,
+  named by its `displayName`) or listed in its catalogue entry (`requiredItems`), beside the project-wide ones.
+- **More the game file can say as data**: a field from the catalogue (`catalogue:<key>`), the highest version folder's metadata
+  (`"pick": "highest"`), `$KEY value` lines and quoted values, an item number kept in an XML element or before an `$END` line,
+  the cover's rules and refused file endings as blockers, and a footer for the page. A catalogue's layout may hold one mod at the
+  repository's top (`"mod": "."`), put the content under a folder of the item, and take the cover from elsewhere.
+
+### Fixed
+
+- **A cover path naming the mod (`{mod}`) is filled in**, and mod names may hold single spaces, as Kenshi's do.
+- **Version control never ships**: `.git` is always left out of an item's content.
+
 ## [1.99.0] - 2026-11-23
 
 ### Added

@@ -1,0 +1,73 @@
+{
+  "name": "zomboid",
+  "title": "Project Zomboid",
+  "appId": "108600",
+  "metadata": {
+    "file": "*/mod.info",
+    "pick": "highest",
+    "fallback": "mod.info",
+    "format": "keyvalue",
+    "title": "name",
+    "version": "modversion"
+  },
+  "preview": "preview.png",
+  "previewRules": {
+    "format": "png",
+    "square": true,
+    "sizes": [
+      256,
+      512
+    ],
+    "maxBytes": 1024000
+  },
+  "refuse": [
+    ".exe",
+    ".dll",
+    ".bat",
+    ".app",
+    ".dylib",
+    ".sh",
+    ".so",
+    ".zip"
+  ],
+  "tags": {
+    "fixed": [
+      "Build 42"
+    ]
+  },
+  "footer": [
+    "Workshop ID: {itemId}",
+    "Mod ID: {field:id}"
+  ],
+  "layout": {
+    "mod": ".",
+    "content": ".",
+    "changelog": "CHANGELOG.md",
+    "page": "workshop/page.bbcode",
+    "releases": "workshop/releases",
+    "contentPrefix": "Contents/mods/{mod}",
+    "previewSource": "workshop/preview.png",
+    "scope": [],
+    "exclude": [
+      ".*",
+      "workshop",
+      "docs",
+      "scripts",
+      "tests",
+      "AGENTS.md",
+      "CLAUDE.md"
+    ]
+  },
+  "reminders": [
+    "Project Zomboid: players and servers find mods by the Mod ID line the page now ends with; check it shows on the item."
+  ],
+  "facts": [
+    "A Workshop item is a folder holding workshop.txt, preview.png and Contents/mods/<mod id>/; Contents may hold only the folders buildings, creative and mods. The game's own uploader takes Contents as the item's content. Source: the game's uploader code, read on this PC (zombie/core/znet/SteamWorkshopItem.java), 23 Nov 2026.",
+    "Build 42 mods keep a mod.info (key=value lines: name, id, modversion, versionMin) in each game-version folder such as 42.15, beside common; a mod.info at the mod's top is Build 41's. The game reads the highest version folder no newer than itself; this file reads the highest.",
+    "The cover is preview.png at the item's top: a square PNG of 256 or 512 pixels and at most 1,024,000 bytes, checked by the game's uploader.",
+    "The game's uploader refuses .exe, .dll, .bat, .app, .dylib, .sh, .so and .zip files anywhere in the item.",
+    "It ends the description with Workshop ID and one Mod ID line per mod; players and dedicated servers use those lines to switch mods on.",
+    "It writes the item number into workshop.txt as id=. A repository of ours keeps the number in its catalogue; workshop.txt is the game's own staging folder's file.",
+    "Phobos repositories of this game hold one mod each, the repository's top being the mod folder; that is the layout here, which a catalogue can change."
+  ]
+}

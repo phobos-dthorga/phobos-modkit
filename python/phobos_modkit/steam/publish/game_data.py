@@ -1,4 +1,4 @@
-"""A game's side of Workshop publishing, as data (1.97.0). Game-free.
+"""A game's side of Workshop publishing, as data (1.97.0; more of it in 1.100.0). Game-free.
 
 The owner, 23 Nov 2026: "The Steam Workshop uploader should be genericized as far as is possible." Each game is a small JSON
 file, `games/<game>/workshop.json`, or a `game` block inside a repository's own catalogue for a game nobody has written one
@@ -10,6 +10,7 @@ for. It says where a mod keeps what Steam needs:
       "metadata": {"file": "About/About.xml", "format": "xml", "title": "name", "version": "modVersion"},
       "preview": "About/Preview.png",
       "tags": {"fixed": ["Mod"], "fields": ["supportedVersions/li"]},
+      "required": {"fields": ["modDependencies/li/steamWorkshopUrl"], "names": "modDependencies/li/displayName"},
       "idFile": {"file": "About/PublishedFileId.txt", "format": "text"},
       "reminders": ["..."],
       "facts": ["format facts, in our own words, with their sources"]
@@ -21,15 +22,22 @@ Metadata formats, and what a field names in each:
 | --- | --- | --- |
 | `xml` | Child elements from the root, joined by `/`, any letter case; the last step may match many | `supportedVersions/li` |
 | `json` | Keys and list positions, joined by `.` | `0.strName` |
-| `keyvalue` | A key on `key<separator>value` lines (separator `=` unless the format says otherwise); a repeated key is a list | `modversion` |
-| `catalogue` | The mod's own entry in the catalogue (`title`, `version`, `tags`): for a game whose mods carry no such file | `title` |
+| `keyvalue` | A key on `key<separator>value` lines (`=` unless `separator` says otherwise, a space splitting at the first space); a repeated key is a list; `quoted` strips one pair of double quotes | `modversion`, `$ITEM_NAME` |
+| `catalogue` | The mod's own entry in the catalogue (`title`, `version`, `tags`): for a game whose mods carry no such file; the title defaults to the mod's name | `title` |
 
-File names in the game file are found in any letter case, as games on Windows do. `{mod}` in a path is the mod's catalogue name.
-ID file formats: `text` (the whole file is the number) and `keyvalue` (one key's line, written in place or added).
+In any format, a field written `catalogue:<key>` comes from the catalogue entry instead (a game file with a title but no
+version). The metadata `file` may hold `*`: with `"pick": "highest"` the match in the folder whose name is the highest version
+number wins (Build 42's `42.15/mod.info`), else the first; `fallback` names a file for when nothing matches. File names are found
+in any letter case, as games on Windows do. `{mod}` in a path is the mod's catalogue name.
 
-`layout` gives the game's own defaults for the catalogue's layout keys (where a Workshop item wraps the mod folder, say);
-a catalogue's own layout still wins. A game whose format cannot be said as data names a `hook`: a module beside its game
-file (`.hook`, relative) whose `read(adapter, folder, item)` returns a ModInfo. Nothing here names a game.
+ID file formats: `text` (the whole file is the number), `keyvalue` (one key's line, written in place, or added before the line
+`before` names, such as `$END`) and `xmltag` (one element's text, written only in a file that exists).
+
+Also: `previewRules` (`format` png, `square`, `sizes`, `maxBytes`) and `refuse` (file endings the game's own uploader refuses)
+become blockers; `footer` lines (`{itemId}`, `{field:<name>}`) end the description as the game's own uploader ends it; `required`
+reads each mod's Required items from its metadata; `layout` gives the game's own defaults for the catalogue's layout keys (a
+catalogue's own still win). A game whose format cannot be said as data names a `hook`: a module beside its game file (`.hook`,
+relative) whose `read(adapter, folder, item)` returns a ModInfo. Nothing here names a game.
 """
 from __future__ import annotations
 
@@ -37,15 +45,21 @@ from importlib import import_module
 import json
 from pathlib import Path
 import re
+import struct
 import xml.etree.ElementTree as ET
 
 from ...files import atomic_write, inside
 from .project import Adapter, ModInfo, PublishError
 
 FORMATS = ("xml", "json", "keyvalue", "catalogue")
-ID_FORMATS = ("text", "keyvalue")
+ID_FORMATS = ("text", "keyvalue", "xmltag")
 BARE_AMPERSAND = re.compile(r"&(?!#?\w+;)")
-SPEC_KEYS = {"name", "appId", "metadata", "preview", "tags", "idFile", "reminders", "facts", "hook", "layout", "title"}
+WORKSHOP_NUMBER = re.compile(r"(?:[?&]id=|CommunityFilePage/|^)(\d{5,})(?:\D|$)")
+VERSION_NAME = re.compile(r"\d+(?:\.\d+)*")
+SPEC_KEYS = {"name", "appId", "metadata", "preview", "tags", "idFile", "reminders", "facts", "hook", "layout", "title",
+             "previewRules", "refuse", "footer", "required"}
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+CATALOGUE_FIELD = "catalogue:"
 
 
 def find(folder, relative):
@@ -62,6 +76,10 @@ def find(folder, relative):
             match = None
         path = match or exact
     return path
+
+
+def _version_key(name):
+    return tuple(int(p) for p in name.split("."))
 
 
 def _xml_root(path):
@@ -94,15 +112,33 @@ def _json_values(value, field):
     return [str(value)] if isinstance(value, (str, int, float)) else []
 
 
-def keyvalue_lines(text, separator="="):
-    """[(key, value)] from key<separator>value lines, in order; blank lines and lines without the separator skipped."""
+def keyvalue_lines(text, separator="=", quoted=False):
+    """[(key, value)] from key<separator>value lines, in order; blank lines and lines without the separator skipped.
+    A separator of one space splits at the first run of whitespace."""
     found = []
     for line in text.splitlines():
-        if separator in line:
+        if separator == " ":
+            parts = line.strip().split(None, 1)
+            if not parts:
+                continue
+            key, value = parts[0], parts[1] if len(parts) > 1 else ""
+        elif separator in line:
             key, _, value = line.partition(separator)
-            if key.strip():
-                found.append((key.strip(), value.strip()))
+        else:
+            continue
+        key, value = key.strip(), value.strip()
+        if quoted and len(value) >= 2 and value[0] == value[-1] == '"':
+            value = value[1:-1]
+        if key:
+            found.append((key, value))
     return found
+
+
+def png_size(data):
+    """(width, height) of PNG bytes, or None when they are not a PNG."""
+    if not data.startswith(PNG_SIGNATURE) or len(data) < 24:
+        return None
+    return struct.unpack(">II", data[16:24])
 
 
 class DataAdapter(Adapter):
@@ -135,13 +171,31 @@ class DataAdapter(Adapter):
 
     # ---- reading a mod ----
 
+    def metadata_path(self, folder, mod=None):
+        """The mod's metadata file: a wildcard resolved (the highest version folder with pick), else its fallback."""
+        relative = self.metadata.format(mod=mod or Path(folder).name)
+        if "*" not in relative:
+            return find(folder, relative)
+        found = sorted(Path(folder).glob(relative))
+        if self.meta.get("pick") == "highest":
+            depth = relative.split("/").index(next(p for p in relative.split("/") if "*" in p))
+            versioned = [p for p in found if VERSION_NAME.fullmatch(p.relative_to(folder).parts[depth])]
+            found = sorted(versioned, key=lambda p: _version_key(p.relative_to(folder).parts[depth]), reverse=True)
+        if found:
+            return found[0]
+        return find(folder, self.meta["fallback"].format(mod=mod or Path(folder).name)) if self.meta.get("fallback") \
+            else Path(folder) / relative
+
     def values(self, folder, field, item=None, mod=None):
-        """Every value of field in the mod's metadata."""
+        """Every value of field in the mod's metadata (or its catalogue entry, for catalogue:<key>)."""
         kind = self.meta["format"]
-        if kind == "catalogue":
-            value = (item or {}).get(field)
+        if kind == "catalogue" or field.startswith(CATALOGUE_FIELD):
+            key = field[len(CATALOGUE_FIELD):] if field.startswith(CATALOGUE_FIELD) else field
+            value = (item or {}).get(key)
+            if not value and key == "title" and kind == "catalogue":
+                value = mod or Path(folder).name
             return [str(v) for v in value] if isinstance(value, list) else [str(value)] if value else []
-        path = find(folder, self.metadata.format(mod=mod or Path(folder).name))
+        path = self.metadata_path(folder, mod)
         if not path.is_file():
             raise PublishError(f"No {self.metadata} in {folder}")
         try:
@@ -150,7 +204,8 @@ class DataAdapter(Adapter):
             text = path.read_text(encoding="utf-8-sig", errors="replace")
             if kind == "json":
                 return _json_values(json.loads(text), field)
-            return [v for k, v in keyvalue_lines(text, self.meta.get("separator", "=")) if k.lower() == field.lower()]
+            lines = keyvalue_lines(text, self.meta.get("separator", "="), self.meta.get("quoted", False))
+            return [v for k, v in lines if k.lower() == field.lower()]
         except (OSError, ValueError) as error:
             raise PublishError(f"Unreadable {path}: {error}") from None
 
@@ -169,6 +224,63 @@ class DataAdapter(Adapter):
         found += [str(t) for t in (item or {}).get("tags", [])]
         return list(dict.fromkeys(t.strip() for t in found if t.strip()))
 
+    def required_items(self, folder, item=None, mod=None):
+        """[(Workshop number, name)] the mod's own metadata names as needed (required.fields; names from required.names)."""
+        spec = self.spec.get("required") or {}
+        if spec.get("each") and self.meta["format"] == "xml":
+            # One element per dependency, its number and name read from its own children, so a dependency with no
+            # Workshop link (one of the repository's own mods, say) never shifts the names of the others.
+            path = self.metadata_path(folder, mod)
+            nodes = [_xml_root(path)] if path.is_file() else []
+            for step in spec["each"].split("/"):
+                nodes = [c for n in nodes for c in n if isinstance(c.tag, str) and c.tag.lower() == step.lower()]
+            found = []
+            for node in nodes:
+                number = next((m[1] for v in _xml_values(node, spec.get("number", "")) for m in [WORKSHOP_NUMBER.search(v)]
+                               if m), None)
+                if number:
+                    name = next(iter(_xml_values(node, spec["name"])), "") if spec.get("name") else ""
+                    found.append((number, name or f"Workshop item {number}"))
+            return list(dict.fromkeys(found))
+        numbers = []
+        for field in spec.get("fields", []):
+            numbers += [m[1] for v in self.values(folder, field, item, mod) for m in [WORKSHOP_NUMBER.search(v)] if m]
+        names = self.values(folder, spec["names"], item, mod) if spec.get("names") else []
+        if len(names) != len(numbers):
+            names = []
+        return list(dict.fromkeys((n, names[i] if names else f"Workshop item {n}") for i, n in enumerate(numbers)))
+
+    def footer(self, folder, item=None, mod=None):
+        """The footer lines, {field:<name>} filled in from the metadata; {itemId} is filled in when sending."""
+        lines = []
+        for line in self.spec.get("footer", []):
+            for field in re.findall(r"\{field:([^}]+)\}", line):
+                line = line.replace(f"{{field:{field}}}", next(iter(self.values(folder, field, item, mod)), ""))
+            lines.append(line)
+        return lines
+
+    def blockers(self, payload, preview):
+        """What the game's own uploader would refuse, in words: cover rules and refused files."""
+        found = []
+        rules = self.spec.get("previewRules") or {}
+        data = payload.get(preview)
+        if rules and data is not None:
+            size = png_size(data)
+            if rules.get("format") == "png" and size is None:
+                found.append(f"{preview} must be a PNG for this game")
+            if size and rules.get("square") and size[0] != size[1]:
+                found.append(f"{preview} is {size[0]} by {size[1]} pixels; this game wants it square")
+            if size and rules.get("sizes") and size[0] not in rules["sizes"]:
+                found.append(f"{preview} is {size[0]} pixels wide; this game takes "
+                             + " or ".join(str(s) for s in rules["sizes"]))
+            if rules.get("maxBytes") and len(data) > rules["maxBytes"]:
+                found.append(f"{preview} is {len(data):,} bytes; this game takes at most {rules['maxBytes']:,}")
+        endings = tuple(e.lower() for e in self.spec.get("refuse", []))
+        refused = sorted(p for p in payload if endings and p.lower().endswith(endings))
+        if refused:
+            found.append("this game's uploader refuses " + ", ".join(refused[:5]) + (" and more" if len(refused) > 5 else ""))
+        return found
+
     # ---- the game's own record of the item ----
 
     def _id_path(self, project, mod):
@@ -182,10 +294,13 @@ class DataAdapter(Adapter):
         if not path.is_file():
             return None
         text = path.read_text(encoding="utf-8-sig").strip()
-        if self.id_spec["format"] == "text":
-            return text or None
-        key = self.id_spec.get("key", "id")
-        values = [v for k, v in keyvalue_lines(text, self.id_spec.get("separator", "=")) if k.lower() == key.lower()]
+        kind, key = self.id_spec["format"], self.id_spec.get("key", "id")
+        if kind == "text":
+            values = [text]
+        elif kind == "xmltag":
+            values = re.findall(rf"<{re.escape(key)}>\s*(\d*)\s*</{re.escape(key)}>", text, re.IGNORECASE)
+        else:
+            values = [v for k, v in keyvalue_lines(text, self.id_spec.get("separator", "=")) if k.lower() == key.lower()]
         return values[0] if values and values[0] not in ("", "0") else None
 
     def check(self, project, mod, item):
@@ -200,18 +315,37 @@ class DataAdapter(Adapter):
         if not self.id_spec or self.recorded_id(project, mod) == item_id:
             return []
         path = self._id_path(project, mod)
-        if self.id_spec["format"] == "text":
+        kind, key = self.id_spec["format"], self.id_spec.get("key", "id")
+        if kind == "text":
             data = item_id
-        else:
-            key, sep = self.id_spec.get("key", "id"), self.id_spec.get("separator", "=")
-            lines = path.read_text(encoding="utf-8-sig").splitlines() if path.is_file() else []
-            hit = [i for i, line in enumerate(lines) if line.partition(sep)[0].strip().lower() == key.lower()]
-            if hit:
-                lines[hit[0]] = f"{key}{sep}{item_id}"
+        elif kind == "xmltag":
+            if not path.is_file():
+                return []       # the game's own tool writes this file; only a file it made is kept in step
+            text = path.read_text(encoding="utf-8-sig")
+            tag = re.compile(rf"<{re.escape(key)}>\s*\d*\s*</{re.escape(key)}>", re.IGNORECASE)
+            if tag.search(text):
+                data = tag.sub(f"<{key}>{item_id}</{key}>", text, count=1)
             else:
-                lines.append(f"{key}{sep}{item_id}")
+                closing = text.rstrip().rfind("</")
+                if closing < 0:
+                    return []
+                data = text[:closing] + f"  <{key}>{item_id}</{key}>\n" + text[closing:]
+        else:
+            sep = self.id_spec.get("separator", "=")
+            lines = path.read_text(encoding="utf-8-sig").splitlines() if path.is_file() else []
+            line_key = (lambda line: (line.strip().split(None, 1) or [""])[0]) if sep == " " else \
+                (lambda line: line.partition(sep)[0].strip())
+            hit = [i for i, line in enumerate(lines) if line_key(line).lower() == key.lower()]
+            new = f"{key}{sep}{item_id}"
+            before = self.id_spec.get("before")
+            if hit:
+                lines[hit[0]] = new
+            elif before and before in [line.strip() for line in lines]:
+                lines.insert([line.strip() for line in lines].index(before), new)
+            else:
+                lines.append(new)
             data = "\n".join(lines) + "\n"
-        atomic_write(path, data.encode("ascii"))
+        atomic_write(path, data.encode("utf-8"))
         return [project.rel(path)]
 
     def after_upload(self, project, mod):

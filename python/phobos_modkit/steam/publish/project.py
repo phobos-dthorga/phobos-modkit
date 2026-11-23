@@ -31,7 +31,8 @@ from ..vdf import VISIBILITY
 
 CATALOGUE = "config/workshop-publishing.json"
 ITEM_ID = re.compile(r"[1-9][0-9]*")
-MOD_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+# Single spaces between words are allowed (1.100.0): Kenshi's mods are named so ("Phobos Coil Rifle").
+MOD_NAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_.-]| (?=[A-Za-z0-9_.-]))*")
 VERSION = re.compile(r"\d+(?:\.\d+){1,3}")
 STAGING_CACHE = "steam-publish"
 
@@ -56,6 +57,8 @@ LAYOUT = {
     "previewMaxBytes": 1_000_000,            # our cover budget, not a Valve figure
     "pageRules": {"title": True, "version": True, "status": True},
     "build": None,                           # a command run before preparing, e.g. ["python", "scripts/build.py", "{mod}"]
+    "contentPrefix": None,                   # 1.100.0: a folder in the item the content goes under, e.g. Contents/mods/{mod}
+    "previewSource": None,                   # 1.100.0: the cover's file in the repository, when it is not in the content
 }
 
 
@@ -147,16 +150,28 @@ class Project:
     def mods(self):
         return self.config["mods"]
 
-    def on_disk(self):
-        """Mod folders that hold the adapter's metadata file."""
-        template = self.layout["mod"]
-        if not template.endswith("/{mod}"):
-            raise PublishError('layout "mod" must end in /{mod}')
-        parent = inside(self.root, template[: -len("/{mod}")])
-        from .game_data import find
+    def has_marker(self, folder, mod):
         marker = self.adapter.metadata
-        return sorted(p.name for p in parent.iterdir()
-                      if p.is_dir() and (not marker or find(p, marker.format(mod=p.name)).is_file()))
+        if not marker:
+            return True
+        if hasattr(self.adapter, "metadata_path"):
+            return self.adapter.metadata_path(folder, mod).is_file()
+        from .game_data import find
+        return find(folder, marker.format(mod=mod)).is_file()
+
+    def on_disk(self):
+        """Mod folders that hold the adapter's metadata file. A layout "mod" of "." is a repository holding one mod at its
+        top (1.100.0): the catalogue then lists exactly that one, under its own name."""
+        template = self.layout["mod"]
+        if template == ".":
+            if len(self.mods) != 1:
+                raise PublishError('A repository whose layout "mod" is "." holds one mod: list exactly one')
+            only = next(iter(self.mods))
+            return [only] if self.has_marker(self.root, only) else []
+        if not template.endswith("/{mod}"):
+            raise PublishError('layout "mod" must end in /{mod}, or be "." for a repository of one mod')
+        parent = inside(self.root, template[: -len("/{mod}")])
+        return sorted(p.name for p in parent.iterdir() if p.is_dir() and self.has_marker(p, p.name))
 
     def resolve(self, name):
         """A catalogue name from its full form or a unique ending, ignoring case: Framework for PhobosFramework."""
@@ -249,10 +264,20 @@ class Project:
         """{relative path: bytes} the item will hold: the project's own payload, or its content folder."""
         if self.payload_hook:
             return dict(self.payload_hook(self, mod))
-        return read_tree(self.path("content", mod), self.layout["exclude"])
+        tree = read_tree(self.path("content", mod), [".git", *self.layout["exclude"]])   # version control never ships
+        prefix = self.layout.get("contentPrefix")
+        if prefix:
+            prefix = prefix.format(mod=mod).strip("/")
+            tree = {f"{prefix}/{name}": data for name, data in tree.items()}
+        if self.layout.get("previewSource"):
+            source = self.path("previewSource", mod)
+            if source.is_file():
+                tree[self.preview(mod)] = source.read_bytes()
+        return tree
 
-    def preview(self):
-        return self.layout["preview"] or self.adapter.preview
+    def preview(self, mod=None):
+        """The cover's path in the item; {mod} is the mod's catalogue name (Kenshi's _<mod>.img)."""
+        return (self.layout["preview"] or self.adapter.preview).format(mod=mod or "")
 
     # ---- Git ----
 

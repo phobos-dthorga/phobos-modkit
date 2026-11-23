@@ -1,0 +1,20 @@
+{
+  "name": "wrsr",
+  "title": "Workers & Resources: Soviet Republic",
+  "appId": "784150",
+  "metadata": {"file": "workshopconfig.ini", "format": "keyvalue", "separator": " ", "quoted": true,
+               "title": "$ITEM_NAME", "version": "catalogue:version"},
+  "preview": "previewimage.png",
+  "idFile": {"file": "workshopconfig.ini", "format": "keyvalue", "key": "$ITEM_ID", "separator": " ", "before": "$END"},
+  "reminders": [
+    "Workers & Resources: the game lets only the account named in $OWNER_ID update the item from inside the game; set it to your SteamID64 there if you will also upload from the game.",
+    "Workers & Resources: its tags are numbers in the game's own list for each item type; set them in the game's editor or on Steam."
+  ],
+  "facts": [
+    "A Workshop item is a folder, media_soviet/workshop_wip/<item number>/, holding workshopconfig.ini, previewimage.png and a folder per object. Checked on five local items and one downloaded item, 23 Nov 2026.",
+    "workshopconfig.ini is lines of $KEY value ending with $END, strings in double quotes: $ITEM_ID, $OWNER_ID (the uploader's SteamID64), $ITEM_TYPE, $VISIBILITY, $TAGS (numbers, repeatable), $OBJECT_BUILDING and the like, $ITEM_NAME and $ITEM_DESC.",
+    "There is no version field, so the version comes from each mod's catalogue entry.",
+    "Public items were seen with $VISIBILITY 2 and with 0, so the game's scale may differ from Steam's; the uploader here sets Steam's visibility itself and leaves the file's alone.",
+    "The official modding wiki (wiki.hoodedhorse.com) refused automated reading, so these facts come from files and Steam discussions."
+  ]
+}

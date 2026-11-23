@@ -2,10 +2,30 @@
   "name": "rimworld",
   "title": "RimWorld",
   "appId": "294100",
-  "metadata": {"file": "About/About.xml", "format": "xml", "title": "name", "version": "modVersion"},
+  "metadata": {
+    "file": "About/About.xml",
+    "format": "xml",
+    "title": "name",
+    "version": "modVersion"
+  },
   "preview": "About/Preview.png",
-  "tags": {"fixed": ["Mod"], "fields": ["supportedVersions/li"]},
-  "idFile": {"file": "About/PublishedFileId.txt", "format": "text"},
+  "tags": {
+    "fixed": [
+      "Mod"
+    ],
+    "fields": [
+      "supportedVersions/li"
+    ]
+  },
+  "required": {
+    "each": "modDependencies/li",
+    "number": "steamWorkshopUrl",
+    "name": "displayName"
+  },
+  "idFile": {
+    "file": "About/PublishedFileId.txt",
+    "format": "text"
+  },
   "reminders": [
     "RimWorld: check the item shows its Mod and game-version tags (such as 1.7); players and mod managers filter by them. The Steam client route sets them; SteamCMD cannot."
   ],
@@ -13,6 +33,7 @@
     "A mod's About/About.xml names it in <name> and gives its version in <modVersion> (a field RimWorld added in 1.4); <supportedVersions> lists the game versions as <li> entries.",
     "Its cover is About/Preview.png.",
     "The game's own uploader writes the item's number into About/PublishedFileId.txt beside About.xml, as decimal text. A folder with that file is the same Workshop item, so the catalogue and the file must agree.",
-    "RimWorld's own uploader tags an item Mod and with each supported version. Source: a Ludeon forum report (https://ludeon.com/forums/index.php?msg=337218); not checked against Valve's documentation."
+    "RimWorld's own uploader tags an item Mod and with each supported version. Source: a Ludeon forum report (https://ludeon.com/forums/index.php?msg=337218); not checked against Valve's documentation.",
+    "Each <modDependencies><li> names a needed mod: <packageId>, <displayName> and often <steamWorkshopUrl> (a steamcommunity.com link with ?id= or a steam://url/CommunityFilePage/ link); those with a link become the item's Required items."
   ]
 }

@@ -2,6 +2,7 @@
 kept in step, and a catalogue can describe a game nobody has written a file for. Made-up mods only; nothing reaches Steam."""
 import json
 from pathlib import Path
+import struct
 import subprocess
 import tempfile
 import unittest
@@ -9,7 +10,7 @@ import unittest
 import support  # noqa: F401
 from phobos_modkit.games import publish_adapters
 from phobos_modkit.steam.publish import notes, stage
-from phobos_modkit.steam.publish.game_data import DataAdapter, find, keyvalue_lines
+from phobos_modkit.steam.publish.game_data import DataAdapter, find, keyvalue_lines, png_size
 from phobos_modkit.steam.publish.project import Project, PublishError
 
 CHANGELOG = "# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2026-11-23 - Draft\n\n- First.\n"
@@ -109,6 +110,115 @@ class GameFiles(unittest.TestCase):
         project = self.catalogue_project(game, {"L": {"Contents/a.txt": "a"}}, {"L": {"title": "L", "version": "1.0.0"}})
         self.assertEqual(project.layout["content"], "mods/{mod}/Contents")
         self.assertEqual(project.layout["pageMaxBytes"], 10)
+
+
+
+def png(width, height, extra=0):
+    """A made-up PNG header: enough for its size to be read."""
+    return b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\rIHDR" + struct.pack(">II", width, height) + b"\x00" * (5 + extra)
+
+
+class MoreGames(unittest.TestCase):
+    """1.100.0: Project Zomboid, Kenshi and Workers & Resources as game files, and RimWorld's own Required items."""
+
+    setUp, tearDown, write = GameFiles.setUp, GameFiles.tearDown, GameFiles.write
+
+    def repo(self, config, notes_too=True):
+        git(self.root, "init", "-q")
+        git(self.root, "config", "core.fsmonitor", "false")
+        self.write("config/workshop-publishing.json", json.dumps(config))
+        project = Project.load(self.root, publish_adapters(), cache_folder=self.root / "cache")
+        if notes_too:
+            notes.run(project, None, None, True, None)
+        return project
+
+    def test_zomboid_one_mod_repository(self):
+        self.write("mod.info", "name=Old\nid=Example\nmodversion=0.1.0\n")
+        self.write("42.14/mod.info", "name=Example\nid=Example\nmodversion=1.0.0\n")
+        self.write("42.15/mod.info", "name=Example Mod\nid=ExampleMod\nmodversion=1.1.0\n")
+        self.write("common/media/lua/shared/a.lua", "return 1\n")
+        self.write("42.15/media/scripts/bad.dll", "x")
+        self.write("docs/notes.md", "not shipped")
+        self.write(".gitignore", "x\n")
+        self.write("workshop/preview.png", "")
+        (self.root / "workshop/preview.png").write_bytes(png(300, 256))
+        self.write("CHANGELOG.md", CHANGELOG.replace("1.0.0", "1.1.0"))
+        self.write("workshop/page.bbcode", PAGE.format(title="Example Mod").replace("1.0.0", "1.1.0"))
+        project = self.repo({"appId": "108600", "mods": {"ExampleMod": {"itemId": None, "requires": []}}})
+        self.assertEqual(project.on_disk(), ["ExampleMod"])
+        info = project.info("ExampleMod")
+        self.assertEqual((info.title, info.version, info.tags), ("Example Mod", "1.1.0", ("Build 42",)))
+        manifest, payload = stage.plan(project, "ExampleMod")[:2]
+        self.assertIn("Contents/mods/ExampleMod/common/media/lua/shared/a.lua", payload)
+        self.assertIn("preview.png", payload)
+        self.assertFalse(any(name.startswith(("Contents/mods/ExampleMod/docs", "Contents/mods/ExampleMod/workshop",
+                                              "Contents/mods/ExampleMod/.git")) for name in payload))
+        blockers = " ".join(manifest["blockers"])
+        self.assertIn("300 by 256 pixels; this game wants it square", blockers)
+        self.assertIn("refuses Contents/mods/ExampleMod/42.15/media/scripts/bad.dll", blockers)
+        self.assertEqual(manifest["footer"], ["Workshop ID: {itemId}", "Mod ID: ExampleMod"])
+        page = stage.with_footer("Text\n", manifest)
+        self.assertEqual(page, "Text\n\nMod ID: ExampleMod\n")            # no number yet: its line waits
+        self.assertEqual(stage.with_footer("Text\n", manifest, "3900000001"),
+                         "Text\n\nWorkshop ID: 3900000001\nMod ID: ExampleMod\n")
+
+    def test_png_rules(self):
+        self.assertEqual(png_size(png(512, 512)), (512, 512))
+        self.assertIsNone(png_size(b"GIF89a"))
+        adapter = publish_adapters()["108600"]
+        self.assertEqual(adapter.blockers({"preview.png": png(512, 512)}, "preview.png"), [])
+        self.assertIn("must be a PNG", adapter.blockers({"preview.png": b"JFIF"}, "preview.png")[0])
+        self.assertIn("at most 1,024,000", adapter.blockers({"preview.png": png(512, 512, 1_100_000)}, "preview.png")[0])
+
+    def test_kenshi_title_from_its_folder_and_the_info_file_kept(self):
+        self.write("mods/Coil Rifle/Coil Rifle.mod", "binary")
+        self.write("mods/Coil Rifle/_Coil Rifle.img", "x")
+        self.write("mods/Coil Rifle/_Coil Rifle.info", "<?xml version=\"1.0\"?>\n<ModData>\n  <id>0</id>\n  "
+                                                      "<title>Coil Rifle</title>\n</ModData>\n")
+        self.write("mods/Coil Rifle/CHANGELOG.md", CHANGELOG)
+        self.write("workshop/Coil Rifle/page.bbcode", PAGE.format(title="Coil Rifle"))
+        self.write("mods/Not A Mod/readme.txt", "no .mod file here")
+        project = self.repo({"appId": "233860", "mods": {"Coil Rifle": {"itemId": None, "requires": [], "version": "1.0.0"}}})
+        info = project.info("Coil Rifle")
+        self.assertEqual((info.title, info.version), ("Coil Rifle", "1.0.0"))
+        self.assertIsNone(project.adapter.recorded_id(project, "Coil Rifle"))      # 0 is no item
+        self.assertEqual(project.adapter.item_recorded(project, "Coil Rifle", "3900000005"), ["mods/Coil Rifle/_Coil Rifle.info"])
+        self.assertIn("<id>3900000005</id>", (self.root / "mods/Coil Rifle/_Coil Rifle.info").read_text())
+        self.assertIn("_Coil Rifle.img", stage.plan(project, "Coil Rifle")[0]["preview"])
+
+    def test_wrsr_dollar_keys_quotes_and_end_line(self):
+        self.write("mods/p01/workshopconfig.ini", '$OWNER_ID 0\n$ITEM_NAME "Heating Works"\n$END\n')
+        self.write("mods/p01/previewimage.png", "x")
+        self.write("mods/p01/CHANGELOG.md", CHANGELOG)
+        self.write("workshop/p01/page.bbcode", PAGE.format(title="Heating Works"))
+        project = self.repo({"appId": "784150", "mods": {"p01": {"itemId": None, "requires": [], "version": "1.0.0"}}})
+        info = project.info("p01")
+        self.assertEqual((info.title, info.version), ("Heating Works", "1.0.0"))
+        project.adapter.item_recorded(project, "p01", "3900000006")
+        self.assertEqual((self.root / "mods/p01/workshopconfig.ini").read_text(),
+                         '$OWNER_ID 0\n$ITEM_NAME "Heating Works"\n$ITEM_ID 3900000006\n$END\n')
+        self.assertEqual(project.adapter.recorded_id(project, "p01"), "3900000006")
+
+    def test_rimworld_reads_each_mods_required_items(self):
+        about = ("<ModMetaData><name>Thing</name><modVersion>1.0.0</modVersion><modDependencies>"
+                 "<li><packageId>a.harmony</packageId><displayName>Harmony</displayName>"
+                 "<steamWorkshopUrl>steam://url/CommunityFilePage/2009463077</steamWorkshopUrl></li>"
+                 "<li><packageId>us.ours</packageId><displayName>Ours, unpublished</displayName></li>"
+                 "<li><packageId>b.other</packageId><displayName>Other</displayName>"
+                 "<steamWorkshopUrl>https://steamcommunity.com/sharedfiles/filedetails/?id=836308268</steamWorkshopUrl></li>"
+                 "</modDependencies></ModMetaData>")
+        self.write("mods/Thing/About/About.xml", about)
+        self.write("mods/Thing/About/Preview.png", "x")
+        self.write("mods/Thing/CHANGELOG.md", CHANGELOG)
+        self.write("workshop/Thing/page.bbcode", PAGE.format(title="Thing"))
+        project = self.repo({"appId": "294100", "mods": {"Thing": {"itemId": None, "requires": [],
+                                                                   "requiredItems": ["1111111"]}},
+                             "externalRequiredItemNames": {"1111111": "Named in the catalogue"}})
+        manifest = stage.plan(project, "Thing")[0]
+        self.assertEqual(manifest["requiredItemDetails"], [
+            {"name": "Harmony", "itemId": "2009463077"}, {"name": "Other", "itemId": "836308268"},
+            {"name": "Named in the catalogue", "itemId": "1111111"}])
+        self.assertEqual(manifest["requiredItems"], ["2009463077", "836308268", "1111111"])
 
 
 if __name__ == "__main__":

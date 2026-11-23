@@ -139,6 +139,7 @@ class SteamClient:
                 item = str(answer.item)
                 fields["needsAgreement"] = bool(answer.needs_agreement)
                 job.on_created(item)
+            page = stage.with_footer(page, manifest, item)
             handle = library.start_update(steam.ugc, app, item)
             folder = content / manifest["preview"]
             settings = [("Title", manifest["title"]), ("Description", page), ("Content", content), ("Preview", folder)]

@@ -75,14 +75,25 @@ def plan(project, mod):
         payload[f"{folder}/{PAGE_FILE}"] = page
         payload[f"{folder}/{NOTE_FILE}"] = note
     blockers = [item["hold"]] if item.get("hold") else []
-    preview, budget = project.preview(), project.layout["previewMaxBytes"]
+    preview, budget = project.preview(mod), project.layout["previewMaxBytes"]
     if preview not in payload:
         blockers.append(f"No cover at {preview}; add one before upload")
     elif len(payload[preview]) >= budget:
         blockers.append(f"{preview} is {len(payload[preview]):,} bytes, over the {budget:,}-byte cover budget")
+    adapter, folder_of_mod = project.adapter, project.path("mod", mod)
+    if hasattr(adapter, "blockers"):
+        blockers += adapter.blockers(payload, preview)
     names = project.config.get("externalRequiredItemNames", {})
     required_ids = list(project.config.get("externalRequiredItems", []))
     required = [{"name": names[i], "itemId": i} for i in required_ids]
+    # 1.100.0: each mod's own Required items, from its metadata (the game file's "required") or its catalogue entry.
+    own = adapter.required_items(folder_of_mod, item, mod) if hasattr(adapter, "required_items") else []
+    own += [(i, names.get(i, f"Workshop item {i}")) for i in item.get("requiredItems", [])]
+    ours = {m.get("itemId") for m in project.mods.values() if m.get("itemId")}
+    for number, name in own:
+        if number not in required_ids and number not in ours:
+            required_ids.append(number)
+            required.append({"name": name, "itemId": number})
     for dependency in item.get("requires", []):
         dependency_id = project.mods[dependency].get("itemId")
         required.append({"name": dependency, "itemId": dependency_id})
@@ -94,6 +105,7 @@ def plan(project, mod):
                 "appId": str(project.config["appId"]), "itemId": item.get("itemId"), "tags": list(info.tags),
                 "operation": "update" if item.get("itemId") else "create", "preview": preview,
                 "blockers": blockers, "requiredItems": required_ids, "requiredItemDetails": required,
+                "footer": adapter.footer(folder_of_mod, item, mod) if hasattr(adapter, "footer") else [],
                 "uploadedVersion": uploaded, "changeNoteVersions": covered, "changeNoteOmitted": omitted,
                 "sizes": {"titleBytes": len(info.title.encode("utf-8")), "descriptionBytes": len(page),
                           "changeNoteBytes": len(note)},
@@ -158,6 +170,19 @@ def published_text(page, note, visibility, today=None):
     return page, note
 
 
+def with_footer(page, manifest, item_id=None):
+    """The page with the game's footer lines (1.100.0), as the game's own uploader ends it: {itemId} filled in, or the
+    line left out while the item has no number yet."""
+    item_id = item_id or manifest.get("itemId")
+    lines = [line.replace("{itemId}", str(item_id)) for line in manifest.get("footer", [])
+             if item_id or "{itemId}" not in line]
+    if not lines:
+        return page
+    page = page.rstrip("\n") + "\n\n" + "\n".join(lines) + "\n"
+    vdf.limit("Workshop page description with its footer", page.encode("utf-8"), vdf.TEXT_MAX_BYTES)
+    return page
+
+
 def candidate_texts(target):
     """(page, change note) as a candidate holds them; verify it first."""
     target = Path(target)
@@ -171,6 +196,7 @@ def upload_vdf(target, visibility, output, today=None):
     manifest = verify(target)
     target = Path(target)
     page, note = published_text(*candidate_texts(target), visibility, today)
+    page = with_footer(page, manifest)
     data = vdf.workshop_item(draft_values(manifest, target, manifest["title"], page, note, visibility)).encode("utf-8")
     output = Path(output)
     if output.exists():
