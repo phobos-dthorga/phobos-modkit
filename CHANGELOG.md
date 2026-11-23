@@ -4,6 +4,18 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.114.0] - 2026-11-24
+
+### Added
+
+- **`installs` counts a mod's own docs as their own kind, `docs`**: Markdown files, and a README, changelog or licence by any
+  suffix, outside the game's folders. When every file installing would change is `docs`, nothing in play changes, and D'thorga
+  Companion 0.80.0 can show such a mod quietly (the owner's screen notes of 24 Nov 2026: every mod said "the repository has more"
+  only because its README was slimmed). They were counted as `other` before.
+- **`doc_tables.settings_reader` is a stable library name** (`docs/library-api.md`, now 52): phobos-rimworld's settings history
+  takes each setting's label from it, so settings named outside the Prefix_SettingThing pattern (D'thorga Radio Framework's,
+  D'thorga Farming's) show their window labels.
+
 ## [1.113.3] - 2026-11-24
 
 ### Changed

@@ -27,6 +27,13 @@ def write(path, text, when=None):
 
 
 class FileTests(unittest.TestCase):
+    def test_a_mods_own_docs_are_their_own_kind(self):
+        for path in ("README.md", "CHANGELOG.md", "LICENSE", "Licence.txt", "docs/Guide.md", "readme.txt"):
+            self.assertEqual("docs", checks.category(path), path)
+        for path, kind in (("Common/Languages/English/Keyed/Notes.md", "text"), ("About/About.xml", "about"),
+                           ("LoadFolders.xml", "other"), ("Changes.txt", "other")):
+            self.assertEqual(kind, checks.category(path), path)
+
     def test_changes_are_counted_by_kind_and_install_only_files_are_left_out(self):
         with tempfile.TemporaryDirectory() as tmp:
             installed, repository = Path(tmp) / "installed", Path(tmp) / "repository"

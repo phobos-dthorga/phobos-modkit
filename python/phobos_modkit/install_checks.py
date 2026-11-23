@@ -27,7 +27,9 @@ from . import testpass
 SKIP_DIRS = {"__pycache__", "obj", "bin", ".git"}
 SKIP_SUFFIXES = (".pyc", ".pdb")
 SYNC_CONFLICT = re.compile(r"_(Download|Upload|Case)Conflict", re.IGNORECASE)
-CATEGORIES = ("code", "defs", "patches", "textures", "text", "sounds", "about", "other")
+CATEGORIES = ("code", "defs", "patches", "textures", "text", "sounds", "about", "docs", "other")
+# A mod's own docs, read by people and never by the game (1.114.0): Markdown, and a README, changelog or licence by any suffix.
+DOC_STEMS = ("readme", "changelog", "license", "licence")
 MAX_PATHS = 60
 CHUNK = 1024 * 1024
 BUILD_SLACK_SECONDS = 1.0       # file systems round times; a source this much newer than its build counts
@@ -62,6 +64,8 @@ def category(relative):
                           ("sounds", "sounds"), ("about", "about")):
         if segment in parts[:-1]:
             return kind
+    if parts[-1].endswith(".md") or parts[-1].split(".")[0] in DOC_STEMS:
+        return "docs"
     return "other"
 
 

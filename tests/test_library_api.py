@@ -56,6 +56,7 @@ STABLE = {
     "games.rimworld.textures": ("DEFAULT_TODDS", "RIMSORT_OPTIMIZED", "trim_folder"),
     "artaudit": ("record_home", "mirrors_of"),
     "picks": ("offer",),
+    "doc_tables": ("settings_reader",),
 }
 
 
@@ -81,7 +82,7 @@ class LibraryApiTest(unittest.TestCase):
         listed = [f"{m}.main" for m in ENTRY_POINTS] + [f"{m}.{n}" for m, names in STABLE.items() for n in names]
         missing = [name for name in listed if f"`{name}`" not in text]
         self.assertEqual([], missing, "docs/library-api.md does not list these stable names")
-        self.assertEqual(51, len(listed), "the doc's count of stable names")
+        self.assertEqual(52, len(listed), "the doc's count of stable names")
 
 
 if __name__ == "__main__":

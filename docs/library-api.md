@@ -6,7 +6,7 @@ phobos-ostranauts (`scripts/`). Which names are a promise is an **agent choice, 
 when a consumer's own work (an install, an art tool) depends on it and no command gives the same answer; it is internal when a
 command already does, or when only a consumer's test reaches in.
 
-**Answer first.** 51 names are a promise: the `main` of 30 command modules, and 21 library functions and constants. 20 more names
+**Answer first.** 52 names are a promise: the `main` of 30 command modules, and 22 library functions and constants. 20 more names
 are imported today but are internal: they may change in any release, and each has a way out below. **Changing or removing a stable
 name, or a keyword argument a consumer passes to it, raises the major version** (`AGENTS.md`: "An incompatible change raises the
 major version and says what consumers must change"). `tests/test_library_api.py` fails when a stable name disappears.
@@ -87,6 +87,7 @@ Every other command's `main` follows the same pattern, but is not listed until a
 | `games.rimworld.textures.RIMSORT_OPTIMIZED` | constant, a tuple of arguments | RimSort's own todds preset, so our encoding matches RimSort's | rimworld `scripts/deploy.py` |
 | `games.rimworld.textures.trim_folder` | `(folder, min_kept=4)` | Shortens the mip chain of every encoded texture under a `Textures` folder in a mod folder | rimworld `scripts/deploy.py` |
 | `artaudit.record_home` | `(path, mirrors=None)` | Where a new record for a repository-relative file is written: under the first mirror that matches, else beside it | rimworld `scripts/art/art_paths.py` |
+| `doc_tables.settings_reader` | `(game)` | The game adapter's `mod_settings(root, options)`, which reads one mod's settings from its code (key, label, description, default, page, section), or `None` when the game has no reader (1.114.0) | rimworld `scripts/mod-settings.py` (the labels in the settings history) |
 | `artaudit.mirrors_of` | `(root)` | The `records.mirrors` of the repository's `config/art-audit.json`; none without a config; a broken config raises | rimworld `scripts/art/art_paths.py` |
 | `picks.offer` | `(root, item, grounds=None)` | Adds one waiting pick to `config/picks.json`, or replaces the one with its id; refuses a pick of the other kind under the same id | rimworld `scripts/art/art_picks.py` |
 
