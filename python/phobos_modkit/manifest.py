@@ -22,7 +22,9 @@ ONLINE = "reads-online"
 WRITES = "writes"
 RUNS = "runs"
 OWNER_ONLY = "owner-only"
-EFFECTS = (READS, ONLINE, WRITES, RUNS, OWNER_ONLY)
+# 1.98.0: a program may run it only on the person's own press and yes, in a window they see; never an agent, a test or CI.
+OWNER_PRESS = "owner-press"
+EFFECTS = (READS, ONLINE, WRITES, RUNS, OWNER_PRESS, OWNER_ONLY)
 
 EXIT_OK = 0
 MANIFEST_FORMAT = 1

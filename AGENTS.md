@@ -75,10 +75,11 @@ session**; `CLAUDE.md` imports it. The rules below are this repository's own, an
 - **Steam, read-only and slow, with one owner-run exception.** Tools read public, keyless pages and APIs only,
   with pacing and a cache, and never log in, handle credentials, subscribe, announce or change an item's
   visibility. The exception is the Workshop uploader (`steam-publish upload` and `update`; owner, 8 November
-  2026, moving phobos-ostranauts' uploader here): **only the owner runs it**, in their own console. It starts
-  SteamCMD, which takes the login in its own prompt, so the tool never sees, stores or passes a password.
-  **Agents, tests and CI never run a real upload**: tests pass a stand-in for SteamCMD, and an agent may run
-  `--what-if` at most.
+  2026, moving phobos-ostranauts' uploader here): **only the owner runs it**, in their own console **or by their own press in
+  D'thorga Companion** (owner, 23 November 2026, for the Publish page; the manifest's `owner-press`). It sends through the
+  Steam client already running and signed in, or through SteamCMD, which takes the login in its own prompt and console, so
+  the tool never sees, stores or passes a password. **Agents, tests and CI never run a real upload**: tests pass stand-ins
+  for SteamCMD and for the Steam library, and an agent may run `--what-if` at most.
 - **Open logs for shared reading.** A game may hold its log open.
 - **Paths** come from one resolver: argument, then environment variable, then a local settings file, then
   the platform default. Never hard-code a personal path.

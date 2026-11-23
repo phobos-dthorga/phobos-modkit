@@ -5,15 +5,17 @@
     python -m phobos_modkit steam-publish status                  every mod: package ready? blockers, sizes, order
     python -m phobos_modkit steam-publish pending                 which items have a newer version than uploaded
     python -m phobos_modkit steam-publish prepare Framework       stage a checked candidate, offline
-    python -m phobos_modkit steam-publish upload Framework --create          OWNER ONLY: SteamCMD asks for login
+    python -m phobos_modkit steam-publish upload Framework --create          OWNER ONLY: through the Steam client
+    python -m phobos_modkit steam-publish upload Framework --update --via steamcmd   OWNER ONLY: SteamCMD asks for login
     python -m phobos_modkit steam-publish update --what-if        OWNER ONLY without --what-if: every due update
     python -m phobos_modkit steam-publish pull --visibility --changelog      bring Steam's live state back
     python -m phobos_modkit steam-publish change-notes            worksheets for tidying Change Notes tabs
 
 Run from the repository (or pass --root); the catalogue is config/workshop-publishing.json unless --catalogue says
 otherwise. Mods are named in full or by a unique ending (Framework for PhobosFramework). Only upload, update and
-reconcile can reach Steam with a login, and only upload and update start SteamCMD: those are for the owner alone,
-never for an agent, a test or CI. pull reads Steam's public API without a key.
+reconcile write Steam's answers, and only upload and update reach Steam with the owner's account, through the running Steam
+client (--via steam, the default) or SteamCMD (--via steamcmd): those are for the owner's own press or console alone, never
+for an agent, a test or CI. pull reads Steam's public API without a key.
 """
 from __future__ import annotations
 
@@ -25,9 +27,10 @@ import sys
 from ... import cache as derived
 from ...report import Bullets, Code, Report, Table, envelope_text, home_redactor, keep, render_markdown
 from .. import workshop
-from . import notes, pull, stage, upload, worksheets
+from . import notes, pull, senders, stage, upload, worksheets
 from .project import STAGING_CACHE, Project, PublishError
-from ...manifest import OWNER_ONLY, READS, RUNS, WRITES
+from ...manifest import OWNER_PRESS, READS, RUNS, WRITES
+from ...progress import Progress
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 
@@ -60,7 +63,7 @@ def build_parser():
     s.add_argument("--build", action="store_true", help="run the catalogue's build command first")
     s = sub.add_parser("verify", parents=[common], help="re-check a staged candidate's files")
     s.add_argument("candidate")
-    s = sub.add_parser("upload", parents=[common], help="OWNER ONLY: send one candidate through SteamCMD")
+    s = sub.add_parser("upload", parents=[common], help="OWNER ONLY: send one candidate to Steam")
     s.add_argument("mod")
     op = s.add_mutually_exclusive_group(required=True)
     op.add_argument("--create", action="store_const", const="create", dest="operation", help="a new item (always private)")
@@ -91,10 +94,14 @@ def build_parser():
 
 
 def upload_options(s):
-    s.add_argument("--steam-user", help="the Steam account name, remembered locally; never a password")
-    s.add_argument("--steamcmd", help="SteamCMD's program, remembered locally")
+    s.add_argument("--via", choices=senders.CHOICES, default="steam",
+                   help="steam: the running, signed-in Steam client (default); steamcmd: Valve's SteamCMD")
+    s.add_argument("--steam-library", help="the game's steam_api library, when it cannot be found; remembered locally")
+    s.add_argument("--new-console", action="store_true", help="SteamCMD in a console window of its own (for a program)")
+    s.add_argument("--steam-user", help="SteamCMD: the Steam account name, remembered locally; never a password")
+    s.add_argument("--steamcmd", help="SteamCMD: its program, remembered locally")
     s.add_argument("--acknowledge-hold", action="store_true", help="private only: pass holds and unpublished dependencies")
-    s.add_argument("--what-if", action="store_true", help="show the plan; write nothing and never start SteamCMD")
+    s.add_argument("--what-if", action="store_true", help="show the plan; write nothing and never ask Steam")
 
 
 # ---- reports ----
@@ -186,7 +193,7 @@ def worksheets_report(project, args):
 # ---- running ----
 
 def main(argv=None, root=None, payload=None, settings_file=None, environ=None, out=None, post=None, run=None,
-         build_run=None, adapters=None):
+         build_run=None, adapters=None, sender=None):
     """Run the command. A game repository's wrapper passes root, settings_file and, if it has one, a payload hook
     (project, mod) -> {relative path: bytes}. Tests pass stand-ins for Steam (post, run and build_run)."""
     out = out or sys.stdout
@@ -204,7 +211,7 @@ def main(argv=None, root=None, payload=None, settings_file=None, environ=None, o
         cache = derived.folder(STAGING_CACHE, args.cache, environ, args.settings or settings_file)
         project = Project.load(args.root or root or Path.cwd(), adapters, args.catalogue, payload, cache)
         report, code = dispatch(project, args, say, post or workshop.http_post, run or upload.run_steamcmd,
-                                build_run or subprocess.run, environ)
+                                build_run or subprocess.run, environ, sender)
     except (PublishError, ValueError, OSError, KeyError, subprocess.SubprocessError, workshop.WorkshopError) as error:
         report, code = Report("steam-publish: error", [str(error)]), EXIT_FAILED
     if report is not None:
@@ -213,7 +220,7 @@ def main(argv=None, root=None, payload=None, settings_file=None, environ=None, o
     return code
 
 
-def dispatch(project, args, say, post, run, build_run, environ):
+def dispatch(project, args, say, post, run, build_run, environ, sender=None):
     command = args.command
     if command == "notes":
         return notes_report(project, args)
@@ -232,12 +239,14 @@ def dispatch(project, args, say, post, run, build_run, environ):
         return manifest_report("Candidate verified (offline)", args.candidate, manifest), EXIT_OK
     if command == "upload":
         request = upload.Request(args.mod, args.operation, args.visibility, args.candidate, args.steam_user,
-                                 args.steamcmd, args.acknowledge_hold, args.confirm_public, args.what_if, args.force)
-        upload.upload(project, request, say, run, environ=environ)
+                                 args.steamcmd, args.acknowledge_hold, args.confirm_public, args.what_if, args.force,
+                                 args.via, args.steam_library, args.new_console)
+        upload.upload(project, request, say, run, environ=environ, sender=sender, progress=Progress(environ))
         return None, EXIT_OK
     if command == "update":
         upload.update_all(project, args.mods, say, args.no_build, args.what_if, args.acknowledge_hold,
-                          args.steam_user, args.steamcmd, run, build_run, environ)
+                          args.steam_user, args.steamcmd, run, build_run, environ, args.via, sender, args.steam_library,
+                          args.new_console, Progress(environ))
         return None, EXIT_OK
     if command == "reconcile":
         state = upload.reconcile(project, args.receipt, args.item_id, args.not_created)
@@ -252,8 +261,8 @@ def dispatch(project, args, say, post, run, build_run, environ):
 MANIFEST = {"game": None, "parser": build_parser, "effect": READS, "reports": {
     "notes": {"effect": WRITES, "when": "--write"},
     "prepare": {"effect": RUNS, "when": "--build", "note": "stages a candidate in the kit's cache"},
-    "upload": {"effect": OWNER_ONLY, "note": "only the owner runs it, in their own console"},
-    "update": {"effect": OWNER_ONLY, "note": "only the owner runs it, in their own console"},
+    "upload": {"effect": OWNER_PRESS, "note": "only on the owner's press or in their own console; never an agent"},
+    "update": {"effect": OWNER_PRESS, "note": "only on the owner's press or in their own console; never an agent"},
     "reconcile": {"effect": WRITES, "note": "settles an upload's receipt"},
     "pull": {"effect": WRITES, "when": "--write", "note": "reads Steam"},
     "change-notes": {"effect": WRITES, "note": "--no-write only counts"},

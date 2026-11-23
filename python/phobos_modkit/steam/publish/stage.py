@@ -158,14 +158,19 @@ def published_text(page, note, visibility, today=None):
     return page, note
 
 
+def candidate_texts(target):
+    """(page, change note) as a candidate holds them; verify it first."""
+    target = Path(target)
+    return (target / PAGE_FILE).read_text(encoding="utf-8"), (target / NOTE_FILE).read_text(encoding="utf-8")
+
+
 def upload_vdf(target, visibility, output, today=None):
     """Write the upload file for a verified candidate; the candidate stays unchanged. Returns its hash."""
     if visibility not in vdf.VISIBILITY:
         raise PublishError("Visibility must be private, friends, unlisted or public")
     manifest = verify(target)
     target = Path(target)
-    page, note = published_text((target / PAGE_FILE).read_text(encoding="utf-8"),
-                                (target / NOTE_FILE).read_text(encoding="utf-8"), visibility, today)
+    page, note = published_text(*candidate_texts(target), visibility, today)
     data = vdf.workshop_item(draft_values(manifest, target, manifest["title"], page, note, visibility)).encode("utf-8")
     output = Path(output)
     if output.exists():

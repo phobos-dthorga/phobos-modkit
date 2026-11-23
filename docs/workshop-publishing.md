@@ -8,16 +8,18 @@ RimWorld and Ostranauts so far.
 
 ## Read this first (gotchas)
 
-- **Only the owner uploads.** `upload` and `update` start SteamCMD, which asks for the Steam password and Steam Guard
-  code in its own prompt; the tool never sees, stores or passes them. Agents, tests and CI never run a real upload.
+- **Only the owner uploads**, in their own console or by their own press in D'thorga Companion. `upload` and `update`
+  send through the **Steam client** already running and signed in (`--via steam`, the default from 1.98.0), or through
+  **SteamCMD** (`--via steamcmd`), which asks for the Steam password and Steam Guard code in its own prompt. The tool never
+  sees, stores or passes them. Agents, tests and CI never run a real upload.
   Every other command is offline or reads Steam's public API without a key.
 - **New items are always created Private.** Test a private subscription, then update with `--visibility public
   --confirm-public`. Anything wider than Private needs a candidate prepared from committed work.
 - **Never retry a create blindly.** If SteamCMD returns no item ID, check your Workshop items on Steam first, then
   `reconcile` the receipt with `--item-id` or `--not-created`. The tool refuses a second create until you do.
-- **SteamCMD cannot set Required items.** Add them on the item's page (Owner controls, Add/Remove Required Items);
+- **SteamCMD cannot set Required items; the Steam client route does.** Add them on the item's page (Owner controls, Add/Remove Required Items);
   the uploader prints the list.
-- **RimWorld: SteamCMD sets no tags.** RimWorld's own uploader tags an item "Mod" and with each game version (such as
+- **SteamCMD sets no tags; the Steam client route sets the game file's tags.** RimWorld's own uploader tags an item "Mod" and with each game version (such as
   1.7); after a SteamCMD upload, check the tags. Source: a
   [Ludeon forum report](https://ludeon.com/forums/index.php?msg=337218), not checked against Valve's documentation.
 - **RimWorld: About/PublishedFileId.txt must agree with the catalogue.** The game's own uploader writes it; the tool
@@ -104,9 +106,22 @@ uploaded on their own still reach players. A first upload carries its own versio
 
 ### Uploading (owner only)
 
-Install [Valve's SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD) yourself; the account must own the
-game. Pass `--steamcmd` and `--steam-user` once: they are remembered in `.local/workshop-settings.json`, never a
-password. `PHOBOS_STEAMCMD` also names the program.
+**Two senders, chosen per upload** (1.98.0; the owner's choice of 23 November 2026), in `steam/publish/senders.py`:
+
+| | `--via steam` (default) | `--via steamcmd` |
+| --- | --- | --- |
+| Login | The Steam client already running and signed in; nothing asked | SteamCMD's own prompt; `--new-console` gives it a window of its own, for a program |
+| What it needs | The game's own `steam_api64.dll`, found from Steam's records of the install (`--steam-library` or `PHOBOS_STEAM_LIBRARY` otherwise) | [Valve's SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD), installed by the owner; `--steamcmd` and `--steam-user` once |
+| Tags and Required items | Set (`SetItemTags`, `AddDependency`) | Not settable: the uploader says what to set on Steam |
+| Progress | Steam's own figures, as progress lines (`PHOBOS_MODKIT_PROGRESS=1`) | SteamCMD's window |
+| While it runs | Steam shows the owner as playing the game | |
+
+Both remember their paths and account name in `.local/workshop-settings.json`, never a password, and write the same receipt.
+A create through the Steam client records the new item's number the moment Steam gives it, so if the files then fail to go
+up, the next upload updates that item instead of making another. **The Steam client route reads three of Valve's answer
+structures** (`CreateItemResult_t`, `SubmitItemUpdateResult_t`, `AddUGCDependencyResult_t`) as Valve's headers lay them out; a
+test holds the layout, and RimWorld 1.7's own library was checked to export every function it uses (23 November 2026). It has
+not yet sent anything to Steam.
 
 In order, `upload`:
 
@@ -115,14 +130,16 @@ In order, `upload`:
    the catalogue's item ID, the last uploaded version and the operation.
 3. Applies the rules: blockers, Private-only creation, committed work for wider visibility, `--confirm-public` when
    an item first goes public, no second create while one is unresolved.
-4. Writes `upload.vdf` and `receipt.json` under `.local/workshop-receipts/<Mod>/` **before** SteamCMD starts. A public
+4. Writes `receipt.json` (and, for SteamCMD, `upload.vdf`) under `.local/workshop-receipts/<Mod>/` **before** Steam is
+   asked. A public
    upload sends "Not published" status lines as public and Draft headings as Released on the day; the repository is
    untouched until you record it.
-5. Runs `steamcmd +login <account> +workshop_build_item <file> +quit` in your console and keeps its fresh logs.
-6. Records the item ID SteamCMD wrote back (a create), and the version and visibility sent, in the catalogue: commit
-   it. A failed update records nothing, so its versions are described again next time.
+5. Sends: the Steam client creates the item if needed, sets its title, page, visibility, tags, files and cover, submits
+   it with the change note and sets its Required items; or SteamCMD runs `+login <account> +workshop_build_item <file>
+   +quit` and its fresh logs are kept.
+6. Records the item ID Steam gave (a create), and the version and visibility sent, in the catalogue: commit it. A failed update records nothing, so its versions are described again next time.
 
-SteamCMD's exit code is not proof: receipts end `created-unverified` or `submitted-unverified`. Open the item and
+Neither sender's answer is proof: receipts end `created-unverified` or `submitted-unverified`. Open the item and
 check it. `update` does all of this for every item whose mod has a newer version, dependencies first, building each
 with the catalogue's `build` command unless `--no-build`, and stops at the first failure.
 

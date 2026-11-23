@@ -51,8 +51,8 @@ class Manifest(unittest.TestCase):
 
     def test_the_uploader_is_marked_owner_only(self):
         publish = find(self.data, "steam-publish")
-        self.assertEqual(report_of(publish, "upload")["effect"], kit_manifest.OWNER_ONLY)
-        self.assertEqual(report_of(publish, "update")["effect"], kit_manifest.OWNER_ONLY)
+        self.assertEqual(report_of(publish, "upload")["effect"], kit_manifest.OWNER_PRESS)
+        self.assertEqual(report_of(publish, "update")["effect"], kit_manifest.OWNER_PRESS)
 
     def test_writing_only_with_a_flag_says_which(self):
         constants = report_of(find(self.data, "release"), "constants")

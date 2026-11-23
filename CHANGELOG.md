@@ -4,6 +4,25 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.98.0] - 2026-11-23
+
+### Added
+
+- **Workshop uploads through the running Steam client** (the owner's choice of 23 Nov 2026 for D'thorga Companion's Publish
+  page: "Both, chosen per upload"). `steam-publish upload` and `update` take `--via steam` (now the default) or `--via steamcmd`.
+  The Steam client route uses the game's own Steam library and the client already signed in, so nothing is typed and no
+  password is ever used; it sets the item's tags and Required items, which SteamCMD cannot, and reports Steam's own progress
+  as progress lines. A new item's number is recorded the moment Steam gives it. RimWorld 1.7's library exports every function
+  it uses; **it has not yet sent anything to Steam**. Guide: `docs/workshop-publishing.md`, "Uploading".
+- **`--new-console`** runs SteamCMD in a console window of its own, so a program can start it and still never see the login.
+- **A manifest effect for the owner's press, `owner-press`**: a program may run it only on the person's own press and yes;
+  never an agent, a test or CI. `upload` and `update` move to it from `owner-only`, and this repository's Steam rule says so.
+
+### Changed
+
+- **`steam-publish upload` sends through the Steam client unless `--via steamcmd` is given.** SteamCMD's options work as
+  before with it; receipts name the route as `via`, and list the tags.
+
 ## [1.97.0] - 2026-11-23
 
 ### Changed

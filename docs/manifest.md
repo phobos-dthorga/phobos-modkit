@@ -90,6 +90,7 @@ and `reports`. Each report has:
 | `reads-online` | Also reads public pages, slowly and with a cache |
 | `writes` | Changes files outside the kit's cache |
 | `runs` | Builds and runs a repository's own code |
+| `owner-press` | A program may run it only on the person's own press and yes, in a window they see (1.98.0: the Workshop uploader, for D'thorga Companion's Publish page). Never an agent, a test or CI |
 | `owner-only` | Only the owner runs it, in their own console. Never a program or an agent |
 
 ## Adding a command

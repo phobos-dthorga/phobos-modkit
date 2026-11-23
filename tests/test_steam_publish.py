@@ -398,7 +398,7 @@ class Publishing(unittest.TestCase):
         self.assertEqual(cli.main(["prepare", "Base", *args], out=out), 0)
         self.assertIn("# Candidate prepared (offline)", out.getvalue())
         out = io.StringIO()
-        self.assertEqual(cli.main(["upload", "Base", "--create", "--what-if", "--steam-user", "x", "--steamcmd",
+        self.assertEqual(cli.main(["upload", "Base", "--create", "--what-if", "--via", "steamcmd", "--steam-user", "x", "--steamcmd",
                                    str(self.steamcmd), *args], out=out, run=SteamCmd(), environ={}), 0)
         self.assertIn("What-if: no receipt written", out.getvalue())
         out = io.StringIO()

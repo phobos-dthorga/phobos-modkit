@@ -1,15 +1,16 @@
-"""The owner-run uploader: a verified candidate sent to the Workshop through Valve's SteamCMD.
+"""The owner's uploader: a verified candidate sent to the Workshop, through the running Steam client or Valve's SteamCMD.
 
-Run by the owner only, in their own console. SteamCMD is started in that console with "+login <account>", so the
-password and Steam Guard code are typed into SteamCMD's own prompt; this module never sees, stores or passes them.
-Agents, tests and continuous integration never run a real upload: tests pass a stand-in for SteamCMD.
+Run only on the owner's press or in the owner's own console (the manifest's owner-press, 1.98.0). The Steam client route uses
+the client already signed in; SteamCMD takes "+login <account>" and asks for the password and Steam Guard code in its own
+prompt. Neither route lets this module see, store or pass a password (steam/publish/senders.py). Agents, tests and continuous
+integration never run a real upload: tests pass stand-ins.
 
 Rules, in order: an update with nothing new does nothing; the candidate must verify and match the source, the
 catalogue and the operation; new items are created Private; anything wider than Private needs a candidate prepared
 from committed work, and making an item Public for the first time needs confirm_public; blockers can be passed only
 for a Private upload with acknowledge_hold, and a missing cover never; a create is refused while an earlier one is
-unresolved, because a blind retry could make a duplicate. A receipt is written before SteamCMD starts, and SteamCMD's
-exit code is never taken as proof: receipts end "unverified" until the owner checks the item.
+unresolved, because a blind retry could make a duplicate. A receipt is written before Steam is asked, and no answer is
+taken as proof: receipts end "unverified" until the owner checks the item.
 """
 from __future__ import annotations
 
@@ -18,21 +19,17 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
-import time
 
 from ...files import inside, sha256
-from .. import vdf
-from . import stage
+from ...progress import Progress
+from . import senders, stage
 from .project import ITEM_ID, PublishError
 
 PENDING, SUBMITTED, CREATED = "pending", "submitted-unverified", "created-unverified"
 RECONCILED, NOT_CREATED = "reconciled-submitted", "reconciled-not-created"
 OPEN = (PENDING, SUBMITTED)
-STEAMCMD_ENV = "PHOBOS_STEAMCMD"
-STEAMCMD_DEFAULT = Path("C:/steamcmd/steamcmd.exe")
-STEAMCMD_GUIDE = "https://developer.valvesoftware.com/wiki/SteamCMD"
+STEAMCMD_ENV, STEAMCMD_DEFAULT, STEAMCMD_GUIDE = senders.STEAMCMD_ENV, senders.STEAMCMD_DEFAULT, senders.STEAMCMD_GUIDE
 ITEM_URL = "https://steamcommunity.com/sharedfiles/filedetails/?id={item}"
 # Receipts written by the PowerShell uploader this replaces named visibilities in title case.
 VISIBILITY_ALIASES = {"private": "private", "friendsonly": "friends", "friends": "friends", "unlisted": "unlisted",
@@ -43,9 +40,8 @@ def visibility_name(value):
     return VISIBILITY_ALIASES.get(str(value or "private").lower(), "private")
 
 
-def run_steamcmd(steamcmd, user, upload_file):
-    """SteamCMD in this console, so its own password and Steam Guard prompts work. Returns its exit code."""
-    return subprocess.run([str(steamcmd), "+login", user, "+workshop_build_item", str(upload_file), "+quit"]).returncode
+run_steamcmd = senders.run_steamcmd
+find_steamcmd = senders.find_steamcmd
 
 
 @dataclass
@@ -60,6 +56,35 @@ class Request:
     confirm_public: bool = False
     what_if: bool = False
     force: bool = False
+    via: str = "steamcmd"          # steam (the running Steam client) or steamcmd; the command line defaults to steam
+    steam_library: str = None      # the game's steam_api library, when it cannot be found from the install
+    new_console: bool = False      # SteamCMD in a console window of its own, for a program
+
+
+@dataclass
+class Job:
+    """One upload in progress, as a sender sees it."""
+    candidate: Path
+    manifest: dict
+    operation: str
+    visibility: str
+    receipt_dir: Path
+    started: datetime
+    on_created: object = None      # called with the new item's number the moment Steam gives one
+
+
+class Speaker:
+    """say() for senders: a line for the person, and with progress=True a progress line for a program (progress.py)."""
+
+    def __init__(self, say, progress=None):
+        self.say, self.progress = say, progress or Progress()
+
+    def __call__(self, text, progress=False, step=None, of=None):
+        if progress:
+            self.progress(label=text, step=step, of=of)
+            if step is not None:
+                return
+        self.say(text)
 
 
 def write_json(path, value):
@@ -76,14 +101,6 @@ def read_receipt(folder):
 def settings(project):
     path = project.path("settings")
     return json.loads(path.read_text(encoding="utf-8-sig")) if path.is_file() else {}
-
-
-def find_steamcmd(explicit, saved, environ):
-    for candidate in (explicit, environ.get(STEAMCMD_ENV), saved.get("SteamCmdPath"), shutil.which("steamcmd"),
-                      STEAMCMD_DEFAULT if STEAMCMD_DEFAULT.is_file() else None):
-        if candidate:
-            return Path(candidate)
-    return None
 
 
 def newest_candidate(project, mod):
@@ -103,8 +120,9 @@ def open_creates(project, mod):
             and read_receipt(d).get("operation") == "create" and read_receipt(d).get("status") in OPEN]
 
 
-def upload(project, request, say=print, run=run_steamcmd, now=datetime.now, environ=None):
-    """Send one mod's candidate. Returns the receipt folder, or None when nothing was sent."""
+def upload(project, request, say=print, run=run_steamcmd, now=datetime.now, environ=None, sender=None, progress=None):
+    """Send one mod's candidate. Returns the receipt folder, or None when nothing was sent. sender is a stand-in for tests;
+    otherwise request.via chooses one (steam/publish/senders.py)."""
     environ = os.environ if environ is None else environ
     mod = project.resolve(request.mod)
     operation = request.operation.lower()
@@ -179,74 +197,78 @@ def upload(project, request, say=print, run=run_steamcmd, now=datetime.now, envi
         say("Proceeding past (private, acknowledged): " + "; ".join(blockers))
 
     saved = settings(project)
-    steamcmd = find_steamcmd(request.steamcmd, saved, environ)
-    user = request.steam_user or saved.get("SteamUser")
-    if not steamcmd or not steamcmd.is_file():
-        raise PublishError(f"SteamCMD was not found. Install it ({STEAMCMD_GUIDE}) and pass --steamcmd once; it is "
-                           "remembered locally.")
-    if not user:
-        raise PublishError("Pass --steam-user <account name> once; it is remembered locally. Never pass a password.")
+    sender = sender or senders.choose(request.via, run, environ=environ, new_console=request.new_console)
+    remembered = sender.ready(project, request, saved, environ)
+    say(f"Sending with: {'the Steam client' if sender.name == 'steam' else 'SteamCMD'}")
     if request.what_if:
-        say("What-if: no receipt written and SteamCMD not started.")
+        say("What-if: no receipt written and nothing sent to Steam.")
         return None
 
     # 3. The receipt, before contacting Steam. The candidate itself stays untouched.
-    settings_file = project.path("settings")
-    settings_file.parent.mkdir(parents=True, exist_ok=True)
-    write_json(settings_file, {**saved, "SteamUser": user, "SteamCmdPath": steamcmd.as_posix()})
+    if remembered:
+        settings_file = project.path("settings")
+        settings_file.parent.mkdir(parents=True, exist_ok=True)
+        write_json(settings_file, {**saved, **remembered})
     started = now()
     receipt_dir = inside(project.root, project.path("receipts") / mod /
                          f"{started.strftime('%Y%m%d-%H%M%S')}-{version}-{operation}")
     receipt_dir.mkdir(parents=True)
-    upload_file = receipt_dir / "upload.vdf"
-    stage.upload_vdf(candidate, visibility, upload_file, started.date())
     receipt = {"schemaVersion": 1, "mod": mod, "version": version, "operation": operation, "visibility": visibility,
                "itemId": manifest["itemId"], "candidate": str(candidate), "sourceCommit": manifest["sourceCommit"],
-               "manifestSha256": sha256((candidate / "manifest.json").read_bytes()),
-               "acknowledgedBlockers": blockers, "startedAt": started.astimezone().isoformat(), "status": PENDING}
+               "manifestSha256": sha256((candidate / "manifest.json").read_bytes()), "via": sender.name,
+               "tags": manifest.get("tags", []), "acknowledgedBlockers": blockers,
+               "startedAt": started.astimezone().isoformat(), "status": PENDING}
     write_json(receipt_dir / "receipt.json", receipt)
+    recorded_files = []
 
-    # 4. SteamCMD in this console.
-    say("Starting SteamCMD. Enter your password and Steam Guard code in its prompt if asked.")
-    clock = time.time()
-    receipt["steamCmdExitCode"] = run(steamcmd, user, upload_file)
-    receipt["finishedAt"] = now().astimezone().isoformat()
-    logs = steamcmd.parent / "logs"
-    if logs.is_dir():
-        kept = receipt_dir / "steamcmd-logs"
-        for log in logs.iterdir():
-            if log.is_file() and log.stat().st_mtime >= clock - 5:
-                kept.mkdir(exist_ok=True)
-                shutil.copy2(log, kept / log.name)
-
-    # 5. SteamCMD writes a new item's ID back into the upload file. Its exit code alone is not proof.
-    returned = vdf.item_id(upload_file.read_text(encoding="utf-8-sig"))
-    receipt["status"] = SUBMITTED
-    if operation == "create" and returned != "0":
-        receipt["itemId"] = returned
+    def created(item_id):
+        # Kept the moment Steam gives a number, so a failure later never loses the item and a retry updates it.
+        receipt["itemId"] = item_id
         write_json(receipt_dir / "receipt.json", receipt)
-        written = stage.record_item_id(project, mod, returned)
-        stage.record_uploaded_version(project, mod, version, visibility)
-        receipt["status"] = CREATED
-        say(f"Steam returned item {returned}; recorded with version {version} in {', '.join(written)} (commit it).")
+        recorded_files.extend(stage.record_item_id(project, mod, item_id))
+
+    # 4. Steam, through the chosen sender.
+    job = Job(candidate, manifest, operation, visibility, receipt_dir, started, created)
+    outcome = sender.send(job, Speaker(say, progress))
+    receipt.update(outcome.fields)
+    receipt["finishedAt"] = now().astimezone().isoformat()
+
+    # 5. What Steam said. The sender's word is not proof: receipts stay unverified until the owner looks.
+    receipt["status"] = SUBMITTED
+    if operation == "create" and outcome.item_id:
+        if receipt.get("itemId") != outcome.item_id:
+            created(outcome.item_id)
+        if outcome.ok:
+            stage.record_uploaded_version(project, mod, version, visibility)
+            receipt["status"] = CREATED
+            say(f"Steam returned item {outcome.item_id}; recorded with version {version} in "
+                f"{', '.join(dict.fromkeys(recorded_files + [project.rel(project.catalogue_path)]))} (commit it).")
+        else:
+            say(f"Warning: Steam made item {outcome.item_id} (recorded) but the files did not go up. Prepare again and "
+                f"upload {mod} with --update.")
     elif operation == "create":
         say(f"Warning: no item ID came back. Check your Workshop items on Steam before anything else, then run: "
             f"steam-publish reconcile \"{receipt_dir}\" --item-id <id>   (or --not-created)")
-    elif receipt["steamCmdExitCode"] == 0:
+    elif outcome.ok:
         # The next change note starts after this version. A failed run records nothing, so its versions are
         # described again next time.
         stage.record_uploaded_version(project, mod, version, visibility)
         say(f"Recorded version {version} ({visibility}) as uploaded in {project.rel(project.catalogue_path)} (commit it).")
     else:
-        say(f"Warning: SteamCMD exited with code {receipt['steamCmdExitCode']}; version {version} was not recorded as "
-            f"uploaded. Check the item on Steam; if the update did arrive, run: steam-publish reconcile "
-            f"\"{receipt_dir}\" --item-id {receipt['itemId']}")
+        code = receipt.get("steamCmdExitCode")
+        why = f"SteamCMD exited with code {code}" if code is not None else "Steam did not confirm the upload"
+        say(f"Warning: {why}; version {version} was not recorded as uploaded. Check the item "
+            f"on Steam; if the update did arrive, run: steam-publish reconcile \"{receipt_dir}\" --item-id "
+            f"{receipt['itemId']}")
     write_json(receipt_dir / "receipt.json", receipt)
     say(f"Receipt: {receipt_dir}")
     if receipt["itemId"]:
         say("Next: open " + ITEM_URL.format(item=receipt["itemId"]) + " and check the title, description, change "
             "note, cover and visibility. Accept the Workshop legal agreement if Steam asks.")
-        say("Set Required items (Owner controls > Add/Remove Required Items): " + ("; ".join(required) or "none"))
+        if not outcome.sets_extras:
+            say("Set Required items (Owner controls > Add/Remove Required Items): " + ("; ".join(required) or "none"))
+            if manifest.get("tags"):
+                say("Set the item's tags on Steam: " + ", ".join(manifest["tags"]) + " (SteamCMD cannot).")
         for reminder in project.adapter.after_upload(project, mod):
             say(reminder)
     if visibility == "public":
@@ -291,7 +313,8 @@ def build(project, mod, run=subprocess.run):
 
 
 def update_all(project, mods=None, say=print, no_build=False, what_if=False, acknowledge_hold=False,
-               steam_user=None, steamcmd=None, run=run_steamcmd, build_run=subprocess.run, environ=None):
+               steam_user=None, steamcmd=None, run=run_steamcmd, build_run=subprocess.run, environ=None, via="steamcmd",
+               sender=None, steam_library=None, new_console=False, progress=None):
     """Update only the items whose mod has a newer version than the one last uploaded, dependencies first.
 
     Each is built (unless no_build), prepared and sent as an update keeping its recorded visibility. Stops at the
@@ -320,7 +343,8 @@ def update_all(project, mods=None, say=print, no_build=False, what_if=False, ack
             build(project, row["mod"], build_run)
         stage.prepare(project, row["mod"])
         upload(project, Request(row["mod"], "update", steam_user=steam_user, steamcmd=steamcmd,
-                                acknowledge_hold=acknowledge_hold), say, run, environ=environ)
+                                acknowledge_hold=acknowledge_hold, via=via, steam_library=steam_library,
+                                new_console=new_console), say, run, environ=environ, sender=sender, progress=progress)
         if project.mods[row["mod"]].get("uploadedVersion") != row["version"]:
             raise PublishError(f"{row['mod']} {row['version']} was not recorded as uploaded; check the item on Steam "
                                "before running this again.")
