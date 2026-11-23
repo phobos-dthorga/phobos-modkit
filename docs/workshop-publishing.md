@@ -66,6 +66,8 @@ python -m phobos_modkit steam-publish update [--what-if] [--no-build] [--acknowl
 python -m phobos_modkit steam-publish reconcile <receipt folder> --item-id 123 | --not-created
 python -m phobos_modkit steam-publish pull [--visibility] [--description] [--changelog] [--write]
 python -m phobos_modkit steam-publish change-notes [--no-write]
+python -m phobos_modkit steam-publish page Framework [--check|--write] [--stdin|--from FILE]
+python -m phobos_modkit steam-publish show Framework
 ```
 
 Mods are named in full or by a unique ending, ignoring case: `Framework` for `PhobosFramework`. `--json` gives JSON.
@@ -79,6 +81,8 @@ Mods are named in full or by a unique ending, ignoring case: `Framework` for `Ph
 | `reconcile` | The receipt and catalogue records | No |
 | `pull` | Catalogue, page and changelog, only with `--write` | Public API, no key |
 | `change-notes` | Worksheets in `.local/workshop-change-notes/` | No |
+| `page` | The page file, only with `--write` and only without problems | No |
+| `show` | Nothing | No |
 
 ### Release notes
 
@@ -151,6 +155,20 @@ without a key: `--visibility` records the item's live visibility, `--description
 text (never when Steam shows another version), and `--changelog` marks a public item's uploaded version Released,
 dated by Steam's last update in local time, and writes its notes again. Private and friends-only items read as not
 found and are left alone.
+
+### For a program's Publish page
+
+`page` and `show` are what D'thorga Companion's Publish page reads and writes (1.99.0); with `--json`, the envelope's `data`
+holds everything it shows, and `status` and `pending` carry their rows there too.
+
+- **`page MOD`** gives the page's text, its path, whether it exists (a missing page is offered as a starter with the three
+  required lines, never written), its size against the budget, and **every problem at once**: unknown or unbalanced tags,
+  ASCII quotes or backslashes, size, and the title, version and status lines. **`--check`** checks a text given on standard
+  input (`--stdin`) or in a file (`--from`) and fails when it has problems; **`--write`** saves it, only when it has none, with
+  LF line endings. Release notes are not rewritten by saving a page.
+- **`show MOD`** gives one mod's card: title, version, tags, what the next upload would be, blockers, sizes, the Required
+  items it would set, **the change note exactly as Steam would get it**, the item and what was last sent, whether an update is
+  due, the game's reminders, and every receipt, newest first. A mod that is not ready says why in `error` and shows the rest.
 
 ### Tidying change notes
 

@@ -4,6 +4,18 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.99.0] - 2026-11-23
+
+### Added
+
+- **`steam-publish page`**, for D'thorga Companion's Workshop page editor: a mod's page with **every problem at once**, its
+  size against the budget and a starter for a page not written yet; `--check` checks a text from standard input or a file,
+  and `--write` saves it only when it has no problems.
+- **`steam-publish show`**: one mod's card, read-only: the change note exactly as Steam would get it next, its tags and
+  Required items, blockers, sizes, whether an update is due, and every upload's receipt, newest first.
+- **`status` and `pending` give their rows as JSON data**, beside the report. Guide: `docs/workshop-publishing.md`, "For a
+  program's Publish page".
+
 ## [1.98.0] - 2026-11-23
 
 ### Added

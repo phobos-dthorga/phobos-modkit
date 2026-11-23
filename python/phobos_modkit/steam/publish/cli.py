@@ -10,6 +10,8 @@
     python -m phobos_modkit steam-publish update --what-if        OWNER ONLY without --what-if: every due update
     python -m phobos_modkit steam-publish pull --visibility --changelog      bring Steam's live state back
     python -m phobos_modkit steam-publish change-notes            worksheets for tidying Change Notes tabs
+    python -m phobos_modkit steam-publish page Framework [--check|--write] [--stdin|--from FILE]   the Workshop page
+    python -m phobos_modkit steam-publish show Framework          one mod's card: next change note, tags, receipts
 
 Run from the repository (or pass --root); the catalogue is config/workshop-publishing.json unless --catalogue says
 otherwise. Mods are named in full or by a unique ending (Framework for PhobosFramework). Only upload, update and
@@ -27,7 +29,7 @@ import sys
 from ... import cache as derived
 from ...report import Bullets, Code, Report, Table, envelope_text, home_redactor, keep, render_markdown
 from .. import workshop
-from . import notes, pull, senders, stage, upload, worksheets
+from . import editor, notes, pull, senders, stage, upload, worksheets
 from .project import STAGING_CACHE, Project, PublishError
 from ...manifest import OWNER_PRESS, READS, RUNS, WRITES
 from ...progress import Progress
@@ -87,6 +89,16 @@ def build_parser():
     for area in pull.AREAS:
         s.add_argument(f"--{area}", action="store_true")
     s.add_argument("--write", action="store_true", help="apply; default only reports")
+    s = sub.add_parser("page", parents=[common], help="a mod's Workshop page with its problems; check or save a new text")
+    s.add_argument("mod")
+    mode = s.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="check the text given, without writing")
+    mode.add_argument("--write", action="store_true", help="save the text given, only when it has no problems")
+    source = s.add_mutually_exclusive_group()
+    source.add_argument("--stdin", action="store_true", help="the text, as UTF-8 on standard input")
+    source.add_argument("--from", dest="source", help="the text, from a file")
+    s = sub.add_parser("show", parents=[common], help="one mod's card: next change note, tags, Required items, receipts")
+    s.add_argument("mod")
     s = sub.add_parser("change-notes", parents=[common], help="worksheets for tidying each item's Change Notes tab")
     s.add_argument("mods", nargs="*")
     s.add_argument("--no-write", action="store_true", help="only count entries")
@@ -125,6 +137,8 @@ def notes_report(project, args):
 
 def status_report(project):
     rows = stage.status(project)
+    data = {"game": project.adapter.title if hasattr(project.adapter, "title") else project.adapter.name,
+            "appId": str(project.config["appId"]), "mods": rows}
     report = Report("Workshop status")
     report.lines.append("Publication order, dependencies first: " + ", ".join(r["mod"] for r in rows) + ".")
     report.section("Mods", Table(["Mod", "Version", "Item", "Next", "Package", "Description bytes", "Change note bytes"],
@@ -134,7 +148,7 @@ def status_report(project):
     problems = [f"{r['mod']}: {b}" for r in rows for b in r["blockers"]] + \
                [f"{r['mod']}: {r['error']}" for r in rows if r.get("error")]
     report.section("Blockers and errors", Bullets(problems) if problems else "None.")
-    return report, EXIT_OK
+    return report, EXIT_OK, data
 
 
 def pending_report(project):
@@ -145,7 +159,7 @@ def pending_report(project):
     report.section("Mods", Table(["Mod", "Version", "Item", "Uploaded", "Visibility", "Due"],
                                  [[r["mod"], r["version"], r["itemId"] or "none", r["uploadedVersion"] or "",
                                    r["uploadedVisibility"] or "", "yes" if r["needsUpload"] else ""] for r in rows]))
-    return report, EXIT_OK
+    return report, EXIT_OK, {"mods": rows}
 
 
 def manifest_report(title, folder, manifest):
@@ -182,6 +196,40 @@ def pull_report(project, args, post):
     return report, EXIT_OK
 
 
+def page_report(project, args, stdin):
+    mod = project.resolve(args.mod)
+    text = None
+    if args.stdin:
+        text = stdin.buffer.read().decode("utf-8-sig") if hasattr(stdin, "buffer") else stdin.read()
+    elif args.source:
+        text = Path(args.source).read_text(encoding="utf-8-sig")
+    if (args.check or args.write) and text is None:
+        raise PublishError("Give the text with --stdin or --from FILE")
+    found = editor.page_write(project, mod, text) if args.write else editor.page_info(project, mod, text)
+    report = Report(f"Workshop page: {mod}" + (" (saved)" if args.write else ""))
+    report.lines.append(f"{found['path']}: {found['bytes']:,} of {found['budget']:,} bytes"
+                        + ("" if found["exists"] else "; not written yet, a starter is shown") + ".")
+    report.section("Problems", Bullets(found["problems"]) if found["problems"] else "None.")
+    return report, EXIT_FAILED if args.check and found["problems"] else EXIT_OK, found
+
+
+def show_report(project, args):
+    found = editor.show(project, project.resolve(args.mod))
+    report = Report(f"Workshop card: {found['mod']}")
+    if found.get("error"):
+        report.lines.append(f"Not ready: {found['error']}")
+    else:
+        report.lines.append(f"{found['title']} {found['version']}: {found['operation']}"
+                            + (f" of item {found['itemId']}" if found["itemId"] else " of a new item") + ".")
+        report.lines.append("Tags: " + (", ".join(found["tags"]) or "none") + ".")
+        report.section("Change note", Code(found["changeNote"].splitlines(), "bbcode"))
+    report.section("Uploads", Table(["When", "Version", "How", "Visibility", "Status"],
+                                    [[r["startedAt"] or r["folder"], r["version"], r["via"] or "steamcmd",
+                                      r["visibility"], r["status"]] for r in found["receipts"]]) if found["receipts"]
+                   else "None yet.")
+    return report, EXIT_OK, found
+
+
 def worksheets_report(project, args):
     rows = worksheets.run(project, args.mods, not args.no_write)
     report = Report("Change-note worksheets")
@@ -193,7 +241,7 @@ def worksheets_report(project, args):
 # ---- running ----
 
 def main(argv=None, root=None, payload=None, settings_file=None, environ=None, out=None, post=None, run=None,
-         build_run=None, adapters=None, sender=None):
+         build_run=None, adapters=None, sender=None, stdin=None):
     """Run the command. A game repository's wrapper passes root, settings_file and, if it has one, a payload hook
     (project, mod) -> {relative path: bytes}. Tests pass stand-ins for Steam (post, run and build_run)."""
     out = out or sys.stdout
@@ -210,17 +258,18 @@ def main(argv=None, root=None, payload=None, settings_file=None, environ=None, o
     try:
         cache = derived.folder(STAGING_CACHE, args.cache, environ, args.settings or settings_file)
         project = Project.load(args.root or root or Path.cwd(), adapters, args.catalogue, payload, cache)
-        report, code = dispatch(project, args, say, post or workshop.http_post, run or upload.run_steamcmd,
-                                build_run or subprocess.run, environ, sender)
+        result = dispatch(project, args, say, post or workshop.http_post, run or upload.run_steamcmd,
+                          build_run or subprocess.run, environ, sender, stdin or sys.stdin)
+        report, code, data = (*result, None) if len(result) == 2 else result
     except (PublishError, ValueError, OSError, KeyError, subprocess.SubprocessError, workshop.WorkshopError) as error:
-        report, code = Report("steam-publish: error", [str(error)]), EXIT_FAILED
+        report, code, data = Report("steam-publish: error", [str(error)]), EXIT_FAILED, None
     if report is not None:
-        print(envelope_text("steam-publish", report, redact) if args.json
+        print(envelope_text("steam-publish", report, redact, data) if args.json
               else render_markdown(report, redact), file=out)
     return code
 
 
-def dispatch(project, args, say, post, run, build_run, environ, sender=None):
+def dispatch(project, args, say, post, run, build_run, environ, sender=None, stdin=None):
     command = args.command
     if command == "notes":
         return notes_report(project, args)
@@ -255,6 +304,10 @@ def dispatch(project, args, say, post, run, build_run, environ, sender=None):
         return pull_report(project, args, post)
     if command == "change-notes":
         return worksheets_report(project, args)
+    if command == "page":
+        return page_report(project, args, stdin)
+    if command == "show":
+        return show_report(project, args)
     raise PublishError(f"Unknown command {command}")
 
 
@@ -266,4 +319,6 @@ MANIFEST = {"game": None, "parser": build_parser, "effect": READS, "reports": {
     "reconcile": {"effect": WRITES, "note": "settles an upload's receipt"},
     "pull": {"effect": WRITES, "when": "--write", "note": "reads Steam"},
     "change-notes": {"effect": WRITES, "note": "--no-write only counts"},
+    "page": {"effect": WRITES, "when": "--write", "note": "writes only the page file, only without problems"},
+    "show": {"effect": READS},
 }}

@@ -70,6 +70,7 @@ class GameFiles(unittest.TestCase):
 
     def catalogue_project(self, game, mods, content=None):
         git(self.root, "init", "-q")
+        git(self.root, "config", "core.fsmonitor", "false")   # the code under test runs plain git
         for mod, files in mods.items():
             for name, text in files.items():
                 self.write(f"mods/{mod}/{name}", text)

@@ -24,21 +24,32 @@ def note_text(title, release):
     return text
 
 
-def check_page(project, mod, title, version, text):
-    rules = project.layout["pageRules"]
-    bbcode.validate(text)
+def page_problems(project, mod, title, version, text):
+    """Every problem with a Workshop page, in words, so an editor can show them all at once (1.99.0)."""
+    rules, problems = project.layout["pageRules"], []
+    try:
+        bbcode.validate(text)
+    except ValueError as error:
+        problems.append(str(error))
     if '"' in text or "\\" in text:
-        raise PublishError(f"{mod}: the page must not contain ASCII double quotes or backslashes; use typographic quotes")
+        problems.append("the page must not contain ASCII double quotes or backslashes; use typographic quotes")
     size, budget = len(text.encode("utf-8")), project.layout["pageMaxBytes"]
     if size > budget:
-        raise PublishError(f"{mod}: the page is {size} UTF-8 bytes; Steam takes under 8,000 and this project's budget is {budget}")
+        problems.append(f"the page is {size} UTF-8 bytes; Steam takes under 8,000 and this project's budget is {budget}")
     if rules.get("version") and text.splitlines().count(f"[b]Version:[/b] {version}") != 1:
-        raise PublishError(f"{mod}: the page needs one line reading [b]Version:[/b] {version}")
+        problems.append(f"the page needs one line reading [b]Version:[/b] {version}")
     if rules.get("title") and f"[h1]{title}[/h1]" not in text:
-        raise PublishError(f"{mod}: the page needs the heading [h1]{title}[/h1]")
+        problems.append(f"the page needs the heading [h1]{title}[/h1]")
     if rules.get("status") and not any(line.startswith(STATUS_LINE) and len(line) > len(STATUS_LINE)
                                        for line in text.splitlines()):
-        raise PublishError(f"{mod}: the page needs a line starting {STATUS_LINE}")
+        problems.append(f"the page needs a line starting {STATUS_LINE}")
+    return problems
+
+
+def check_page(project, mod, title, version, text):
+    problems = page_problems(project, mod, title, version, text)
+    if problems:
+        raise PublishError(f"{mod}: {problems[0]}")
 
 
 def read(path):
