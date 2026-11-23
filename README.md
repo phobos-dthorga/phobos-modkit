@@ -4,6 +4,9 @@ Out-of-game tools for game modders: read logs, saves, mod data and Steam Worksho
 questions in a short summary instead of a long read. One shared home for code that the
 [Phobos](https://github.com/phobos-dthorga) game repositories had each been copying.
 
+- **How the kit is built**: layers, modules, the command model, native parts and tests: [architecture](docs/architecture.md).
+- **What another repository may import**, and which names are a promise: [library API](docs/library-api.md).
+
 ## Read this first (gotchas)
 
 - **`python -m phobos_modkit manifest` lists every command** with what it reads and changes, and the [Tools](#tools) table
@@ -167,13 +170,16 @@ git submodule add https://github.com/phobos-dthorga/phobos-modkit.git external/p
 
 Python scripts add `external/phobos-modkit/python` to their import path. The Rust and C# tools build from
 the submodule, and their programs stay out of Git. Moving to a newer version is an ordinary commit that
-moves the pin. See [project direction](docs/project-direction.md) for the rules.
+moves the pin. See [architecture](docs/architecture.md) for how a consumer uses the kit, and [library API](docs/library-api.md)
+for the names it may import.
 
 ## Project map
 
 | Location | Holds |
 | --- | --- |
-| [docs/project-direction.md](docs/project-direction.md) | What belongs here, the three layers, languages, consumers |
+| [docs/architecture.md](docs/architecture.md) | How the kit is built: the three layers, the module map, the command model, derived data, native parts, settings, tests, adding a command, consumers |
+| [docs/library-api.md](docs/library-api.md) | What other repositories may import: stable entry points and library names, and the internal ones with their way out |
+| [docs/project-direction.md](docs/project-direction.md) | Decisions: what belongs here, what is out of scope, what waits and what was not adopted |
 | [docs/migration.md](docs/migration.md) | Scripts copied across the Phobos repositories and where each one moves |
 | [docs/rimworld-log.md](docs/rimworld-log.md) | How to run RimWorld log triage and read its summary |
 | [docs/rimworld-save.md](docs/rimworld-save.md) | How to index a RimWorld save and ask it questions |
@@ -222,7 +228,7 @@ moves the pin. See [project direction](docs/project-direction.md) for the rules.
 | [docs/gate.md](docs/gate.md) | The gate: a repository's checks from config/gate.json, and what each output parser keeps |
 | `python/phobos_modkit/` | Standard-library Python package: `report.py` (every tool's reports), `cache.py` (derived data), `sampling.py` and `dotnet_diagnostics.py` (sampled call stacks and Microsoft's diagnostics tools), `query.py` (report filters), `steam/` (Workshop research; `publish/` for publishing), `release/` (changelogs, constants, history screen), `gate/` (the check runner and its output parsers), `code/` (the C# declaration scanner and index), `logs/` (game-free triage), `games/rimworld/` (the adapter, with the save schema), `games/zomboid/` (the mod list and publishing), `games/ostranauts/`, `games/kenshi/` and `games/wrsr/` (publishing only: each a `workshop.json`) |
 | `crates/xml-index/` | Rust: streams any large XML file into SQLite, driven by a schema file; `cargo test` |
-| `dotnet/` | C# tools: `PhobosModKit.Assemblies`, the assembly metadata reader (System.Reflection.Metadata; builds outside the repository) |
+| `dotnet/` | C# tools: `PhobosModKit.Assemblies`, the assembly metadata reader (System.Reflection.Metadata), and `PhobosModKit.Heap`, the heap reader (ClrMD); both build outside the repository |
 | `fixtures/`, `tests/` | Hand-written test data and the tests: `python -m unittest discover -s tests` |
 
 ## Licence

@@ -4,6 +4,28 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.108.1] - 2026-11-23
+
+### Added
+
+- **Two docs: the kit's architecture and its library API** (docs rewrite, step 4, the owner's go-ahead of 23 Nov 2026). An audit
+  had found the architecture spread over `AGENTS.md` and `project-direction.md`, and no doc of what other repositories import.
+  [architecture.md](docs/architecture.md), written fresh from the code: the three layers with a diagram, the module map, the five
+  game adapters, the command model (manifest, report, envelope, progress, generated blocks), derived data, the Rust and C# parts
+  and where they build, the paths order, tests and the gate, a checklist for a new command, and how a consumer uses the kit.
+  [library-api.md](docs/library-api.md), from every `phobos_modkit` import in phobos-rimworld, D'thorga Companion and
+  phobos-ostranauts: 51 names stable (30 command entry points with the keywords consumers pass, 21 library names), whose change
+  raises the major version, and 20 internal names imported today, each with its way out. `tests/test_library_api.py` fails when a
+  stable name or keyword disappears, or the doc stops listing one. Stable versus internal is an agent choice, for the owner to
+  revise.
+
+### Changed
+
+- **`project-direction.md` keeps only direction**: decisions, what is out of scope, what waits and what was not adopted. Its
+  layers, languages and frameworks tables moved to the architecture doc, and its "Order of work" history went (each step is in
+  this changelog). `AGENTS.md` points to the architecture doc instead of repeating the layers table, and names the library API
+  as what its major-version rule protects; the README and `CONTRIBUTING.md` link both docs.
+
 ## [1.108.0] - 2026-11-23
 
 ### Added

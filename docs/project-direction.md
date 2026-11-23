@@ -5,36 +5,24 @@ project: reading logs, saves, mod data, assemblies and Workshop pages, and the r
 repository repeats. It exists so that agent sessions read short, deterministic summaries instead of large
 files, and so the owner's game repositories stop carrying drifting copies of the same scripts.
 
+This page holds the decisions and what was set aside. How the kit is built (its layers, modules, languages and frameworks) is
+in [architecture](architecture.md); what other repositories may import is in [library API](library-api.md); the rules are in
+`AGENTS.md`; what each version delivered is in `CHANGELOG.md` (docs rewrite, step 4, 23 Nov 2026).
+
 **Who decided what.** Owner (7 Nov 2026): build deterministic tools to save LLM work; put truly generic
 code in its own repository; this name; public under MIT. Agent choices, open to revision: the three layers,
 game adapters living here, the tool list and order, and the language of each tool.
 
-## The three layers
+The first consumer was phobos-rimworld; its
+[analysis tooling record](https://github.com/phobos-dthorga/phobos-rimworld/blob/main/docs/development/analysis-tooling.md)
+gives the first tools' designs.
 
-```mermaid
-flowchart LR
-    subgraph modkit["phobos-modkit"]
-        core["Core<br/>no game in it"]
-        adapters["Game adapters<br/>games/rimworld, games/zomboid, ..."]
-        adapters --> core
-    end
-    subgraph game["a game repository"]
-        policy["Project policy<br/>its own checks and rules"]
-    end
-    policy --> adapters
-    policy --> core
-```
+## Why game adapters live here
 
-- **Core** holds code with no game in it: path resolution and Steam library discovery, Steam's public
-  Workshop pages and API, log grouping and run-to-run comparison, streaming XML indexing, assembly metadata,
-  changelog, release-note and link checking, and the install pattern (refuse while running, back up first).
-- **Game adapters** hold public file-format knowledge for one game: its log line formats, its save schema,
-  its mod metadata files and load rules. Anyone modding that game can use them without the owner's mods.
-- **Project policy** stays in each game repository: which data matters to its mods, its own checks, its
-  disclaimer text, its mod suggestions.
-
-Why adapters live here and not in the game repositories (agent choice): the format knowledge is the part
-most worth sharing, and keeping it beside the core keeps the core honest about what it must not know.
+The kit has three layers: core (no game in it), game adapters (one game's public file formats) and project policy (what one
+repository's mods require, kept in that repository); [architecture](architecture.md) draws them. Adapters live here and not in
+the game repositories (agent choice): the format knowledge is the part most worth sharing, and keeping it beside the core keeps
+the core honest about what it must not know.
 
 ## Out of scope
 
@@ -43,62 +31,28 @@ most worth sharing, and keeping it beside the core keeps the core honest about w
 - **In-game profiling**, which is [Phobos Scope](https://github.com/phobos-dthorga/phobos-scope)'s.
 - **Steam uploads by anyone but the owner.** Until 8 November 2026 the owner-run upload scripts stayed in the
   repository that publishes; that day the owner asked for phobos-ostranauts' publishing tools, uploader included,
-  to move here, made generic. The uploader runs only in the owner's console; agents, tests and CI never upload.
+  to move here, made generic. The uploader runs only in the owner's console or on the owner's own press in D'thorga
+  Companion; agents, tests and CI never upload.
 
-## Languages
+## Shared frameworks: what was agreed and what waits
 
-| Language | Used for | Why |
-| --- | --- | --- |
-| Python, standard library | The default: logs, mod data, Workshop, release tooling | Small inputs; every Phobos repository already runs Python; no toolchain to install |
-| Rust | The save indexer | Saves of about 300 MB are read on every question in Python (7.6 s per pass on a high-end PC); index once, query many needs a fast reader; one self-contained program |
-| C# | The assembly metadata reader | .NET's `System.Reflection.Metadata` reads assemblies without loading them, which keeps the rule against running other authors' code |
+Agreed with the owner on 7 November 2026, after two tools had shown what repeats (agent proposal, owner's go-ahead): the report
+model, the derived-data cache and the SQLite substrate. All three are built; [architecture](architecture.md) says what each gives.
 
-## Shared frameworks inside the kit (7 Nov 2026)
+- **A game adapter contract waits for a second game whose logs or saves are read.** It would give generic commands (`log`,
+  `save`) with a game option, each game registering its adapter, instead of commands named by game. Five games have adapters now
+  (RimWorld; Project Zomboid's mod list; Workshop publishing data for Ostranauts, Kenshi and Workers & Resources), but only
+  RimWorld's logs and saves are read, so building the contract would still guess at its shape.
 
-Agreed with the owner on 7 November 2026, after two tools had shown what repeats. Agent proposal, owner's go-ahead.
+## Not adopted, and why
 
-| Framework | Module | What it gives every tool | Status |
-| --- | --- | --- | --- |
-| Report model | `phobos_modkit.report` | One way to build a report (paragraphs, bullets, tables, code) and render it as Markdown or JSON, with redaction applied to every piece of text and table cut-offs stated | Built (0.3.0); log triage and the save index use it |
-| Derived-data cache | `phobos_modkit.cache` | The cache folder, provenance stamps and hashes, a staleness check, frozen copies of files another program may be writing, removal of read-only files | Built (0.3.0); the save index uses it |
-| SQLite substrate | convention, in AGENTS.md | Every derived file is SQLite with a `meta` provenance table, so tools can read one another's data with ATTACH | Adopted; the mod and Def index is designed to it |
-| Game adapter contract | not built | Generic commands (`log`, `save`) with a game option, each game registering its adapter, instead of commands named by game | **Waits for a second game whose logs or saves are read.** Five games have adapters now (RimWorld; Project Zomboid's mod list; Workshop publishing data for Ostranauts, Kenshi and Workers & Resources), but only RimWorld's logs and saves are read, so building the contract would still guess at its shape |
-
-Not adopted, and why: outside Python frameworks (click, pandas, rich) would break the standard-library rule that
-lets every Phobos repository run the kit with nothing installed; clap for Rust is not worth it for one command;
-sharing code with Phobos Scope would need a third repository for no present gain, since its reports are HTML for
-people and the kit's are Markdown for agents.
-
-## How consumers use it
-
-- A pinned git submodule at `external/phobos-modkit`, as phobos-ostranauts pins Phobos Scope.
-- Python scripts add `external/phobos-modkit/python` to their import path through a few-line shim.
-- The Rust and C# tools are built from the submodule by the consumer's own build or verify script; their
-  programs are ignored.
-- A fix lands here first, then the consumer moves its pin. Consumers adopt a tool when they next touch the
-  script it replaces.
-
-## Order of work
-
-The first consumer is phobos-rimworld; its
-[analysis tooling record](https://github.com/phobos-dthorga/phobos-rimworld/blob/main/docs/development/analysis-tooling.md)
-gives each tool's design.
-
-1. These documents. Done 7 Nov 2026.
-2. Log triage, core and RimWorld adapter. Done 7 Nov 2026 (0.1.0); see [RimWorld log triage](rimworld-log.md).
-3. The save indexer's working slice, with RimWorld's schema. Done 7 Nov 2026 (0.2.0); see
-   [RimWorld save index](rimworld-save.md). Agent choice: the Rust program only builds the index; the reports are
-   Python, sharing the log tool's command line and Markdown, and read the index with Python's own SQLite.
-4. The shared report model and derived-data cache. Done 7 Nov 2026 (0.3.0); see the table above.
-5. RimWorld's mod and Def index, written to SQLite in the cache like the save index. Done 7 Nov 2026 (0.4.0); see
-   [RimWorld Def index](rimworld-defs.md).
-6. Workshop research. Done 7 Nov 2026 (0.5.0); see [Workshop research](workshop.md).
-7. Release tooling and Workshop publishing, from phobos-ostranauts' scripts. Done 8 Nov 2026 (0.10.0) at the
-   owner's request; see [Workshop publishing](workshop-publishing.md) and [release chores](release.md). Agent
-   choices: the uploader became Python instead of PowerShell (one language, testable with a stand-in for SteamCMD,
-   runs anywhere), candidates are staged in the kit's cache, and each repository's package checks stay with it as a
-   payload hook.
-8. The assembly metadata reader, startup sessions, the readiness scan, doc links and layout rules, as the need
-   arises.
-
-Continuous integration runs the tests on Windows and Linux, as Phobos Scope does.
+- **Outside Python frameworks** (click, pandas, rich): they would break the standard-library rule that lets every Phobos
+  repository run the kit with nothing installed.
+- **clap for Rust**: not worth it for one command.
+- **Sharing code with Phobos Scope**: it would need a third repository for no present gain, since Scope's reports are HTML for
+  people and the kit's are Markdown for agents.
+- **The uploader in PowerShell** (8 Nov 2026, agent choice, when phobos-ostranauts' publishing moved here): Python instead, one
+  language, testable with a stand-in for SteamCMD, and it runs anywhere. Candidates are staged in the kit's cache, and each
+  repository's own package checks stay with it as a payload hook.
+- **Reports in Rust** (7 Nov 2026, agent choice for the save index): the Rust program only builds the index; the reports are
+  Python, sharing the other tools' command line and Markdown, and read the index with Python's own SQLite.

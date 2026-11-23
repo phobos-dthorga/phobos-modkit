@@ -25,11 +25,8 @@ session**; `CLAUDE.md` imports it. The rules below are this repository's own, an
 
 ## What belongs here: three layers
 
-| Layer | What it is | Where |
-| --- | --- | --- |
-| Core | Code with no game in it: paths, Steam, log grouping, XML indexing, assembly metadata, release tooling | here |
-| Game adapter | Public file-format knowledge for one game: log line formats, save schemas, mod metadata files | here, under `games/<game>/` |
-| Project policy | What one project's mods require: which data matters, its own checks, its disclaimer text | the game repository |
+Core (no game in it) and game adapters (`games/<game>/`) live here; project policy stays in each game repository.
+[`docs/architecture.md`](docs/architecture.md) draws the layers and maps every module; these are the rules for them.
 
 - **Core never names a game.** A game's knowledge enters through an adapter or a data file.
 - **An adapter holds format facts, in our own words.** Facts learned by decompiling a game are summarised,
@@ -154,6 +151,9 @@ session**; `CLAUDE.md` imports it. The rules below are this repository's own, an
   commit: which script to run, for what, before reading the raw material by hand. Without the rule, sessions keep
   reading the raw files and the tool saves nothing. Later features of the tool update that rule.
 - An incompatible change raises the major version and says what consumers must change.
+- **What consumers may import is [`docs/library-api.md`](docs/library-api.md)**: the names it lists as stable are the ones the
+  rule above protects, and `tests/test_library_api.py` fails when one disappears. A name a consumer starts importing is added there
+  (and to the test) in the same commit, or the consumer is pointed at a command's `main(argv)` instead.
 
 ## Git, versions and documents
 

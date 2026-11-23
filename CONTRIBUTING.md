@@ -1,7 +1,7 @@
 # Contributing
 
-Read [AGENTS.md](AGENTS.md) and the [project direction](docs/project-direction.md) first. Keep each change to
-one useful tool or one improvement, with its tests.
+Read [AGENTS.md](AGENTS.md), the [architecture](docs/architecture.md) and the [project direction](docs/project-direction.md)
+first. Keep each change to one useful tool or one improvement, with its tests.
 
 - **Use hand-written fixtures.** Never commit a real save, log, assembly or another author's file, or an
   excerpt of one.
