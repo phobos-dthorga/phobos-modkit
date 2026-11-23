@@ -103,6 +103,41 @@ class ListingTests(unittest.TestCase):
         self.assertFalse(json.loads(out.getvalue())["data"]["ok"])
 
 
+class ByNameTests(unittest.TestCase):
+    """Lua, Python and XML Defs, by name from the connections graph (1.115.0), on the connections tests' own sample repository."""
+
+    def names(self, tmp, file, commit=None):
+        import test_connections as sample
+        root = sample.repository(tmp)
+        argv = ["names", "--root", str(root), "--file", file] + (["--commit", commit] if commit else [])
+        code, found = sample.run(argv, tmp)
+        self.assertEqual(code, 0, found)
+        return {(n["text"], n["line"]): n for n in found["names"]}, found
+
+    def test_lua_names_are_found_whole_and_never_in_a_comment_or_a_string(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            names, found = self.names(tmp, "lua/lamps.lua")
+            self.assertFalse(found["exact"])
+            shine = names[("Lamps.shine", 5)]
+            self.assertEqual((shine["node"], shine["declared"]["line"], shine["here"]), ("lua:Lamps.shine", 12, False))
+            self.assertTrue(names[("Lamps.light", 4)]["here"])
+            self.assertFalse(any(line == 3 for _, line in names), "a comment is not code")
+            self.assertFalse(any(line == 13 for _, line in names), "a string is not code")
+            self.assertEqual(found["snippets"]["lua/lamps.lua:12"]["lines"][0], "function Lamps.shine()")
+
+    def test_python_and_xml_defs_are_found_by_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            names, _ = self.names(tmp, "tools/keeper.py")
+            self.assertEqual(names[("tidy", 6)]["kind"], "function")
+            self.assertEqual(names[("tidy", 6)]["declared"]["line"], 9)
+        with tempfile.TemporaryDirectory() as tmp:
+            names, _ = self.names(tmp, "Defs/Lamps.xml")
+            self.assertEqual(names[("BaseLamp", 6)]["node"], "def:ThingDef/BaseLamp")
+            self.assertEqual(names[("Lamp", 15)]["node"], "def:ThingDef/Lamp")
+            self.assertTrue(names[("MakeLamp", 13)]["here"])
+            self.assertNotIn(("ThingDef", 3), names, "an element's own name is not read")
+
+
 @unittest.skipUnless(HAVE_DOTNET or REQUIRE, "the .NET SDK is not installed")
 class ReaderTests(unittest.TestCase):
     def repository(self, tmp):

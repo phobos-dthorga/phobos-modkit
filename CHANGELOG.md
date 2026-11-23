@@ -4,6 +4,17 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.115.0] - 2026-11-24
+
+### Added
+
+- **`connections names` reads Lua, Python and XML too, by name** (the owner's go for D'thorga Companion's step 5, 24 Nov 2026:
+  "proceed with steps 5 and 6"). A word in the file that names one of the repository's things in the connections graph (in code,
+  never in a comment or a string; in XML only element text and attribute values) becomes a name, with the things it may stand
+  for (up to 8), its first thing's connections id and its lines, all marked by name. A dotted name is matched whole when the graph
+  has it (`Lamps.shine`, a C# class a Def names). Checked on phobos-rimworld (a Def file: 39 names; a Python script: 152) and
+  Project Zomboid's PhobosLib (a Lua file: 37). See [connections](docs/connections.md).
+
 ## [1.114.0] - 2026-11-24
 
 ### Added

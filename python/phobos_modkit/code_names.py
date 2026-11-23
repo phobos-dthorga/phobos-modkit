@@ -14,11 +14,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
 from . import changes
-from .connections import source_files
+from .connections import lua, source_files
 from .dotnet_tools import DotnetTool, ToolBuildError
 
 
@@ -150,6 +151,105 @@ def read(root, file, commit=None, environ=None, run=subprocess.run, progress=Non
         answer["limits"].append(f"{answer['missingReferences']} of the assemblies the project refers to were not found, so "
                                 "names from them are not placed.")
     return answer
+
+
+# ---------------------------------------------------------------- by name, for the languages Roslyn does not read (1.115.0)
+
+#: The languages read by name, by file suffix, and the graph's languages a name in each may stand for.
+BY_NAME = {".lua": ("lua", ("lua",)), ".py": ("python", ("python",)), ".xml": ("xml", ("xml", "csharp"))}
+MAX_CANDIDATES = 8
+_WORD = re.compile(r"[A-Za-z_]\w*(?:[.:][A-Za-z_]\w*)*")
+_PART = re.compile(r"[A-Za-z_]\w*")
+_PY_SKIP = re.compile(r"(?s)(\"\"\"|''').*?\1|\"(?:\\.|[^\"\\\n])*\"|'(?:\\.|[^'\\\n])*'|#[^\n]*")
+_XML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+_XML_VALUE = re.compile(r">([^<]+)<|=\s*\"([^\"]*)\"")
+
+
+def _blank(match):
+    return re.sub(r"[^\n]", " ", match.group(0))
+
+
+def _code_lines(text, language):
+    """The text as the words in it can be read: comments and strings blanked in Lua and Python; in XML only element text and
+    attribute values kept, the rest blanked. Line breaks and columns stay where they were."""
+    if language == "lua":
+        return lua._code(text).split("\n")
+    if language == "python":
+        return _PY_SKIP.sub(_blank, text).split("\n")
+    text = _XML_COMMENT.sub(_blank, text)
+    kept = [" "] * len(text)
+    for match in _XML_VALUE.finditer(text):
+        group = 1 if match.group(1) is not None else 2
+        for at in range(match.start(group), match.end(group)):
+            kept[at] = text[at]
+    for at, char in enumerate(text):
+        if char == "\n":
+            kept[at] = "\n"
+    return "".join(kept).split("\n")
+
+
+def _index(conn, languages):
+    """This repository's things in these languages, by their whole name and by the last part of it."""
+    whole, last = {}, {}
+    marks = ",".join("?" * len(languages))
+    rows = conn.execute(f'SELECT id, name, kind, file, line, "end" FROM nodes WHERE external = 0 AND file IS NOT NULL '
+                        f"AND language IN ({marks}) ORDER BY id", languages).fetchall()
+    for node_id, name, kind, file, line, end in rows:
+        thing = {"id": node_id, "name": name, "kind": kind, "file": file, "line": line, "end": end or line}
+        full = node_id.split(":", 1)[1] if node_id.startswith(("cs:", "py:", "lua:")) else name
+        for key in {full, name}:
+            whole.setdefault(key, []).append(thing)
+        last.setdefault(re.split(r"[.:/]", name)[-1], []).append(thing)
+    return whole, last
+
+
+def read_by_name(conn, root, file, text, commit=None):
+    """Every name in a Lua, Python or XML file that names one of this repository's things, matched by name in the connections
+    graph: a dotted name whole when the graph has it (a C# class named in a Def), else each part. Each says which things it may
+    stand for, at most `MAX_CANDIDATES`, and is marked by name; a declaration's lines come with it, read as the file now stands."""
+    language, languages = BY_NAME[Path(file).suffix.lower()]
+    whole, last = _index(conn, languages)
+    names, snippets, files = [], {}, {}
+    for number, line in enumerate(_code_lines(text, language), 1):
+        for match in _WORD.finditer(line):
+            word = match.group(0)
+            pieces = [(match.start(), word, whole.get(word))] if word in whole else \
+                [(match.start() + p.start(), p.group(0), last.get(p.group(0))) for p in _PART.finditer(word)]
+            for column, piece, things in pieces:
+                if not things:
+                    continue
+                first = things[0]
+                names.append({
+                    "line": number, "column": column, "length": len(piece), "text": piece, "kind": first["kind"],
+                    "display": first["name"], "id": None, "node": first["id"], "exact": False,
+                    "here": len(things) == 1 and first["file"] == file and first["line"] == number,
+                    "declared": {"file": first["file"], "line": first["line"], "end": first["end"]},
+                    "candidates": things[:MAX_CANDIDATES], "more": max(0, len(things) - MAX_CANDIDATES)})
+                for thing in things[:MAX_CANDIDATES]:
+                    key = f"{thing['file']}:{thing['line']}"
+                    if key not in snippets:
+                        snippets[key] = _snippet(root, thing, files)
+    return {"file": file, "project": None, "projects": [], "names": names,
+            "snippets": {k: v for k, v in snippets.items() if v}, "errors": 0, "missingReferences": 0, "seconds": 0,
+            "commit": commit, "exact": False,
+            "limits": ["Read by name, from this repository's connections as it now stands: a name may stand for any of the "
+                       "things listed with it."] + (["The file is read as it stood at that commit."] if commit else [])}
+
+
+def _snippet(root, thing, files):
+    """A thing's lines as its file now stands, at most `CONTEXT`; None when the file cannot be read."""
+    path = Path(root) / thing["file"]
+    if thing["file"] not in files:
+        try:
+            files[thing["file"]] = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            files[thing["file"]] = None
+    lines = files[thing["file"]]
+    if not lines or not thing["line"]:
+        return None
+    start, end = thing["line"], max(thing["line"], thing["end"] or thing["line"])
+    last = min(end, start + CONTEXT - 1, len(lines))
+    return {"file": thing["file"], "start": start, "end": end, "lines": lines[start - 1:last], "cut": last < end}
 
 
 def counts(answer):

@@ -45,7 +45,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `flow` | Who calls one thing and what it calls, a few steps each way. The calls around one thing, a few steps each way; needs its id. | reads only |
 | `changed` | The things a commit changed. The things a commit changed; needs the commit. | reads only |
 | `history` | The commits that changed one thing's lines, with the changelog entries they wrote. The commits that changed one thing, with the entries they wrote; needs its id. | reads only |
-| `names` | What every name in one C# file is, and where it is declared. What every name in one C# file is and where it is declared; needs the file. | reads only |
+| `names` | What every name in one file is, and where it is declared. What every name in one file is and where it is declared; needs the file. | reads only |
 
 | Option | Reports | What it does | Default |
 | --- | --- | --- | --- |
@@ -59,7 +59,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--depth N` | `flow` | steps each way (default 2). One of `1`, `2`, `3`. | `2` |
 | `--commit VALUE` | `changed` | the commit. Required. |  |
 | `--limit N` | `history` | commits to give, newest first (default 25, at most 500) | `25` |
-| `--file VALUE` | `names` | the C# file, relative to the repository. Required. |  |
+| `--file VALUE` | `names` | the file (C#, Lua, Python or XML), relative to the repository. Required. |  |
 | `--commit VALUE` | `names` | read the file as it stood at this commit (other files as they stand now) |  |
 
 - Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
@@ -95,7 +95,11 @@ of 24 Nov 2026: "Roslyn for C#"). It reads differently from the rest of this too
 - **At a commit, only that file is read as it stood**; every other file as it stands now, and `limits` says so.
 - **About 3 to 7 s a file** on phobos-rimworld's vehicles part (two projects, 355 files): MSBuild's listing about half of it.
   Nothing is cached yet.
-- C# only; other languages go by name through `find`.
+- **Lua, Python and XML by name** (1.115.0; Companion's `docs/code-reading.md` step 5): a word in the file (in code, never a
+  comment or a string; in XML only element text and attribute values) that names one of this repository's things in the graph,
+  a dotted name whole when the graph has it (`Lamps.shine`, or a C# class a Def names) and otherwise each part. Each such name
+  lists the things it may stand for; the file is read as it stood at `--commit`, the things as they stand now. Checked on
+  phobos-rimworld (a Def file, a Python script) and Project Zomboid's PhobosLib (Lua).
 
 ## Outputs
 
@@ -119,7 +123,9 @@ The answers (`data`):
   signature (`Boat.Float(int)`); `id` the documentation id (`M:NamesFixture.Core.Boat.Float(System.Int32)`); `here` true where
   the name is its own declaration; `declared` either `{file, line, end}` in this repository or `{assembly}`. `snippets` holds
   each of this repository's declarations the file names (not parameters or locals) by `file:line`: `{file, start, end, lines,
-  cut}`, at most 60 lines, its comment above it included.
+  cut}`, at most 60 lines, its comment above it included. Read by name (a Lua, Python or XML file), the answer has `exact: false`
+  and each name also `node` (the first thing's connections id), `exact: false`, `candidates` (up to 8 things, `{id, name, kind,
+  file, line, end}`) and `more` (how many beyond them); `declared` is the first candidate's place.
 
 ## Effects
 
