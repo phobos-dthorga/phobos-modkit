@@ -44,6 +44,17 @@ The lines `setup` gives, for a program that keeps a list of servers:
 
 and for Claude Code, one command: `claude mcp add-json --scope user dthorga-reports '<the same server, with "type": "stdio">'`.
 
+**For a program that asks a model itself** (1.110.0; D'thorga Companion's help on pages, `docs/ai.md` there, slice 3b), the same
+tools behind the same checks, one process for each call and no server to start:
+
+```text
+python -m phobos_modkit mcp tools --json                                  data.tools: the three, as handed to a model
+python -m phobos_modkit mcp call --tool ask_report --arguments '{...}' --json   data.text and data.isError
+```
+
+`call` takes the model's arguments as one JSON object of at most 8,000 characters, and answers exactly as `serve` would: a
+refusal is `isError` with the reason in words, never a failed command.
+
 ## The tools
 
 | Tool | Takes | Gives |
@@ -77,12 +88,18 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | --- | --- | --- |
 | `serve` | Answers an AI program on standard input and output; the program starts it itself. Started by an AI program, never by a person's press; runs only reports that read (and read public pages with `--online`). | reads only |
 | `setup` | What to paste into an AI program's settings so it can start the server. | reads only |
+| `tools` | The server's three tools as a program hands them to a model, with the games list's repositories. For D'thorga Companion, which hands them to the model it asks. | reads only |
+| `call` | One call of one of the server's tools, as a model asked it, without starting the server. Runs only reports that read, as serve does; the answer is redacted (1.110.0). | reads only |
 
 | Option | Reports | What it does | Default |
 | --- | --- | --- | --- |
 | `--online` | `serve` | also offer the reports that read public pages |  |
 | `--name VALUE` | `setup` | the name the program lists the server by (default: dthorga-reports) | `dthorga-reports` |
 | `--online` | `setup` | have the server offer the reports that read public pages too |  |
-| `--json` | `setup` | print JSON instead of Markdown |  |
+| `--json` | `setup`, `tools`, `call` | print JSON instead of Markdown |  |
 | `--no-redact` | `setup` | show the home folder instead of ~ |  |
+| `--online` | `tools` | as the server would offer them with `--online` |  |
+| `--tool VALUE` | `call` | the tool the model asked for. Required. One of `ask_report`, `describe_report`, `find_reports`. |  |
+| `--arguments VALUE` | `call` | the model's arguments, as one JSON object (default: {}) | `{}` |
+| `--online` | `call` | also allow the reports that read public pages |  |
 <!-- end generated -->

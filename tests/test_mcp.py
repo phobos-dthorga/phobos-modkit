@@ -264,6 +264,40 @@ class McpTests(unittest.TestCase):
         out = io.StringIO()
         self.assertEqual(mcp.main(["setup", "--name", "a b"], out=out), mcp.EXIT_USAGE)
 
+    # One call at a time, for a program that asks a model itself (1.110.0).
+
+    def test_a_call_answers_as_the_server_would(self):
+        text, failed = mcp.call_tool(self.server, "ask_report", {"command": "sample-save", "report": "find",
+                                                                 "arguments": {"thing_id": "Pawn42"}})
+        self.assertFalse(failed)
+        self.assertIn("~\\Saves", text)
+        self.assertEqual(self.runner.calls[0][0], ["sample-save", "find", "Pawn42"])
+
+    def test_a_call_keeps_every_refusal(self):
+        for tool, arguments in (("ask_report", {"command": "sample-save", "report": "snapshot"}),
+                                ("ask_report", {"command": "sample-save", "report": "pawns", "arguments": {"save": "../x"}}),
+                                ("delete_everything", {}),
+                                ("ask_report", ["not", "an", "object"])):
+            text, failed = mcp.call_tool(self.server, tool, arguments)
+            self.assertTrue(failed, (tool, arguments))
+            self.assertTrue(text)
+        self.assertEqual(self.runner.calls, [])
+
+    def test_the_call_command_takes_json_and_says_what_was_wrong(self):
+        for arguments, words in (("not json", "not JSON"), ("x" * (mcp.MAX_ARGUMENTS + 1), "longer than")):
+            out = io.StringIO()
+            self.assertEqual(mcp.main(["call", "--tool", "find_reports", "--arguments", arguments, "--json"], out=out),
+                             mcp.EXIT_OK)
+            data = json.loads(out.getvalue())["data"]
+            self.assertTrue(data["isError"])
+            self.assertIn(words, data["text"])
+
+    def test_the_tools_command_lists_the_three(self):
+        out = io.StringIO()
+        self.assertEqual(mcp.main(["tools", "--json"], out=out), mcp.EXIT_OK)
+        tools = json.loads(out.getvalue())["data"]["tools"]
+        self.assertEqual([t["name"] for t in tools], list(mcp.TOOLS))
+
     # The games list, shared with the daily safe copies.
 
     def test_games_list_entries_name_their_game(self):

@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.110.0] - 2026-11-23
+
+### Added
+
+- **`mcp tools` and `mcp call`: the MCP server's three tools for a program that asks a model itself** (the owner, 23 Nov 2026:
+  "go ahead with the kit's tools for the model", for D'thorga Companion's help on pages). `tools` lists them as they are handed
+  to a model, with the games list's repositories; `call` answers one call a model asked for, exactly as `serve` would, with
+  every check it makes: only reports that read, repositories by name, no paths, redacted. One process for each call, so the
+  program needs no server running. A refusal is an answer marked as an error, in words. See [mcp](docs/mcp.md).
+
 ## [1.109.0] - 2026-11-23
 
 ### Added

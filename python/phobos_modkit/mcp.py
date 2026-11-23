@@ -2,6 +2,11 @@
 
     mcp serve [--online]                   an AI program starts this itself, and speaks to it on standard input and output
     mcp setup [--name NAME] [--online]     what to paste into an AI program's settings so it can start `serve`
+    mcp tools [--online]                   the three tools as a program hands them to a model (1.110.0)
+    mcp call --tool T --arguments JSON     one tool call a model asked for, answered as `serve` would (1.110.0)
+
+`tools` and `call` let a program that asks a model itself (D'thorga Companion's help on pages) offer the same tools, behind the
+same checks, without starting the server: one process for each call, like every other report.
 
 The server offers three tools, not one for each report: find_reports, describe_report and ask_report. **ask_report runs only a
 report whose manifest effect is `reads`** (and `reads-online` when started with --online), checked against the manifest at every
@@ -52,6 +57,8 @@ MAX_TEXT = 60_000                        # characters of a report's answer given
 MAX_ERROR = 3_000
 TIMEOUT = 300                            # seconds before a report is stopped (agent default)
 FORMS = ("markdown", "json")
+TOOLS = ("find_reports", "describe_report", "ask_report")
+MAX_ARGUMENTS = 8_000                    # characters of a model's arguments `mcp call` takes
 # A text value is refused when it could name a file: a slash, a drive, the home folder or a step up.
 PATH_LIKE = re.compile(r"[\\/]|^[A-Za-z]:|^~|^\.|\.\.")
 
@@ -472,7 +479,48 @@ def _parser():
     u.add_argument("--online", action="store_true", help="have the server offer the reports that read public pages too")
     u.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
     u.add_argument("--no-redact", action="store_true", help="show the home folder instead of ~")
+    t = sub.add_parser("tools", help="the server's three tools as a program hands them to a model, with the games list's "
+                                     "repositories")
+    t.add_argument("--online", action="store_true", help="as the server would offer them with --online")
+    c = sub.add_parser("call", help="one call of one of the server's tools, as a model asked it, without starting the server")
+    c.add_argument("--tool", required=True, choices=TOOLS, help="the tool the model asked for")
+    c.add_argument("--arguments", default="{}", help="the model's arguments, as one JSON object (default: {})")
+    c.add_argument("--online", action="store_true", help="also allow the reports that read public pages")
+    for parser in (t, c):
+        parser.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
     return p
+
+
+def call_tool(server, tool, arguments):
+    """One tool call, as the server would answer it: (its text, whether it is an error). A malformed call is an error in words."""
+    if tool not in TOOLS:
+        return f"there is no tool {tool!r}", True
+    if not isinstance(arguments, dict):
+        return "arguments must be one JSON object", True
+    result = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                            "params": {"name": tool, "arguments": arguments}})
+    if "error" in result:
+        return result["error"]["message"], True
+    return "\n".join(c.get("text", "") for c in result["result"]["content"]), bool(result["result"]["isError"])
+
+
+def _call(args, out):
+    """`mcp call`: the program that started it (D'thorga Companion) hands the model's call over whole and reads the answer."""
+    if len(args.arguments) > MAX_ARGUMENTS:
+        text, failed = f"the arguments are longer than {MAX_ARGUMENTS} characters", True
+    else:
+        try:
+            arguments = json.loads(args.arguments)
+        except ValueError:
+            text, failed = "the arguments are not JSON", True
+        else:
+            text, failed = call_tool(Server(online=args.online), args.tool, arguments)
+    report = Report(f"{args.tool}: " + ("refused or failed" if failed else "answered"))
+    report.lines.extend(text.splitlines() or [""])
+    data = {"text": text, "isError": failed}
+    redact = home_redactor()
+    out.write((envelope_text("mcp", report, redact, data) if args.json else render_markdown(report, redact)) + "\n")
+    return EXIT_OK
 
 
 def main(argv=None, out=None, instream=None, outstream=None):
@@ -484,6 +532,15 @@ def main(argv=None, out=None, instream=None, outstream=None):
         serve(instream or sys.stdin.buffer, outstream or sys.stdout.buffer, Server(online=args.online))
         return EXIT_OK
     out = out or sys.stdout
+    if args.report == "call":
+        return _call(args, out)
+    if args.report == "tools":
+        tools = Server(online=args.online).tools()
+        report = Report(f"The server's tools: {len(tools)}")
+        report.section("Tools", Bullets([f"{tool['name']}: {tool['description']}" for tool in tools]))
+        out.write((envelope_text("mcp", report, home_redactor(), {"tools": tools}) if args.json
+                   else render_markdown(report, home_redactor())) + "\n")
+        return EXIT_OK
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", args.name):
         out.write("A server's name is letters, digits, - and _ only.\n")
         return EXIT_USAGE
@@ -498,7 +555,9 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS,
             "reports": {"serve": {"effect": READS, "when": None,
                                   "note": "started by an AI program, never by a person's press; runs only reports that read "
                                           "(and read public pages with --online)"},
-                        "setup": {"question": "How do I let an AI program ask the kit's reports?"}}}
+                        "setup": {"question": "How do I let an AI program ask the kit's reports?"},
+                        "tools": {"note": "for D'thorga Companion, which hands them to the model it asks"},
+                        "call": {"note": "runs only reports that read, as serve does; the answer is redacted (1.110.0)"}}}
 
 
 if __name__ == "__main__":
