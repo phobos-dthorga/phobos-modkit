@@ -3,8 +3,8 @@
 **Status (19 Nov 2026):** created at the owner's request, with its first rules (commits and changelog entries), and a second file
 the same day (builds: the same code builds to the same bytes). phobos-rimworld and D'thorga Companion read it through their pinned
 copy of this repository. On 20 Nov 2026 a third file followed (designs: the four questions a new behaviour answers), its first
-three questions moved here from phobos-rimworld with the fourth. The rules waiting to move here are listed below; none of those
-has been moved yet.
+three questions moved here from phobos-rimworld with the fourth. On 23 Nov 2026 the twelve rules that had been waiting moved here
+on the owner's word ("Move all 12 now"): ten into `every-session.md`, and two files of their own, `brand.md` and `changelogs.md`.
 
 ## Read this first (gotchas)
 
@@ -21,8 +21,10 @@ has been moved yet.
 
 | File | Read | Covers |
 | --- | --- | --- |
-| [every-session.md](every-session.md) | At the start of every session | Every game from the start; commits and changelog entries; claims when sharing the machine with other sessions; which file to read before which work |
+| [every-session.md](every-session.md) | At the start of every session | Working with the owner (slices, testing, mouse and saves, labels, plain writing); git, versions, the gate and what is never committed; every game from the start; commits and changelog entries; claims when sharing the machine with other sessions; which file to read before which work |
 | [builds.md](builds.md) | Before setting up or changing how code is built | The same code builds to the same bytes |
+| [brand.md](brand.md) | Before naming anything players or the public see, or writing a public page | D'thorga the one brand; plain names; older names change on return, display names only; the "dthorga" spelling on public pages |
+| [changelogs.md](changelogs.md) | Before writing a changelog entry | Existing entries never moved; new entries short; a mod's changelog form, what it records, no backticks |
 | [designs.md](designs.md) | Before designing or building a new behaviour | The four questions a new behaviour answers: what it lets, stops and changes, and what outside it notices; and a riskier behaviour's own setting, off by default when its risk is high |
 | [licences.md](licences.md) | Before writing or changing a `LICENSE`, starting a repository, or preparing a mod's first public page | Code MIT, our art and sound CC BY 4.0, our names kept out of both grants, and the paragraphs a `LICENSE` carries |
 | [reports.md](reports.md) | Before drafting a report of another author's fault, and when the owner says one is posted | Find it with the tools and look for an existing report; a plain draft in the owner's private tracker, ready to paste; the owner posts; check how it shows, then mark it posted everywhere |
@@ -62,6 +64,12 @@ it to the repository's gate (`config/gate.json`), so a repository cannot stop re
 4. Move each repository's pin when it is next worked on, or at once when the owner wants the rule in force everywhere now. A
    repository whose own `AGENTS.md` repeated the rule drops its copy in the same commit, so a rule is never stated twice.
 
+## Why the commit rules are as they are
+
+Moved from `every-session.md` on 23 Nov 2026, which keeps only the rules. What this costs, said plainly: where a repository checks every commit (a gate, a commit guard), each separate commit needs its own
+passing run. That is why the rule is "finish one before starting the next", where the run is one the change needed anyway, and not
+"one commit for every entry", which the owner set aside.
+
 ## Where a rule belongs
 
 | The rule is about | It lives in |
@@ -71,26 +79,27 @@ it to the repository's gate (`config/gate.json`), so a repository cannot stop re
 | One game's engine, mods or tools | That repository's `AGENTS.md`, or a file beside the work in it |
 | What one version delivered | That repository's changelog, never a rules file |
 
-## Waiting to move here
+## Moved here on 23 Nov 2026
 
-Found on 19 Nov 2026 by comparing the `AGENTS.md` of eight repositories: each of these is stated, in slightly different words, in
-several of them. **None has been moved**: the wording of a rule is the owner's, and one wording has to be chosen from several.
-Each moves on the owner's word, into the file named, and the repositories drop their copies as their pins move.
+Found on 19 Nov 2026 by comparing the `AGENTS.md` of eight repositories: each of these was stated, in slightly different words, in
+several of them. **All twelve moved on the owner's word of 23 Nov 2026** ("Move all 12 now", in the docs rewrite), each in one
+wording the moving agent chose from theirs, for the owner to revise. Each repository drops its copies as its pin moves: phobos-rimworld
+and D'thorga Companion the same day; the others when next worked on.
 
-| Rule | Stated in | Would go in |
+| Rule | Was stated in | Now in |
 | --- | --- | --- |
-| Never force-push or rewrite history; commit and push to `main` | modkit, companion, rimworld, ostranauts, kenshi, scope, log | `every-session.md` |
-| Version numbers: a fix raises the last number, new functionality the middle, a rework the first | modkit, companion, rimworld, ostranauts, kenshi, log | `every-session.md` |
-| Never control the owner's mouse or keyboard; never edit or delete saves | modkit, companion, rimworld, ostranauts, kenshi, scope | `every-session.md` |
-| Never commit credentials, personal paths, saves, game files or other authors' files | modkit, companion, rimworld, ostranauts, kenshi, scope | `every-session.md` |
-| Never invent hour estimates; working slices over speculative frameworks | modkit, companion, rimworld, ostranauts, kenshi | `every-session.md` |
-| Owner choices, agent defaults and agent choices are labelled as such | modkit, companion, rimworld, ostranauts, kenshi | `every-session.md` |
-| Never use Figma; diagrams are Mermaid | modkit, companion, rimworld, ostranauts, kenshi, log | `every-session.md` |
-| Run the gate before a commit and chain the commit on its exit code | modkit, companion, rimworld, kenshi, log | `every-session.md` |
-| Write plainly: answer first, short sentences, bold for must-dos, tables for comparisons | modkit, companion, rimworld, kenshi, log | `every-session.md` |
-| Nothing counts as tested until the owner says so | companion, rimworld, kenshi | `every-session.md` |
-| D'thorga is the one brand for everything new; plain names; the "dthorga" spelling on public pages | companion, rimworld (and in part modkit, kenshi, scope) | `brand.md` |
-| The changelog's form: Unreleased, then dated Draft and Released entries, by section | rimworld, ostranauts, kenshi (and read by this kit's tools) | `changelogs.md` |
+| Never force-push or rewrite history; commit and push to `main` | modkit, companion, rimworld, ostranauts, kenshi, scope, log | [every-session.md](every-session.md) |
+| Version numbers: a fix raises the last number, new functionality the middle, a rework the first | modkit, companion, rimworld, ostranauts, kenshi, log | [every-session.md](every-session.md) |
+| Never control the owner's mouse or keyboard; never edit or delete saves | modkit, companion, rimworld, ostranauts, kenshi, scope | [every-session.md](every-session.md) |
+| Never commit credentials, personal paths, saves, game files or other authors' files | modkit, companion, rimworld, ostranauts, kenshi, scope | [every-session.md](every-session.md) |
+| Never invent hour estimates; working slices over speculative frameworks | modkit, companion, rimworld, ostranauts, kenshi | [every-session.md](every-session.md) |
+| Owner choices, agent defaults and agent choices are labelled as such | modkit, companion, rimworld, ostranauts, kenshi | [every-session.md](every-session.md) |
+| Never use Figma; diagrams are Mermaid | modkit, companion, rimworld, ostranauts, kenshi, log | [every-session.md](every-session.md) |
+| Run the gate before a commit and chain the commit on its exit code | modkit, companion, rimworld, kenshi, log | [every-session.md](every-session.md) |
+| Write plainly: answer first, short sentences, bold for must-dos, tables for comparisons | modkit, companion, rimworld, kenshi, log | [every-session.md](every-session.md) |
+| Nothing counts as tested until the owner says so | companion, rimworld, kenshi | [every-session.md](every-session.md) |
+| D'thorga is the one brand for everything new; plain names; the "dthorga" spelling on public pages | companion, rimworld (and in part modkit, kenshi, scope) | [brand.md](brand.md) |
+| The changelog's form: Unreleased, then dated Draft and Released entries, by section | rimworld, ostranauts, kenshi (and read by this kit's tools) | [changelogs.md](changelogs.md) |
 
 ## Limits
 

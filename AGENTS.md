@@ -12,7 +12,7 @@ session**; `CLAUDE.md` imports it. The rules below are this repository's own, an
 
 - **A rule that holds across games goes in `rules/`, never in one repository's `AGENTS.md`**: `rules/README.md` says which file,
   how a rule is changed (the owner decides; a new or changed rule raises the middle version number) and how a repository takes
-  the rules up. Its "Waiting to move here" table lists the rules still repeated in several repositories.
+  the rules up. Its "Moved here on 23 Nov 2026" table lists the twelve rules that had been repeated in every repository.
 - **A rule moves here only on the owner's word**, in one wording they have chosen, and each repository drops its own copy when
   its pin next moves, so a rule is never stated twice.
 - `python -m phobos_modkit rules list` prints the files; `rules check --root REPO` says whether a repository reads them, for
@@ -20,14 +20,8 @@ session**; `CLAUDE.md` imports it. The rules below are this repository's own, an
 
 ## Working with the owner
 
-- Author: Phobos A. D'thorga (phobosgekko).
-- Practical working slices over speculative frameworks. Explain what works, what was checked and what
-  remains uncertain. Never invent hour estimates.
-- A unit test or a run on a synthetic fixture is never a game test. Tools read what games wrote; they do
-  not show that a mod works in play.
-- Do not control the owner's mouse or keyboard. Never edit, replace or delete the owner's saves; read-only
-  copies for diagnosis are fine and are deleted afterwards.
-- Owner choices, agent defaults and agent choices are labelled as such in design records.
+- Author: Phobos A. D'thorga (phobosgekko). The shared rules cover how to work with the owner (`rules/every-session.md`).
+- Tools read what games wrote; they never show that a mod works in play.
 
 ## What belongs here: three layers
 
@@ -131,10 +125,9 @@ session**; `CLAUDE.md` imports it. The rules below are this repository's own, an
 - Fixtures are written by hand from format knowledge. Never commit a real save, log, assembly or another
   author's file, or an excerpt of one. Say in `fixtures/README.md` what each fixture follows and how faithful it is.
 - Network and clock are passed in, so tests never reach Steam.
-- **Before every commit, run every check, and commit only when all pass**, gated on their exit codes in the same
-  command (`&&` or an `if`), never on reading the output. **`cd python && python -m phobos_modkit gate --root ..`
-  runs them all** from `config/gate.json` and prints only what failed; the list below is what it runs, and what CI repeats. A commit chained after a step that may have failed is how
-  the v0.2.2 tag came to carry a broken test (7 November 2026). The checks, which CI repeats on Windows and Linux:
+- **This repository's gate is `cd python && python -m phobos_modkit gate --root ..`** (the shared rule: chain the commit on
+  it). It runs every check from `config/gate.json` and prints only what failed. A commit chained after a step that may have failed
+  is how the v0.2.2 tag came to carry a broken test (7 November 2026). The checks, which CI repeats on Windows and Linux:
 
   ```text
   cargo fmt --all -- --check
@@ -163,16 +156,8 @@ session**; `CLAUDE.md` imports it. The rules below are this repository's own, an
 - **The commit guard** (owner's go-ahead, 18 November 2026): this repository's `.githooks/pre-commit` runs `gate --verify-staged`,
   which refuses a commit whose staged files no full passing gate run saw exactly so. **After cloning, run
   `git config core.hooksPath .githooks`.** Never pass `--no-verify`; run the gate and chain the commit on it.
-- Commit and push directly to `main`; no pull requests unless the owner asks. Never force-push or rewrite
-  history. Several agent sessions may share a tree: commit explicit paths and leave others' work alone.
-- Versions: a fix raises the last number, new functionality the middle, an incompatible change the first.
-  Every change updates `CHANGELOG.md` in the same commit.
 - **A version bump changes three files together**: `python/phobos_modkit/__init__.py`, the workspace version in
   `Cargo.toml`, and `Cargo.lock` through `cargo update --offline --workspace`. A lock file left behind makes every
   `--locked` build refuse to start, as v0.2.1's did; `tests/test_versions.py` checks the three agree. Tag each
   release `vX.Y.Z` and push the tag; never move a pushed tag, release a fixed version instead.
-- Never commit credentials, personal paths, game files, saves, logs, assemblies, decompiled code or other
-  authors' mod files.
-- Write plainly: answer first, short sentences, **bold** for must-dos, tables for comparisons. Diagrams are
-  Mermaid in the Markdown. Never use Figma.
 - Name the organisation or author behind a claim, with a link. Never invent a citation.

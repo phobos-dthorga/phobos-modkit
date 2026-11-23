@@ -4,6 +4,20 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.105.0] - 2026-11-23
+
+### Changed
+
+- **The twelve rules every repository repeated now live here** (the owner's word of 23 Nov 2026 in the docs rewrite, D4: "Move all
+  12 now"; each wording chosen by the moving agent from the repositories' own, for the owner to revise). Ten join
+  `rules/every-session.md` (working slices and no hour estimates; nothing tested until the owner says so; never the mouse,
+  keyboard or saves; choices labelled; writing plainly with Mermaid, never Figma; commit to `main`, never force-push; version
+  numbers; the gate before every commit; what is never committed). Two get files of their own, read before the work:
+  `rules/brand.md` (D'thorga, plain names, the "dthorga" spelling) and `rules/changelogs.md` (a mod's changelog form, and the
+  owner's choice D2 of the same day: existing entries are never moved, new entries are short). This repository's `AGENTS.md`
+  drops its copies, and `every-session.md`'s reasoning about commit costs moves to `rules/README.md`, so the file read every
+  session holds rules only. **Consumers drop their own copies when their pin moves to this version.**
+
 ## [1.104.0] - 2026-11-23
 
 ### Added

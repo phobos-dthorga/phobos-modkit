@@ -16,10 +16,38 @@ Read the file named before doing the work, even when no file of that kind is ope
 | Before | Read |
 | --- | --- |
 | Setting up or changing how a repository builds code, or adding a project or a build script | [builds.md](builds.md) |
+| Naming anything players or the public see, or writing a public page (a README's opening, a Workshop description) | [brand.md](brand.md) |
+| Writing a changelog entry | [changelogs.md](changelogs.md) |
 | Designing or building a new behaviour for a game or mod | [designs.md](designs.md) |
 | Writing or changing a `LICENSE`, starting a repository, or preparing a mod's first public page | [licences.md](licences.md) |
 | Drafting a report of another author's fault, or hearing from the owner that one is posted | [reports.md](reports.md) |
 | Making something that cannot be made again (a training, a model, notes or masters kept outside git), or starting on a new game | [safe-copies.md](safe-copies.md) |
+
+## Working with the owner
+
+Moved here from every repository's `AGENTS.md` on the owner's word (23 Nov 2026: "Move all 12 now"); the wording is chosen from
+theirs by the agent that moved them, for the owner to revise.
+
+- **Practical working slices over speculative frameworks, and never invent hour estimates.** Explain what works, what was
+  checked and what remains uncertain.
+- **Nothing counts as tested until the owner says so.** A build, a unit test, a run on a fixture or a browser audit is never a
+  test in the game or on screen; write "not yet tested in game" (or "on screen") where it matters.
+- **Never control the owner's mouse or keyboard**; give instructions for interactive steps. **Never edit, replace or delete the
+  owner's saves**; read-only copies for diagnosis are fine, and are deleted afterwards.
+- **Owner choices, agent defaults and agent choices are labelled as such** in design records, so the owner can revise them.
+- **Write plainly**: answer first, short sentences, **bold** for must-dos, tables for comparisons. Diagrams are Mermaid in the
+  Markdown; never use Figma.
+
+## Git, versions and checks
+
+- **Commit and push directly to `main`**, with no pull requests unless the owner asks. **Never force-push or rewrite history.**
+  Several sessions may share a tree: commit explicit paths, and leave others' uncommitted work alone.
+- **Versions**: a fix raises the last number, new functionality the middle, an incompatible change or a total rework the first.
+  A release mixing a fix and a feature takes the middle.
+- **Run the repository's gate before every commit and chain the commit on its exit code** (`gate && git commit ...`), never on
+  reading its output, and never pass `--no-verify`. Each repository's `AGENTS.md` names its gate.
+- **Never commit** credentials, personal paths, saves, logs, game files or assemblies, decompiled code, or other authors' mod
+  files.
 
 ## Every game from the start
 
@@ -55,10 +83,6 @@ Read the file named before doing the work, even when no file of that kind is ope
   test list; the first of them carries the version's own lines.
 - **Keep an entry's opening words when rewording it**, its bold opening where it has one: the tools match an entry by its opening,
   so a changed opening reads as one entry lost and another gained.
-
-What this costs, said plainly: where a repository checks every commit (a gate, a commit guard), each separate commit needs its own
-passing run. That is why the rule is "finish one before starting the next", where the run is one the change needed anyway, and not
-"one commit for every entry", which the owner set aside.
 
 ## Sharing the machine with other sessions
 
