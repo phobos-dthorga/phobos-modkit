@@ -4,6 +4,23 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.118.0] - 2026-11-25
+
+### Added
+
+- **`programs status` says how a missing program is fetched** (the owner, 25 Nov 2026, for D'thorga Companion's setup check:
+  "Show command, run on press"). Each row now carries the page to get it from (`url`), the command that fetches it on this
+  system where one is known (`fetch`: Windows' winget for git, .NET 10 and Steam, `dotnet tool install` for ilspycmd), whether
+  the program that command starts is here (`fetchHere`), what must be here first (`after`) and whether a page most people open
+  needs it (`everyday`). The Markdown report lists the commands for what is missing. **The kit runs none of them.** winget's
+  names were read from winget; no fetch command has been run.
+
+### Changed
+
+- **The .NET 10 SDK is a row of its own**, and the old ".NET 10" row is the runtime: the runtime alone runs the kit's readers,
+  and only watching memory, fetching ilspycmd and building need the SDK. A PC with the runtime and no SDK read as "here" before,
+  with "no SDK" in small words.
+
 ## [1.117.0] - 2026-11-24
 
 ### Added

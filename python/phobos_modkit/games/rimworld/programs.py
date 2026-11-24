@@ -13,5 +13,6 @@ def _todds(environ):
 
 PROGRAMS = [
     Program("todds", "RimSort's texture encoder (todds)", "Encoding mods' textures, on the Mods page",
-            "Comes with RimSort, https://github.com/RimSort/RimSort", _todds),
+            "Comes with RimSort, https://github.com/RimSort/RimSort", _todds,
+            url="https://github.com/RimSort/RimSort"),
 ]

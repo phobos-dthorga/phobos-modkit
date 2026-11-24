@@ -9,6 +9,11 @@ where settings name them, and runs none of them. A game's own programs come from
 copies them into one folder, for an installer to carry beside the kit (the release audit's A4): a PC that installs them needs neither Rust
 nor the .NET SDK to read a save, and only the .NET runtime to read assemblies. The kit looks in that folder before building
 anything (`native.bundled_dir`).
+
+Since 1.118.0 each row also says how a missing program is fetched (for D'thorga Companion's setup check; the owner, 25 Nov 2026):
+`url`, the page to get it from by hand; `fetch`, a command that fetches it on this system, where one is known (Windows' winget,
+or `dotnet tool install`), with `fetchHere`, whether the program that command starts is on the PATH; `after`, the programs that
+must be here first; and `everyday`, whether a page most people open needs it. The kit still only looks: it runs no fetch command.
 """
 from __future__ import annotations
 
@@ -33,6 +38,8 @@ EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 STAMP = "bundle.json"
 BUNDLE_FORMAT = 1
 DOTNET_MAJOR = "10."
+# The only programs a fetch command may start (1.118.0); a test holds every command to it, and D'thorga Companion checks again.
+FETCHERS = ("winget", "dotnet")
 
 
 @dataclass
@@ -50,6 +57,24 @@ class Program:
     needed_by: str
     get: str
     find: Callable[[dict], Found]
+    # 1.118.0: how a missing one is fetched. `fetch` is {system: command}, the system "windows", "linux", "macos" or "any".
+    url: str | None = None
+    fetch: dict | None = None
+    after: tuple = ()
+    everyday: bool = False
+
+
+def system(platform=None):
+    """This system as `fetch` names it: windows, macos or linux."""
+    platform = sys.platform if platform is None else platform
+    return "windows" if platform.startswith("win") else "macos" if platform == "darwin" else "linux"
+
+
+def winget(package):
+    """The command that fetches a package with Windows' own package manager, with no question asked on a console nobody sees:
+    the exact name, from winget's own source, its agreements accepted (the person was shown the command and pressed)."""
+    return {"windows": ["winget", "install", "--id", package, "--exact", "--source", "winget",
+                        "--accept-source-agreements", "--accept-package-agreements", "--disable-interactivity"]}
 
 
 def _on_path(name, which=shutil.which):
@@ -104,12 +129,23 @@ def _dotnet(environ):
     found = _on_path("dotnet")
     if not found:
         return Found(False, None, "not on the PATH")
-    runtimes, sdks = dotnet_versions(found)
+    runtimes, _ = dotnet_versions(found)
     ten = [v for v in runtimes if v.startswith(DOTNET_MAJOR)]
-    sdk_ten = [v for v in sdks if v.startswith(DOTNET_MAJOR)]
     if not ten:
         return Found(False, str(found), f"here, but without the .NET 10 runtime (has {', '.join(runtimes) or 'none'})")
-    return Found(True, str(found), f"runtime {ten[-1]}" + (f", SDK {sdk_ten[-1]}" if sdk_ten else ", no SDK"))
+    return Found(True, str(found), f"runtime {ten[-1]}")
+
+
+def _dotnet_sdk(environ):
+    """The SDK, a row of its own since 1.118.0: the runtime alone runs the readers, and only some pages need more."""
+    found = _on_path("dotnet")
+    if not found:
+        return Found(False, None, "not on the PATH")
+    _, sdks = dotnet_versions(found)
+    ten = [v for v in sdks if v.startswith(DOTNET_MAJOR)]
+    if not ten:
+        return Found(False, str(found), f"here, but without the .NET 10 SDK (has {', '.join(sdks) or 'none'})")
+    return Found(True, str(found), f"SDK {ten[-1]}")
 
 
 def _diagnostics(environ):
@@ -140,7 +176,8 @@ def _steam(environ):
 
 CORE = [
     Program("git", "git", "Every repository's history: Home, Changes, the Timeline, the code viewer, What changed",
-            "Git for Windows, https://git-scm.com", _git),
+            "Git for Windows, https://git-scm.com", _git,
+            url="https://git-scm.com/downloads", fetch=winget("Git.Git"), everyday=True),
     Program("xml-index", "The kit's XML indexer", "Reading large XML files fast, such as a game's saves",
             "Comes with D'thorga Companion's installer; or Rust from https://rustup.rs, and the kit builds it", _xml_index),
     Program("assembly-reader", "The kit's assembly reader",
@@ -155,17 +192,26 @@ CORE = [
             "Following a name in C# code to where it is declared: what each name is, read from source with Roslyn",
             "Comes with D'thorga Companion's installer and needs the .NET 10 runtime; or the .NET 10 SDK, and the kit builds it",
             _dotnet_tool(code_names.TOOL)),
-    Program("dotnet", ".NET 10",
-            "Running the assembly, heap and names readers; building them and the diagnostics tools needs the SDK",
-            "Microsoft, https://dotnet.microsoft.com/download (the runtime, or the SDK to build)", _dotnet),
+    Program("dotnet", ".NET 10 runtime",
+            "Running the assembly, heap and names readers: the Code map's C# links, Harmony patches, names in C# code",
+            "Microsoft, https://dotnet.microsoft.com/download (the runtime; the SDK brings it too)", _dotnet,
+            url="https://dotnet.microsoft.com/download/dotnet/10.0", fetch=winget("Microsoft.DotNet.Runtime.10")),
+    Program("dotnet-sdk", ".NET 10 SDK",
+            "Watching a running game's memory (the kit installs Microsoft's diagnostics tools with it), fetching ilspycmd, "
+            "and building the kit's own tools",
+            "Microsoft, https://dotnet.microsoft.com/download (the SDK, which brings the runtime too)", _dotnet_sdk,
+            url="https://dotnet.microsoft.com/download/dotnet/10.0", fetch=winget("Microsoft.DotNet.SDK.10")),
     Program("dotnet-diagnostics", "Microsoft's .NET diagnostics tools",
             "Watching a running game's memory, and where it spends its time",
-            "The kit installs them itself, with the .NET 10 SDK", _diagnostics),
+            "The kit installs them itself, with the .NET 10 SDK", _diagnostics, after=("dotnet-sdk",)),
     Program("ilspycmd", "ILSpy's command line (ilspycmd)",
             "Reading another author's code from a .dll, and comparing two builds",
-            "With the .NET SDK: dotnet tool install --global ilspycmd", _ilspycmd),
+            "With the .NET SDK: dotnet tool install --global ilspycmd", _ilspycmd,
+            url="https://github.com/icsharpcode/ILSpy", fetch={"any": ["dotnet", "tool", "install", "--global", "ilspycmd"]},
+            after=("dotnet-sdk",)),
     Program("steam", "Steam", "Game files, adding a game from Steam, and the Workshop's reports",
-            "Valve, https://store.steampowered.com/about", _steam),
+            "Valve, https://store.steampowered.com/about", _steam,
+            url="https://store.steampowered.com/about", fetch=winget("Valve.Steam"), everyday=True),
 ]
 
 
@@ -184,19 +230,32 @@ def game_programs():
     return found
 
 
-def status(environ=None):
-    """Every program, core first, then each game's: what it is, what needs it, whether it is here and where to get it."""
+def status(environ=None, platform=None, which=shutil.which):
+    """Every program, core first, then each game's: what it is, what needs it, whether it is here, where to get it and, where a
+    command is known for this system, how it is fetched."""
     environ = os.environ if environ is None else environ
+    here = system(platform)
     rows = []
     for game, program in [(None, p) for p in CORE] + game_programs():
         try:
             found = program.find(environ)
         except Exception as problem:  # noqa: BLE001 - a lookup that fails is reported as such, never a crash of the report
             found = Found(False, None, f"could not be looked for: {problem}")
+        fetch = (program.fetch or {}).get(here) or (program.fetch or {}).get("any")
         rows.append({"key": program.key, "name": program.name, "game": game, "neededBy": program.needed_by,
-                     "get": program.get, "here": found.here, "where": found.where, "how": found.how})
-    return {"python": sys.version.split()[0], "programs": rows,
+                     "get": program.get, "here": found.here, "where": found.where, "how": found.how,
+                     "url": program.url, "fetch": list(fetch) if fetch else None,
+                     "fetchHere": bool(fetch and which(fetch[0])), "after": list(program.after),
+                     "everyday": program.everyday})
+    return {"python": sys.version.split()[0], "system": here, "programs": rows,
             "missing": sum(1 for r in rows if not r["here"])}
+
+
+def fetch_rows(found):
+    """The missing programs a command can fetch on this system: [name, the command as typed, what must be here first]."""
+    names = {p["key"]: p["name"] for p in found["programs"]}
+    return [[p["name"], " ".join(p["fetch"]), ", ".join(names.get(key, key) for key in p["after"])]
+            for p in found["programs"] if not p["here"] and p["fetch"]]
 
 
 def bundle(out, environ=None, run=subprocess.run, which=shutil.which):
@@ -265,6 +324,9 @@ def main(argv=None, out=None, environ=None):
     rows = [[p["name"] + (f" ({p['game']})" if p["game"] else ""), "here" if p["here"] else "not here", p["how"],
              p["neededBy"], p["get"]] for p in found["programs"]]
     report.section("Programs", Table(["Program", "Here?", "How", "Needed by", "Where to get it"], rows))
+    fetching = fetch_rows(found)
+    if fetching:
+        report.section("Commands that fetch what is missing", Table(["Program", "Command", "Needs first"], fetching))
     out.write((envelope_text("programs", report, redact, found) if args.json else render_markdown(report, redact)) + "\n")
     return EXIT_OK
 

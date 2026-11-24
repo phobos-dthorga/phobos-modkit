@@ -8,6 +8,10 @@ compiled tools built) and B7 (each tool says what it needs).
 - **`programs status` only looks.** It finds each program on the PATH, in the kit's own folders or where a setting names it, and
   runs none of them. ".NET 10" is read from the folders beside `dotnet`, never by running it.
 - **Each program is needed only by what it names.** A PC without Steam, ilspycmd or .NET still runs every other tool.
+- **It says how a missing program is fetched, and fetches nothing** (1.118.0). Where a command is known for this system, the
+  row carries it: Windows' winget for git, .NET 10 and Steam; `dotnet tool install` for ilspycmd on every system. A program
+  that shows the row to a person (D'thorga Companion's setup check) runs it only on their press. Every command starts one of
+  `programs.FETCHERS`, which a test holds.
 - **`programs bundle` builds**: with Rust's cargo and the .NET 10 SDK, on the PC that makes an installer. It is the one way the
   kit's compiled tools reach another PC ready-built (D'thorga Companion's installer runs it).
 - **A ready-built tool is found first**, before any build: in `PHOBOS_MODKIT_TOOLS`, else `tools` beside the kit's package folder.
@@ -46,14 +50,28 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | git | Every repository's history | On the PATH |
 | The kit's XML indexer (`xml-index`, Rust) | Reading large XML files fast, such as saves | Ready-built, else the kit's build folder (`native.tool_path`) |
 | The kit's assembly reader (`PhobosModKit.Assemblies`, C#) | Reading .NET code without running it | Ready-built (`assemblies/`), else the kit's build (`assemblies.ensure_reader`) |
-| .NET 10 | Running the assembly reader (the runtime); building it and installing the diagnostics tools (the SDK) | `dotnet` on the PATH; versions from `shared/Microsoft.NETCore.App` and `sdk` beside it |
+| .NET 10 runtime | Running the assembly, heap and names readers | `dotnet` on the PATH; versions from `shared/Microsoft.NETCore.App` beside it |
+| .NET 10 SDK (a row of its own since 1.118.0) | Installing the diagnostics tools, fetching ilspycmd, building the kit's own tools | `dotnet` on the PATH; versions from `sdk` beside it |
 | Microsoft's .NET diagnostics tools | Watching a running game's memory and time | The kit's own install (`dotnet_diagnostics.tool_path`) |
 | ilspycmd | Another author's code from a `.dll`; comparing builds | `ilspycmdPath` or `PHOBOS_MODKIT_ILSPYCMD`, else the PATH |
 | Steam | Game files, adding a game, Workshop reports | Its usual install, or `steamPath` |
 | A game's own | Whatever its adapter says | `games/<game>/programs.py`, a `PROGRAMS` list of `programs.Program` (RimWorld: RimSort's todds) |
 
-`--json` gives `data.python`, `data.missing` and `data.programs`, each with `key`, `name`, `game` (null for the core), `neededBy`,
-`get`, `here`, `where` and `how`. A lookup that fails is reported on its row, as not here, with the reason.
+`--json` gives `data.python`, `data.system` (`windows`, `linux` or `macos`), `data.missing` and `data.programs`, each with `key`,
+`name`, `game` (null for the core), `neededBy`, `get`, `here`, `where` and `how`. A lookup that fails is reported on its row, as
+not here, with the reason.
+
+Since 1.118.0 each program also has:
+
+| Field | What it is |
+| --- | --- |
+| `url` | The page to get it from by hand, or null (the kit's own tools come with an installer) |
+| `fetch` | The command that fetches it on this system, as a list of words, or null where none is known |
+| `fetchHere` | Whether the program that command starts (`winget`, `dotnet`) is on the PATH |
+| `after` | The keys of the programs that must be here first (ilspycmd and the diagnostics tools need the SDK) |
+| `everyday` | True for what a page most people open needs: git and Steam |
+
+When something a command can fetch is missing, the Markdown report adds **Commands that fetch what is missing**.
 
 ### What bundle makes
 
@@ -70,5 +88,9 @@ debug files. About 2.5 MB in all (20 November 2026).
 ## Limits
 
 - Windows is the only platform built and checked so far; the code names programs the same way elsewhere.
+- **A fetch command is known for Windows only**, but for ilspycmd: Linux's package managers differ by distribution, so a row
+  there gives the page alone. A next system needs one more entry in a program's `fetch` (`"linux"` or `"macos"`), no code.
+- winget's package names were read from winget on 25 November 2026 (`Git.Git`, `Microsoft.DotNet.Runtime.10`,
+  `Microsoft.DotNet.SDK.10`, `Valve.Steam`); no fetch command has been run by the kit or its tests.
 - Whether a program works is not checked, only whether it is there: an old ilspycmd, or a Steam that won't start, still reads
   as here.

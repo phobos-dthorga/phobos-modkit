@@ -87,11 +87,64 @@ class StatusTests(unittest.TestCase):
     def test_every_program_says_what_needs_it_and_where_to_get_it(self):
         found = programs.status({})
         keys = [p["key"] for p in found["programs"]]
-        for key in ("git", "xml-index", "assembly-reader", "dotnet", "ilspycmd", "steam"):
+        for key in ("git", "xml-index", "assembly-reader", "dotnet", "dotnet-sdk", "ilspycmd", "steam"):
             self.assertIn(key, keys)
         for program in found["programs"]:
             self.assertTrue(program["neededBy"] and program["get"] and program["how"], program["key"])
         self.assertEqual(found["missing"], sum(1 for p in found["programs"] if not p["here"]))
+
+    def test_a_row_says_how_a_missing_program_is_fetched_on_this_system(self):
+        found = programs.status({}, platform="win32", which=lambda name: "there" if name == "winget" else None)
+        rows = {p["key"]: p for p in found["programs"]}
+        self.assertEqual(found["system"], "windows")
+        self.assertEqual(rows["git"]["fetch"][:4], ["winget", "install", "--id", "Git.Git"])
+        self.assertTrue(rows["git"]["fetchHere"] and rows["git"]["everyday"])
+        self.assertTrue(rows["git"]["url"].startswith("https://"))
+        # ilspycmd is fetched by dotnet, on every system, and only once the SDK is here.
+        self.assertEqual(rows["ilspycmd"]["fetch"][:3], ["dotnet", "tool", "install"])
+        self.assertFalse(rows["ilspycmd"]["fetchHere"])
+        self.assertEqual(rows["ilspycmd"]["after"], ["dotnet-sdk"])
+        # The kit's own tools come with an installer: nothing fetches them.
+        self.assertIsNone(rows["xml-index"]["fetch"])
+        self.assertFalse(rows["xml-index"]["everyday"])
+
+    def test_a_system_with_no_known_command_is_given_the_page_only(self):
+        rows = {p["key"]: p for p in programs.status({}, platform="linux", which=lambda name: "there")["programs"]}
+        self.assertIsNone(rows["git"]["fetch"])
+        self.assertFalse(rows["git"]["fetchHere"])
+        self.assertTrue(rows["git"]["url"])
+        self.assertEqual(rows["ilspycmd"]["fetch"][0], "dotnet")
+
+    def test_every_fetch_command_starts_a_program_the_kit_names_and_every_after_is_a_row(self):
+        keys = {p.key for p in programs.CORE} | {p.key for _, p in programs.game_programs()}
+        for program in list(programs.CORE) + [p for _, p in programs.game_programs()]:
+            for command in (program.fetch or {}).values():
+                self.assertIn(command[0], programs.FETCHERS, program.key)
+            for key in program.after:
+                self.assertIn(key, keys, program.key)
+
+    def test_the_runtime_and_the_sdk_are_rows_of_their_own(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            dotnet = touch(root / "dotnet.exe")
+            (root / "shared" / "Microsoft.NETCore.App" / "10.0.15").mkdir(parents=True)
+            (root / "sdk" / "9.0.100").mkdir(parents=True)
+            saved = programs._on_path
+            programs._on_path = lambda name, which=None: dotnet
+            try:
+                self.assertTrue(programs._dotnet({}).here)
+                sdk = programs._dotnet_sdk({})
+            finally:
+                programs._on_path = saved
+            self.assertFalse(sdk.here)
+            self.assertIn("9.0.100", sdk.how)
+
+    def test_the_commands_that_fetch_are_listed_only_for_what_is_missing(self):
+        found = {"programs": [
+            {"key": "a", "name": "A", "here": False, "fetch": ["winget", "install", "A"], "after": ["b"]},
+            {"key": "b", "name": "B", "here": True, "fetch": ["winget", "install", "B"], "after": []},
+            {"key": "c", "name": "C", "here": False, "fetch": None, "after": []}]}
+        self.assertEqual(programs.fetch_rows(found), [["A", "winget install A", "B"]])
 
     def test_a_game_brings_its_own_programs_through_its_adapter(self):
         games = {game for game, _ in programs.game_programs()}
