@@ -125,7 +125,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--open` | `look-kind` | also show the first one with every value it holds |  |
 | `TYPE` | `look-why` | the type's full name, as look lists it (System.Xml.XmlDocument) |  |
 | `--sample N` | `look-why` | paths to show, each to a different object (default 3) | `3` |
-| `--checks VALUE` | `look-check` | the check file (default: config/checks.json in the current folder) | `config/checks.json` |
+| `--checks VALUE` | `look-check` | the check file (default: config/checks.json here, else in RimWorld's repositories on the games list) |  |
 | `--check VALUE` | `look-check` | only checks whose id matches; \* and ? are wildcards |  |
 | `--label VALUE` | `look-serve` | a few words to keep its overview by |  |
 | `--limit-seconds N` | `look-serve` | let the snapshot go after this long (default 600: it costs memory while held) | `600` |

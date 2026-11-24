@@ -19,6 +19,7 @@ import math
 from pathlib import Path
 import re
 
+from . import games_list
 from .report import Bullets, Report, Table
 
 SOURCES = ("save", "live")
@@ -325,6 +326,38 @@ def load_checks(path, source=None, kinds=()):
         ids.add(check.id)
         checks.append(check)
     return [c for c in checks if source is None or c.source == source]
+
+
+CHECK_FILE = Path("config") / "checks.json"
+
+
+def check_files(game, explicit=None, environ=None, cwd=None):
+    """The check files to run (1.122.0): the one named; else config/checks.json in the current folder; else that file in every
+    repository the owner's games list gives the game, which is how a program running the kit from its own folder (D'thorga
+    Companion) finds them. CheckError when there are none."""
+    if explicit:
+        return [Path(explicit)]
+    here = Path(cwd or Path.cwd()) / CHECK_FILE
+    if here.is_file():
+        return [here]
+    try:
+        listed = games_list.entries(games_list.games_file(None, environ))
+    except games_list.GamesListError:
+        listed = []
+    found = [entry.folder / CHECK_FILE for entry in listed if entry.game == game and (entry.folder / CHECK_FILE).is_file()]
+    if not found:
+        raise CheckError(f"No check file was named, there is none at {CHECK_FILE} here, and no repository the games list gives "
+                         f"{game} has one. Name one with --checks.")
+    return found
+
+
+def load_files(paths, source=None, kinds=()):
+    """Every check of a source in several check files, in their order: (checks, the files' names for the report)."""
+    checks, names = [], []
+    for path in paths:
+        checks.extend(load_checks(path, source, kinds))
+        names.append(f"{Path(path).parent.parent.name}/{CHECK_FILE.as_posix()}")
+    return checks, names
 
 
 # ---- Judging ----

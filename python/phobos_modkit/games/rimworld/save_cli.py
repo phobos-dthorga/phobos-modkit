@@ -179,8 +179,8 @@ def _parser():
     d.add_argument("--component", help="compare only components whose class matches, e.g. *RimPacts*")
     ck = sub.add_parser("checks", parents=[common], help="a repository's save checks run over the save: states its rules say "
                                                          "should never be")
-    ck.add_argument("--checks", dest="checks_file", default="config/checks.json",
-                    help="the check file (default: config/checks.json in the current folder)")
+    ck.add_argument("--checks", dest="checks_file",
+                    help="the check file (default: config/checks.json here, else in RimWorld's repositories on the games list)")
     ck.add_argument("--check", help="only checks whose id matches; * and ? are wildcards")
     q = sub.add_parser("sql", parents=[common], help="any read-only SQL query over the index")
     q.add_argument("query", help="one read-only SQL statement, in quotes")
@@ -307,13 +307,14 @@ def _planet(conn, args, environ, settings_file, cache, top):
         raise saves.SaveError(str(problem)) from None
 
 
-def _checks(conn, args, save, meta):
+def _checks(conn, args, save, meta, environ=None):
     """The save checks' report; its findings ride along for the JSON envelope's data."""
     if save is None:
         raise saves.SaveError("Checks read the save itself, which an index read with --index alone does not give. Name the save "
                               "with --save.")
     try:
-        chosen = check_engine.load_checks(args.checks_file, "save", save_checks.KINDS)
+        chosen, files = check_engine.load_files(check_engine.check_files("rimworld", args.checks_file, environ),
+                                                "save", save_checks.KINDS)
     except check_engine.CheckError as problem:
         raise saves.SaveError(str(problem)) from None
     if args.check:
@@ -322,6 +323,7 @@ def _checks(conn, args, save, meta):
     report = check_engine.report("Save checks", results,
                                  caveat="Read from the save, from a frozen copy. A finding is a state the rules say should not "
                                         "happen; it is not an in-game test, and a check can be wrong.")
+    report.facts.append(Fact("Checks", ", ".join(files)))
     report.check_data = check_engine.data(results)
     return report
 
@@ -362,7 +364,7 @@ def _report(conn, args, environ=None, settings_file=None, other=None, save=None,
     if args.report == "mood":
         return _mood(conn, args, environ, settings_file, top)
     if args.report == "checks":
-        return _checks(conn, args, save, meta)
+        return _checks(conn, args, save, meta, environ)
     if args.report == "diff":
         other_index, other_name, this_name = other
         return save_diff.diff(conn, Path(other_index).resolve().as_uri() + "?mode=ro", other_name, this_name,

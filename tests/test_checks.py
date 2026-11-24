@@ -107,6 +107,30 @@ class Parsing(unittest.TestCase):
                 checks.load_checks(Path(tmp) / "none.json")
 
 
+class FindingTheFile(unittest.TestCase):
+    """1.122.0: a program running the kit from its own folder finds a game's check files through the games list."""
+
+    def test_named_then_here_then_the_games_lists_repositories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            mine, other, empty = base / "phobos-rimworld", base / "phobos-kenshi", base / "elsewhere"
+            for repo in (mine, other):
+                (repo / "config").mkdir(parents=True)
+                (repo / "config" / "checks.json").write_text('{"checks": []}', encoding="utf-8")
+            empty.mkdir()
+            games = base / "games.json"
+            games.write_text(json.dumps({"games": [{"id": "rimworld", "repositories": [str(mine), str(empty)]},
+                                                   {"id": "kenshi", "repositories": [str(other)]}]}), encoding="utf-8")
+            environ = {"PHOBOS_COMPANION_GAMES": str(games)}
+            self.assertEqual(checks.check_files("rimworld", "x.json", environ, empty), [Path("x.json")])
+            self.assertEqual(checks.check_files("rimworld", None, environ, other), [other / "config" / "checks.json"])
+            self.assertEqual(checks.check_files("rimworld", None, environ, empty), [mine / "config" / "checks.json"])
+            with self.assertRaises(checks.CheckError):
+                checks.check_files("factorio", None, environ, empty)
+            found, names = checks.load_files([mine / "config" / "checks.json"])
+            self.assertEqual((found, names), ([], ["phobos-rimworld/config/checks.json"]))
+
+
 class Judging(unittest.TestCase):
     def test_findings_sentences_and_the_report(self):
         check = rule(read={"stacks": "s", "kinds": "k"}, fault="sum(stacks) > 300", level="look",

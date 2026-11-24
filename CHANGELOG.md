@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.122.0] - 2026-11-25
+
+### Changed
+
+- **Checks find a game's check files through the games list** when none is named and there is none in the current folder: every
+  repository the games list gives the game is read, and the report names the files. D'thorga Companion runs the kit from the
+  kit's own folder, so its Reports page can now offer `rimworld-save checks` with nothing typed. [Checks](docs/checks.md).
+
 ## [1.121.0] - 2026-11-25
 
 ### Added

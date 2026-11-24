@@ -29,6 +29,11 @@ python -m phobos_modkit rimworld-perf look-check --checks config/checks.json    
 
 JSON, with a list under `checks`. phobos-rimworld keeps its own in `config/checks.json`.
 
+**Which file runs** (1.122.0): the one named with `--checks`; else `config/checks.json` in the current folder; else that file in
+every repository the owner's games list gives the game (`games.json`, as D'thorga Companion keeps it), all of them run together.
+That last is how a program that runs the kit from the kit's own folder, D'thorga Companion's Reports page among them, finds a
+game's checks with nothing typed. The report's facts name the files it ran.
+
 ```json
 {"checks": [
   {"id": "work-store-heavy", "title": "A work store holds far more than any fitting takes", "source": "save", "level": "look",

@@ -150,7 +150,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `OTHER` | `diff` | the save to compare with (a name or path), usually an earlier one |  |
 | `--faction VALUE` | `diff` | whose pawns and hediffs to compare: player (default), any, or a faction's name or def | `player` |
 | `--component VALUE` | `diff` | compare only components whose class matches, e.g. \*RimPacts\* |  |
-| `--checks VALUE` | `checks` | the check file (default: config/checks.json in the current folder) | `config/checks.json` |
+| `--checks VALUE` | `checks` | the check file (default: config/checks.json here, else in RimWorld's repositories on the games list) |  |
 | `--check VALUE` | `checks` | only checks whose id matches; \* and ? are wildcards |  |
 | `QUERY` | `sql` | one read-only SQL statement, in quotes |  |
 

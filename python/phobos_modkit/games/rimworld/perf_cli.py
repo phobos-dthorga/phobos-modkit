@@ -53,7 +53,7 @@ from ...dotnet_snapshots import SnapshotError
 from ... import process_memory as pm
 from ...manifest import READS, RUNS, WRITES
 from ...progress import Progress
-from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
+from ...report import Fact, Report, Table, envelope_text, home_redactor, keep, render_markdown
 from ...sampling import CPU, MOD, UNKNOWN, Recording, SamplingError, index_speedscope, modules, read_counters, write_counters, write_owners
 from ... import heap_reader as hreader
 from ... import checks as check_engine
@@ -170,8 +170,8 @@ def _parser():
     lw.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
     lc = sub.add_parser("look-check", parents=[common], help="a repository's live checks, all answered from one snapshot of the "
                                                              "running game: states its rules say should never be")
-    lc.add_argument("--checks", dest="checks_file", default="config/checks.json",
-                    help="the check file (default: config/checks.json in the current folder)")
+    lc.add_argument("--checks", dest="checks_file",
+                    help="the check file (default: config/checks.json here, else in RimWorld's repositories on the games list)")
     lc.add_argument("--check", help="only checks whose id matches; * and ? are wildcards")
     lc.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
     lv = sub.add_parser("look-serve", parents=[common], help="hold a snapshot and answer JSON requests a line at a time, for a program")
@@ -568,17 +568,17 @@ def _look(args, environ, settings_file, run, now):
 def _look_check(args, environ, settings_file, run, run_requests=None):
     """(report, data) for look-check: every live check in the file, from one snapshot (1.120.0)."""
     try:
-        chosen = check_engine.load_checks(args.checks_file, "live")
+        chosen, files = check_engine.load_files(check_engine.check_files("rimworld", args.checks_file, environ), "live")
     except check_engine.CheckError as problem:
         raise PerfError(str(problem)) from None
     if args.check:
         chosen = [c for c in chosen if fnmatch.fnmatch(c.id.lower(), args.check.lower())]
     if not chosen:
-        raise PerfError(f"{args.checks_file} holds no live checks" + (f" matching {args.check}" if args.check else "") + ".")
+        raise PerfError(", ".join(files) + " hold no live checks" + (f" matching {args.check}" if args.check else "") + ".")
     pid = _pid(args, run, "RimWorld is not running. Load the save you want to check first.")
     ready, results = checks_live.run(pid, look.runtime_folder(args.game, environ, settings_file), chosen, look.DESCRIBE, environ,
                                      run_requests or hreader.run_requests)
-    report = check_engine.report("Live checks", results, caveat=checks_live.CAVEAT)
+    report = check_engine.report("Live checks", results, facts=[Fact("Checks", ", ".join(files))], caveat=checks_live.CAVEAT)
     if ready.get("snapshotMs") is not None:
         report.lines.insert(1, f"The snapshot paused the game for {ready['snapshotMs']:,} ms.")
     return report, check_engine.data(results)
