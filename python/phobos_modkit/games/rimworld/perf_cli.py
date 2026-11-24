@@ -20,6 +20,7 @@
     rimworld-perf look --label "day 40"      inside the running game from a snapshot: every object by type and by mod
     rimworld-perf look-kind Verse.Pawn --open   one kind's objects, each described (--match TEXT, --largest)
     rimworld-perf look-why System.Xml.XmlDocument   why a kind is still in memory: paths from a root to its largest
+    rimworld-perf look-check --checks config/checks.json   a repository's live checks, all from one snapshot
     rimworld-perf look-serve                 hold a snapshot and answer JSON requests a line at a time (for a program's page)
 
 Recording attaches Microsoft's dotnet-trace and dotnet-counters to the game through its .NET diagnostics pipe; stack uses
@@ -55,6 +56,8 @@ from ...progress import Progress
 from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
 from ...sampling import CPU, MOD, UNKNOWN, Recording, SamplingError, index_speedscope, modules, read_counters, write_counters, write_owners
 from ... import heap_reader as hreader
+from ... import checks as check_engine
+from ... import checks_live
 from . import look
 from . import perf
 from . import perf_snapshots as snap
@@ -62,7 +65,8 @@ from . import perf_watch as pw
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 REPORTS = ("report", "record", "index", "mod", "compare", "list", "stack", "stack-report", "heap", "heap-report", "heap-compare",
-           "watch", "watch-report", "watch-status", "watch-stop", "watch-mark", "look", "look-kind", "look-why", "look-serve")
+           "watch", "watch-report", "watch-status", "watch-stop", "watch-mark", "look", "look-kind", "look-why", "look-serve",
+           "look-check")
 MEMORY_SURFACE = "memory-watch"     # D'thorga Companion's Memory page finds the watch's commands by this, never by the game's name
 CACHE_FOLDER = "rimworld-perf"
 INDEX_NAME = "index.sqlite"
@@ -164,6 +168,12 @@ def _parser():
     lw.add_argument("--sample", type=int, default=hreader.WHY_SAMPLE,
                     help=f"paths to show, each to a different object (default {hreader.WHY_SAMPLE})")
     lw.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
+    lc = sub.add_parser("look-check", parents=[common], help="a repository's live checks, all answered from one snapshot of the "
+                                                             "running game: states its rules say should never be")
+    lc.add_argument("--checks", dest="checks_file", default="config/checks.json",
+                    help="the check file (default: config/checks.json in the current folder)")
+    lc.add_argument("--check", help="only checks whose id matches; * and ? are wildcards")
+    lc.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
     lv = sub.add_parser("look-serve", parents=[common], help="hold a snapshot and answer JSON requests a line at a time, for a program")
     lv.add_argument("--label", help="a few words to keep its overview by")
     lv.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
@@ -555,6 +565,25 @@ def _look(args, environ, settings_file, run, now):
     return hreader.why_report(f"rimworld-perf: look-why {args.type}", data), data
 
 
+def _look_check(args, environ, settings_file, run, run_requests=None):
+    """(report, data) for look-check: every live check in the file, from one snapshot (1.120.0)."""
+    try:
+        chosen = check_engine.load_checks(args.checks_file, "live")
+    except check_engine.CheckError as problem:
+        raise PerfError(str(problem)) from None
+    if args.check:
+        chosen = [c for c in chosen if fnmatch.fnmatch(c.id.lower(), args.check.lower())]
+    if not chosen:
+        raise PerfError(f"{args.checks_file} holds no live checks" + (f" matching {args.check}" if args.check else "") + ".")
+    pid = _pid(args, run, "RimWorld is not running. Load the save you want to check first.")
+    ready, results = checks_live.run(pid, look.runtime_folder(args.game, environ, settings_file), chosen, look.DESCRIBE, environ,
+                                     run_requests or hreader.run_requests)
+    report = check_engine.report("Live checks", results, caveat=checks_live.CAVEAT)
+    if ready.get("snapshotMs") is not None:
+        report.lines.insert(1, f"The snapshot paused the game for {ready['snapshotMs']:,} ms.")
+    return report, check_engine.data(results)
+
+
 def _watch(args, environ, settings_file, run, popen, now, sleep, clock):
     """The report for watch and watch-report."""
     where = pw.root(args.cache, environ, settings_file)
@@ -650,6 +679,8 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
                               stdout=out)
         elif args.report in ("look", "look-kind", "look-why"):
             report, data = _look(args, environ, settings_file, run, now or datetime.now())
+        elif args.report == "look-check":
+            report, data = _look_check(args, environ, settings_file, run)
         elif args.report in ("watch", "watch-report"):
             report, data = _watch(args, environ, settings_file, run, popen, now or datetime.now(), sleep, clock)
         elif args.report == "compare":
@@ -729,6 +760,9 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
                   "note": LOOK_NOTE},
     "look-why": {"effect": RUNS, "surface": look.SURFACE, "question": "Why is something still in my running game's memory?",
                  "note": LOOK_NOTE},
+    "look-check": {"effect": RUNS, "surface": look.SURFACE,
+                   "question": "Is anything in my running game in a state it should never be?",
+                   "note": LOOK_NOTE + " One snapshot answers every live check in the file (docs/checks.md)."},
     "look-serve": {"effect": RUNS, "surface": look.SURFACE,
                    "note": LOOK_NOTE + " Holds the snapshot and answers one JSON request a line on standard input until it closes "
                            "or the time limit passes; for a program's page, not a person's console."},

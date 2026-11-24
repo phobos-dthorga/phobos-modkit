@@ -1,5 +1,6 @@
 // A small running program whose memory the heap reader's tests read: colonists kept in a static list, each with a name, a
-// struct, an enum and a link to another; a dictionary; and orphans nothing holds, garbage the collector has not swept yet.
+// struct, an enum and a link to another; a dictionary; a squad holding a list of colonists, an array of numbers and a set (for
+// the values request, 1.120.0); and orphans nothing holds, garbage the collector has not swept yet.
 // It prints "ready <pid>" once everything is in place, then waits until its standard input closes.
 using System;
 using System.Collections.Generic;
@@ -32,6 +33,15 @@ namespace HeapFixture
         public Colonist Bonded;
     }
 
+    public class Squad
+    {
+        public string Name;
+        public List<Colonist> Members = new List<Colonist>();
+        public int[] Scores;
+        public HashSet<string> Orders = new HashSet<string>();
+        public Spot[] Posts;
+    }
+
     public class Orphan
     {
         public long[] Payload = new long[64];
@@ -41,6 +51,7 @@ namespace HeapFixture
     {
         public static List<Colonist> Colonists = new List<Colonist>();
         public static Dictionary<string, int> Stock = new Dictionary<string, int>();
+        public static List<Squad> Squads = new List<Squad>();
     }
 
     public static class Program
@@ -59,6 +70,12 @@ namespace HeapFixture
             Colony.Colonists[0].Bonded = Colony.Colonists[1];
             Colony.Stock["Steel"] = 75;
             Colony.Stock["Silver"] = 1200;
+            var alpha = new Squad { Name = "Alpha", Scores = new[] { 3, 5, 8 }, Posts = new[] { new Spot { X = 1, Z = 2 } } };
+            alpha.Members.Add(Colony.Colonists[0]);
+            alpha.Members.Add(Colony.Colonists[2]);
+            alpha.Orders.Add("Hold");
+            Colony.Squads.Add(alpha);
+            Colony.Squads.Add(new Squad { Name = "Empty", Scores = new int[0], Posts = new Spot[0] });
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();

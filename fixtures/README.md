@@ -67,7 +67,8 @@ made-up BBCode descriptions. `steam/collection.json` follows GetCollectionDetail
 of the three items, listed out of order with sortorder values, and one collection Steam does not return (result 9).
 
 `dotnet/HeapFixture/` is a small program the heap reader's tests build, start and read while it runs (Windows only): twelve
-colonists in a static list, each with text, numbers, an enum, a struct and links; a dictionary of two stocks; and twenty orphans
+colonists in a static list, each with text, numbers, an enum, a struct and links; a dictionary of two stocks; two squads, one with
+members, an array of numbers, a set of text and an array of structs, one empty (for the values request, 1.120.0); and twenty orphans
 nothing holds, made after the last collection, so a snapshot finds them as garbage. Its names are made up.
 
 `dotnet/ConnectionsFixture/` is C# source the connections tool's tests build and read: a base class with a virtual method and

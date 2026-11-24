@@ -20,6 +20,7 @@ values. The design and its reasons: phobos-rimworld's
 ```text
 python -m phobos_modkit rimworld-save checks --checks config/checks.json        every save check, on the newest save
 python -m phobos_modkit rimworld-save checks --save PG20 --check "work-store*"  some checks, on one save
+python -m phobos_modkit rimworld-perf look-check --checks config/checks.json    every live check, from one snapshot (ask first)
 ```
 
 ## Inputs
@@ -48,7 +49,7 @@ JSON, with a list under `checks`. phobos-rimworld keeps its own in `config/check
 | `source` | `save` (read from a save) or `live` (read from a snapshot of the running game) |
 | `level` | `fault` (the design says it cannot happen; the default) or `look` (worth a look; may be fine) |
 | `kind` | `rule` (the default), or a kind the game's adapter builds itself (RimWorld's save checks: `numbers`, `references`) |
-| `select` | Which things to read. RimWorld's save checks: `def`, `class` (both take `*` and `?`), `place`, `map`. Required: reading every thing would take minutes |
+| `select` | Which things to read. Save checks (RimWorld): `def`, `class` (both take `*` and `?`), `place`, `map`; required, as reading every thing would take minutes. Live checks: `type` (a kind's full name, as `look` lists it; required), `subclasses` (kinds below it too), `take` (objects, default 5,000) and `items` (items opened per path on one object, default 1,000) |
 | `read` | Each value's name and its path. A name is letters, digits and `_`, and not a function's name |
 | `when` | Optional: a condition saying which things the rule applies to |
 | `fault` | The condition that makes it a fault. Required for a rule |
@@ -64,6 +65,13 @@ step, `**` for any run across steps, `?` for one character. **A path with a wild
 one without reads one value, or None when it is not saved. A thing another thing holds (a vehicle's cargo, a pawn's inventory) is
 cut out of its holder's data, as `thing` does, but keeps its `def`, `id` and `stackCount` from the index at the paths its own XML
 would give, so a check can count a store's stacks.
+
+**In a running game** (live checks, any .NET game): a path follows fields by name, joined by dots, through links and structs
+(`parent.def.defName`). `[]` after a name opens a list, array, set or dictionary into its items, and the rest of the path is read
+from each (`held.innerList[].stackCount`); a final `#` gives a collection's count without reading its items (`orders#`). A path
+that opened anything reads a list; one that did not, one value or None. Names are the code's own fields, private ones included, as
+`look-kind --open` shows them; a property is not a field. The heap reader's [values request](heap-reader.md) does the reading. A
+finding names the object by its summary (RimWorld's: a pawn's name, a Def's defName, a thing's ID number), else its kind and address.
 
 ### The language
 
@@ -102,6 +110,8 @@ one), then the checks that found nothing with how many things each read, then an
 
 ## Limits
 
+- A live check reads one instant: a value mid-change (a list being rebuilt, a cache cleared for its next look) can break a rule for
+  that moment only. Run it again before believing a finding, or make the rule allow for it.
 - RimWorld's save checks read each chosen thing's part of the save: about 50 vehicles take a second or two on a 450 MB save
   (25 November 2026, the owner's colony). Every pawn in a large colony would take far longer.
 - Values another thing holds are only those the index keeps (`def`, `id`, `stackCount`); read the held thing itself with its own

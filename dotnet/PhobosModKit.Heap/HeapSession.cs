@@ -14,6 +14,8 @@ public sealed class HeapSession : IDisposable
 {
     public const int DefaultTake = 50, MaxTake = 500, DefaultHolders = 50, DefaultSample = 3, MaxSample = 20;
     public const int TextLimit = 4000, SummaryLimit = 120, StructDepth = 2, WhyTargets = 2000, ArrayScanLimit = 1_000_000;
+    // The values request (1.120.0): objects read per kind, and items opened per path on one object, unless the request asks otherwise.
+    public const int DefaultValuesTake = 5000, MaxValuesTake = 50_000, DefaultItems = 1000, MaxItems = 100_000;
     public static readonly TimeSpan PathTime = TimeSpan.FromMinutes(5);
     private const int KindsKept = 4;
     private const long ProgressEvery = 1 << 20;
@@ -123,6 +125,9 @@ public sealed class HeapSession : IDisposable
             "holders" => Holders(Address(request), Math.Clamp(Int(request, "max", DefaultHolders), 1, MaxTake)),
             "path" => Path_(Address(request)),
             "why" => Why(Text(request, "type"), Math.Clamp(Int(request, "sample", DefaultSample), 1, MaxSample)),
+            "values" => Values(Text(request, "type"), ValuePath.All(request), Math.Clamp(Int(request, "take", DefaultValuesTake), 1, MaxValuesTake),
+                               Math.Clamp(Int(request, "items", DefaultItems), 1, MaxItems),
+                               request["subclasses"] is JsonValue sub && sub.TryGetValue(out bool also) && also),
             "release" => new JsonObject { ["released"] = true },
             _ => throw new SessionError($"Unknown op: {op}"),
         };
@@ -271,6 +276,209 @@ public sealed class HeapSession : IDisposable
         };
     }
 
+    /// <summary>
+    /// Named values read from every object of a kind (1.120.0, for the kit's live checks): each path follows fields by name through links
+    /// and structs; "[]" after a name opens a list, array, set or dictionary into its items (a dictionary's values); a final "#" gives a
+    /// collection's count without reading its items. A path that opened anything answers with a list; one that did not, with one value
+    /// or null. Values come as text, as the object request gives them; a link at the end of a path gives its summary.
+    /// </summary>
+    private JsonObject Values(string type, List<ValuePath> paths, int take, int itemLimit, bool subclasses)
+    {
+        List<(ulong address, ulong size)> all = Instances(type, subclasses);
+        var items = new JsonArray();
+        foreach (var (address, _) in all.Take(take))
+        {
+            ClrObject o = heap.GetObject(address);
+            var values = new JsonObject();
+            bool cut = false;
+            foreach (ValuePath path in paths)
+            {
+                try
+                {
+                    values[path.Text] = ReadPath(new Place(o.Address, o.Type, false), path, itemLimit, ref cut);
+                }
+                catch (Exception error) when (error is ClrDiagnosticsException or InvalidOperationException or ArgumentException
+                                                       or IndexOutOfRangeException or NullReferenceException)
+                {
+                    values[path.Text] = null;
+                }
+            }
+            var item = new JsonObject { ["address"] = Hex(address), ["type"] = o.Type?.Name, ["summary"] = Summary(o), ["values"] = values };
+            if (cut) item["cut"] = true;
+            items.Add(item);
+        }
+        return new JsonObject
+        {
+            ["type"] = type, ["subclasses"] = subclasses, ["count"] = all.Count, ["take"] = take, ["more"] = all.Count > take,
+            ["itemLimit"] = itemLimit, ["items"] = items,
+        };
+    }
+
+    /// <summary>Where a value is: an object (Interior false) or a struct inside one (Interior true); or, for an item of a list of
+    /// numbers or text, the value itself (IsValue).</summary>
+    private readonly record struct Place(ulong Address, ClrType? Type, bool Interior, string? Value = null, bool IsValue = false);
+
+    private JsonNode? ReadPath(Place start, ValuePath path, int itemLimit, ref bool cut)
+    {
+        var current = new List<Place> { start };
+        bool listed = false;
+        for (int i = 0; i < path.Steps.Count; i++)
+        {
+            ValueStep step = path.Steps[i];
+            bool last = i == path.Steps.Count - 1;
+            var next = new List<Place>();
+            var answers = new JsonArray();
+            foreach (Place place in current)
+            {
+                if (place.IsValue || place.Type == null) continue;
+                ClrInstanceField? field = place.Type.GetFieldByName(step.Name);
+                if (field == null) continue;
+                if (last && !step.Open && !path.Count)
+                {
+                    answers.Add(FieldValue(field, place));
+                    continue;
+                }
+                Place? child = Child(field, place);
+                if (child == null)
+                {
+                    if (last && path.Count && listed) answers.Add(null);
+                    continue;
+                }
+                if (last && path.Count)
+                {
+                    answers.Add(CountOf(child.Value));
+                    continue;
+                }
+                if (step.Open)
+                {
+                    listed = true;
+                    next.AddRange(ItemsOf(child.Value, itemLimit - next.Count, ref cut));
+                }
+                else next.Add(child.Value);
+            }
+            if (last && !step.Open)
+                return listed ? answers : answers.Count > 0 ? answers[0]?.DeepClone() : null;
+            current = next;
+        }
+        // The path ended by opening a collection: each item as a value (a number, text, or a link's summary).
+        return new JsonArray(current.Select(PlaceValue).ToArray());
+    }
+
+    private Place? Child(ClrInstanceField field, Place place)
+    {
+        if (field.ElementType == ClrElementType.String || field.IsObjectReference)
+        {
+            ClrObject value = field.ReadObject(place.Address, place.Interior);
+            if (value.IsNull || !value.IsValid || value.Type == null) return null;
+            return new Place(value.Address, value.Type, false);
+        }
+        if (field.ElementType == ClrElementType.Struct && field.Type is ClrType structType && !structType.IsEnum)
+        {
+            ClrValueType inner = field.ReadStruct(place.Address, place.Interior);
+            return new Place(inner.Address, structType, true);
+        }
+        return null;
+    }
+
+    private JsonNode? FieldValue(ClrInstanceField field, Place place)
+    {
+        if (field.ElementType == ClrElementType.String || field.IsObjectReference)
+        {
+            ClrObject value = field.ReadObject(place.Address, place.Interior);
+            if (value.IsNull || !value.IsValid || value.Type == null) return null;
+            return value.Type.IsString ? value.AsString(TextLimit) : Summary(value) is { Length: > 0 } s ? s : value.Type.Name;
+        }
+        if (field.ElementType == ClrElementType.Struct && field.Type is ClrType structType && !structType.IsEnum) return null;
+        string? text = Primitive(field.Type?.IsEnum == true ? field.Type.AsEnum().ElementType : field.ElementType, field, place.Address,
+                                 place.Interior);
+        return field.Type?.IsEnum == true && text != null ? EnumName(field.Type, text) : text;
+    }
+
+    private JsonNode? PlaceValue(Place place)
+    {
+        if (place.IsValue) return place.Value;
+        if (place.Interior || place.Type == null) return null;
+        ClrObject o = heap.GetObject(place.Address);
+        if (!o.IsValid || o.Type == null) return null;
+        return o.Type.IsString ? o.AsString(TextLimit) : Summary(o) is { Length: > 0 } s ? s : o.Type.Name;
+    }
+
+    /// <summary>How many items a list, array, set or dictionary holds; null for anything else.</summary>
+    private JsonNode? CountOf(Place place)
+    {
+        if (place.Interior || place.Type == null) return null;
+        ClrObject o = heap.GetObject(place.Address);
+        if (o.IsArray) return o.AsArray().Length;
+        string bare = (o.Type?.Name ?? "").Split('<')[0];
+        if (bare == "System.Collections.Generic.List") return o.ReadField<int>("_size");
+        if (bare is "System.Collections.Generic.Dictionary" or "System.Collections.Generic.HashSet")
+            return o.ReadField<int>("_count") - o.ReadField<int>("_freeCount");
+        return null;
+    }
+
+    /// <summary>A collection's items, as places to read on from: objects, structs, or numbers and text as values.</summary>
+    private List<Place> ItemsOf(Place place, int limit, ref bool cut)
+    {
+        var items = new List<Place>();
+        if (limit <= 0)
+        {
+            cut = true;
+            return items;
+        }
+        if (place.Interior || place.Type == null) return items;
+        ClrObject o = heap.GetObject(place.Address);
+        string bare = (o.Type?.Name ?? "").Split('<')[0];
+        if (o.IsArray) cut |= ArrayItems(o.AsArray(), o.AsArray().Length, limit, items);
+        else if (bare == "System.Collections.Generic.List" && o.TryReadObjectField("_items", out ClrObject array) && !array.IsNull)
+            cut |= ArrayItems(array.AsArray(), o.ReadField<int>("_size"), limit, items);
+        else if (bare is "System.Collections.Generic.Dictionary" or "System.Collections.Generic.HashSet"
+                 && o.TryReadObjectField("_entries", out ClrObject entries) && !entries.IsNull)
+        {
+            ClrArray slots = entries.AsArray();
+            ClrType? entryType = slots.Type.ComponentType;
+            ClrInstanceField? value = EntryField(entryType, "value");
+            string next = EntryField(entryType, "next")?.Name ?? "next";
+            int count = o.ReadField<int>("_count");
+            for (int i = 0; i < Math.Min(count, slots.Length) && value != null; i++)
+            {
+                ClrValueType entry = slots.GetStructValue(i);
+                if (entry.ReadField<int>(next) < -1) continue;   // a free slot: .NET marks them below -1
+                if (items.Count >= limit)
+                {
+                    cut = true;
+                    break;
+                }
+                var at = new Place(entry.Address, entryType, true);
+                if (Child(value, at) is Place child) items.Add(child);
+                else if (FieldValue(value, at) is JsonNode node) items.Add(new Place(0, null, false, node.GetValue<string>(), true));
+            }
+        }
+        return items;
+    }
+
+    /// <summary>Adds up to <paramref name="limit"/> of an array's first <paramref name="length"/> items; whether any were left out.</summary>
+    private bool ArrayItems(ClrArray array, int length, int limit, List<Place> items)
+    {
+        ClrType? component = array.Type.ComponentType;
+        int end = Math.Min(length, array.Length);
+        for (int i = 0; i < end; i++)
+        {
+            if (items.Count >= limit) return true;
+            if (component == null) continue;
+            if (component.IsObjectReference || component.IsString)
+            {
+                ClrObject item = array.GetObjectValue(i);
+                if (!item.IsNull && item.IsValid && item.Type != null) items.Add(new Place(item.Address, item.Type, false));
+            }
+            else if (component.IsValueType && !component.IsPrimitive && !component.IsEnum)
+                items.Add(new Place(array.GetStructValue(i).Address, component, true));
+            else
+                items.Add(new Place(0, null, false,
+                                    ArrayPrimitive(array, component.IsEnum ? component.AsEnum().ElementType : component.ElementType, i), true));
+        }
+        return false;
+    }
+
     // ---- Walking ----
 
     private bool LastFinished;
@@ -326,34 +534,44 @@ public sealed class HeapSession : IDisposable
         };
     }
 
-    private List<(ulong address, ulong size)> Instances(string type)
+    private List<(ulong address, ulong size)> Instances(string type, bool subclasses = false)
     {
+        string key = subclasses ? type + " and its subclasses" : type;
         for (var node = kinds.First; node != null; node = node.Next)
-            if (node.Value.type == type)
+            if (node.Value.type == key)
             {
                 kinds.Remove(node);
                 kinds.AddFirst(node);
                 return node.Value.objects;
             }
         var found = new List<(ulong, ulong)>();
-        ClrType? matched = null;
+        var answers = new Dictionary<ClrType, bool>();
         long seen = 0;
         foreach (ClrObject o in heap.EnumerateObjects())
         {
             if (++seen % ProgressEvery == 0) progress.Say($"Finding every {type}", seen, objectCount);
             ClrType? t = o.Type;
             if (t == null) continue;
-            if (!ReferenceEquals(t, matched))
-            {
-                if (t.Name != type) continue;
-                matched = t;
-            }
-            found.Add((o.Address, o.Size));
+            if (!answers.TryGetValue(t, out bool wanted))
+                answers[t] = wanted = t.Name == type || (subclasses && IsBelow(t, type));
+            if (wanted) found.Add((o.Address, o.Size));
         }
         objectCount ??= seen;
-        kinds.AddFirst((type, found));
+        kinds.AddFirst((key, found));
         while (kinds.Count > KindsKept) kinds.RemoveLast();
         return found;
+    }
+
+    /// <summary>A dictionary's or set's entry field by name: .NET's Dictionary names them in lower case (next, value), its HashSet
+    /// with a capital (Next, Value).</summary>
+    private static ClrInstanceField? EntryField(ClrType? entryType, string name) =>
+        entryType?.GetFieldByName(name) ?? entryType?.GetFieldByName(char.ToUpperInvariant(name[0]) + name[1..]);
+
+    private static bool IsBelow(ClrType type, string name)
+    {
+        for (ClrType? t = type.BaseType; t != null; t = t.BaseType)
+            if (t.Name == name) return true;
+        return false;
     }
 
     /// <summary>Every object a static field holds, named Type.field: the names a path from a root is easiest to read by.</summary>
@@ -590,15 +808,17 @@ public sealed class HeapSession : IDisposable
                 ClrType? entryType = array.Type.ComponentType;
                 var list = new JsonArray();
                 int used = 0;
+                string next = EntryField(entryType, "next")?.Name ?? "next";
                 for (int i = 0; i < Math.Min(count, array.Length) && list.Count < take; i++)
                 {
                     ClrValueType entry = array.GetStructValue(i);
-                    if (entry.ReadField<int>("next") < -1) continue;   // a free slot: .NET marks them below -1
+                    if (entry.ReadField<int>(next) < -1) continue;   // a free slot: .NET marks them below -1
                     if (used++ < skip) continue;
                     var node = new JsonObject { ["name"] = $"[{used - 1}]", ["kind"] = "struct", ["type"] = entryType?.Name ?? "?" };
                     var fields = new JsonArray();
+                    // A dictionary's entry names them key and value; a set's, Value (1.120.0: sets showed no items before).
                     foreach (ClrInstanceField f in entryType?.Fields ?? [])
-                        if (f.Name is "key" or "value") fields.Add(Field(f, entry.Address, true, 1));
+                        if (f.Name is "key" or "value" or "Value") fields.Add(Field(f, entry.Address, true, 1));
                     node["fields"] = fields;
                     list.Add(node);
                 }
@@ -699,4 +919,44 @@ public sealed class HeapSession : IDisposable
         request[name] is JsonValue v && v.TryGetValue(out int n) ? Math.Max(0, n) : fallback;
 
     private static int Take(JsonObject request) => Math.Clamp(Int(request, "take", DefaultTake), 1, MaxTake);
+}
+
+/// <summary>One step of a values path: a field's name, and whether its value is opened into items ("[]").</summary>
+public sealed record ValueStep(string Name, bool Open);
+
+/// <summary>A values path as written ("held.innerList[].stackCount", "orders#"), read into steps (1.120.0).</summary>
+public sealed class ValuePath
+{
+    public string Text { get; }
+    public List<ValueStep> Steps { get; } = new();
+    /// <summary>The path ends in "#": the last value's count, not its items.</summary>
+    public bool Count { get; }
+
+    public ValuePath(string text)
+    {
+        Text = text;
+        string body = text.Trim();
+        if (body.EndsWith('#'))
+        {
+            Count = true;
+            body = body[..^1];
+        }
+        foreach (string part in body.Split('.'))
+        {
+            bool open = part.EndsWith("[]", StringComparison.Ordinal);
+            string name = open ? part[..^2] : part;
+            if (name.Length == 0 || name.Any(c => !(char.IsLetterOrDigit(c) || c is '_' or '<' or '>')))
+                throw new SessionError($"\"{text}\" is not a values path: field names joined by dots, [] to open a list, # at the end to count.");
+            Steps.Add(new ValueStep(name, open));
+        }
+        if (Count && Steps[^1].Open)
+            throw new SessionError($"\"{text}\" both opens and counts its last list; write it without [] to count it.");
+    }
+
+    public static List<ValuePath> All(JsonObject request)
+    {
+        if (request["paths"] is not JsonArray list || list.Count == 0)
+            throw new SessionError("A values request needs \"paths\", a list of field paths.");
+        return list.Select(n => new ValuePath(n?.GetValue<string>() ?? "")).ToList();
+    }
 }

@@ -75,6 +75,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `look` | Inside the running game from a snapshot: every object by type and by mod. Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own memory-reading library from its install folder; nothing is written to the game. | runs other programs |
 | `look-kind` | One kind's objects in the running game, each described. Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own memory-reading library from its install folder; nothing is written to the game. | runs other programs |
 | `look-why` | Why a kind is still in memory: paths from a root to its largest objects. Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own memory-reading library from its install folder; nothing is written to the game. | runs other programs |
+| `look-check` | A repository's live checks, all answered from one snapshot of the running game: states its rules say should never be. Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own memory-reading library from its install folder; nothing is written to the game. One snapshot answers every live check in the file (docs/checks.md). | runs other programs |
 | `look-serve` | Hold a snapshot and answer JSON requests a line at a time, for a program. Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own memory-reading library from its install folder; nothing is written to the game. Holds the snapshot and answers one JSON request a line on standard input until it closes or the time limit passes; for a program's page, not a person's console. | runs other programs |
 
 | Option | Reports | What it does | Default |
@@ -88,7 +89,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `RECORDING` | `report` | (optional) a recording's ID (its start is enough) or label; the newest when left out |  |
 | `--seconds N` | `record` | how long to record (default 30) | `30` |
 | `--label VALUE` | `record` | a few words to find the recording by, such as what was happening |  |
-| `--pid N` | `record`, `stack`, `heap`, `watch`, `look`, `look-kind`, `look-why`, `look-serve` | the game's process ID, when more than one RimWorld runs |  |
+| `--pid N` | `record`, `stack`, `heap`, `watch`, `look`, `look-kind`, `look-why`, `look-check`, `look-serve` | the game's process ID, when more than one RimWorld runs |  |
 | `--keep-speedscope` | `record` | keep the converted trace beside the index (large) |  |
 | `FILE` | `index` | a .speedscope.json file from dotnet-trace |  |
 | `--counters VALUE` | `index` | dotnet-counters' JSON file from the same time |  |
@@ -124,6 +125,8 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--open` | `look-kind` | also show the first one with every value it holds |  |
 | `TYPE` | `look-why` | the type's full name, as look lists it (System.Xml.XmlDocument) |  |
 | `--sample N` | `look-why` | paths to show, each to a different object (default 3) | `3` |
+| `--checks VALUE` | `look-check` | the check file (default: config/checks.json in the current folder) | `config/checks.json` |
+| `--check VALUE` | `look-check` | only checks whose id matches; \* and ? are wildcards |  |
 | `--label VALUE` | `look-serve` | a few words to keep its overview by |  |
 | `--limit-seconds N` | `look-serve` | let the snapshot go after this long (default 600: it costs memory while held) | `600` |
 
@@ -253,6 +256,11 @@ through agents. All five commands carry the manifest surface `memory-watch`, so 
 `look`, `look-kind`, `look-why` and `look-serve` read a Windows snapshot of the game with the kit's heap reader instead of
 dotnet-gcdump: every object with no limit on how many, any object's values, and why something is still in memory, without forcing a
 collection. See [the heap reader](heap-reader.md).
+
+**`look-check` (1.120.0) runs a repository's live checks** from one snapshot: every check with `"source": "live"` in the check
+file (default `config/checks.json`) becomes one values request, all answered before the snapshot is let go, then judged and
+reported as `rimworld-save checks` reports a save's. How checks are written, and what a live check's `select` and paths take:
+[checks](checks.md). **Ask before every run on someone's game**, as for every snapshot.
 
 ## Effects
 

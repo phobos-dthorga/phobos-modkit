@@ -1,4 +1,5 @@
-"""Checks (1.119.0): the game-free engine, and RimWorld's save checks on the hand-written fixture save.
+"""Checks (1.119.0): the game-free engine, RimWorld's save checks on the hand-written fixture save, and live checks over a
+stand-in heap reader (1.120.0; test_heap_reader runs them on a real snapshot).
 
 Save tests need the compiled xml-index program and skip when it is not built, as test_rimworld_save's do.
 """
@@ -13,6 +14,7 @@ import unittest
 
 from support import FIXTURES
 from phobos_modkit import checks
+from phobos_modkit import checks_live
 from phobos_modkit import native
 from phobos_modkit.games.rimworld import save as saves
 from phobos_modkit.games.rimworld import save_checks
@@ -204,6 +206,49 @@ class SaveChecks(unittest.TestCase):
     def test_a_broken_file_is_a_usage_error(self):
         self.write({"id": "x", "title": "X", "source": "save", "read": {"x": "x"}, "fault": "open('f')"})
         self.assertEqual(self.run_main()[0], EXIT_USAGE)
+
+
+def live(**fields):
+    entry = {"id": "store", "title": "A store holds no more than its work asks", "source": "live",
+             "select": {"type": "Phobos.Store"}, "read": {"held": "held.innerList[].stackCount", "orders": "orders#"},
+             "fault": "sum(held) > 100 and orders == 0", "says": "{sum(held)} held for no orders"}
+    entry.update(fields)
+    return checks.parse_check(entry, "test")
+
+
+class LiveChecks(unittest.TestCase):
+    def test_one_snapshot_answers_every_check_in_order(self):
+        asked = []
+
+        def reader(pid, folder, requests, describe, environ):
+            asked.append(requests)
+            first = {"ok": True, "data": {"type": "Phobos.Store", "count": 3, "take": 2, "more": True, "itemLimit": 1000,
+                                          "items": [{"address": "0x1", "summary": "HEMTT 1", "values": {
+                                              "held.innerList[].stackCount": ["75", "75"], "orders#": 0}},
+                                                    {"address": "0x2", "summary": "", "type": "Phobos.Store", "cut": True,
+                                                     "values": {"held.innerList[].stackCount": ["5"], "orders#": 0}}]}}
+            return {"pid": pid, "snapshotMs": 440}, [first, {"ok": False, "error": "Unknown type"}]
+
+        broken = live(id="broken", select={"name": "x"})
+        ready, results = checks_live.run(7, "game", [live(), live(id="second", select={"type": "Other"}), broken], ("Name",),
+                                         None, reader)
+        self.assertEqual(len(asked), 1)
+        self.assertEqual(asked[0][0], {"op": "values", "type": "Phobos.Store", "paths": ["held.innerList[].stackCount", "orders#"],
+                                       "subclasses": False})
+        self.assertEqual([r.check.id for r in results], ["store", "second", "broken"])
+        store, second, broken_result = results
+        self.assertEqual([(f.row.label, f.text) for f in store.findings], [("HEMTT 1", "150 held for no orders")])
+        self.assertEqual(len(store.limits), 2)
+        self.assertIn("first 2 of 3", store.limits[0])
+        self.assertEqual(second.problem, "Unknown type")
+        self.assertIn("select takes type", broken_result.problem)
+        self.assertEqual(ready["snapshotMs"], 440)
+
+    def test_no_snapshot_is_taken_when_no_check_can_ask(self):
+        def reader(*args):
+            raise AssertionError("no snapshot should be taken")
+        _, results = checks_live.run(7, "game", [live(select={})], (), None, reader)
+        self.assertIn("needs \"type\"", results[0].problem)
 
 
 if __name__ == "__main__":

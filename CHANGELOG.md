@@ -4,6 +4,21 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.120.0] - 2026-11-25
+
+### Added
+
+- **Live checks: every check in a file answered from one snapshot of the running game** (the owner's "I especially want to do
+  #4", 25 Nov 2026). `rimworld-perf look-check` takes one Windows snapshot, reads each live check's values from every object of
+  its kind, lets the snapshot go and reports as save checks do; `checks_live.py` is game-free. The heap reader's new `values`
+  request reads named paths from every object of a kind in one pass: through links and structs, `[]` to open a list, set, array or
+  dictionary, and `#` to count one. Tested on the fixture program's real snapshot; not yet run on a game.
+
+### Fixed
+
+- **The heap reader shows a set's items**: .NET's HashSet names its entry fields with a capital (Next, Value), and the reader
+  looked for Dictionary's lower-case ones, so `object` showed a set with none.
+
 ## [1.119.0] - 2026-11-25
 
 ### Added

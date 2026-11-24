@@ -12,7 +12,8 @@ using Phobos.ModKit.Heap;
 //
 // Requests: {"op": "info"}, {"op": "overview"}, {"op": "kind", "type": NAME, "skip", "take", "sort": "size", "match"},
 // {"op": "object", "address": "0x...", "skip", "take"}, {"op": "holders", "address", "max"}, {"op": "path", "address"},
-// {"op": "why", "type": NAME, "sample"}, {"op": "release"}. Each may carry an "id", which its answer repeats.
+// {"op": "why", "type": NAME, "sample"}, {"op": "values", "type": NAME, "paths": [PATH...], "take", "items", "subclasses"},
+// {"op": "release"}. Each may carry an "id", which its answer repeats.
 //
 // Only the memory-reading library beside the program's own coreclr.dll is ever loaded, and only when that folder is the
 // RUNTIME-FOLDER named: the caller (a game's adapter) names the install it trusts. Progress goes to standard error as the kit's

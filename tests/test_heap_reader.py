@@ -15,6 +15,8 @@ import tempfile
 import unittest
 
 from support import FIXTURES
+from phobos_modkit import checks
+from phobos_modkit import checks_live
 from phobos_modkit import file_lock
 from phobos_modkit import heap_reader as hr
 from phobos_modkit import native
@@ -201,7 +203,7 @@ class Reading(unittest.TestCase):
         self.assertEqual(fields["Bonded"]["summary"], "Colonist 1 · Human")
         if orphans["count"]:    # a collection would have reclaimed them; none should have run
             self.assertTrue(orphans["noneReachable"])
-        self.assertEqual(colonists["paths"][0]["static"], "HeapFixture.Colony.Colonists")
+        self.assertIn(colonists["paths"][0]["static"], ("HeapFixture.Colony.Colonists", "HeapFixture.Colony.Squads"))
 
     def test_a_session_opens_holds_and_lets_go(self):
         session = hr.Session(self.pid, self.folder, ["Name"])
@@ -224,6 +226,49 @@ class Reading(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, self.assertRaises(hr.LookError) as caught:
             hr.run_requests(self.pid, tmp, [{"op": "overview"}])
         self.assertIn("not in the install named", str(caught.exception))
+
+    def test_values_read_named_paths_from_every_object_of_a_kind(self):
+        """The values request (1.120.0): fields through links and structs, [] to open a list, set or array, # to count."""
+        requests = [{"op": "values", "type": "HeapFixture.Colonist",
+                     "paths": ["Name", "Age", "Mood", "Drafted", "Position.Z", "def.defName", "Bonded", "Bonded.Name"]},
+                    {"op": "values", "type": "HeapFixture.Squad", "items": 2,
+                     "paths": ["Name", "Members[].Name", "Members#", "Scores[]", "Scores#", "Orders[]", "Posts[].Z",
+                               "Members[].Position.X", "Members[].Bonded.Name"]},
+                    {"op": "values", "type": "HeapFixture.Squad", "paths": ["Name.", "Members[]#"]}]
+        _, answers = hr.run_requests(self.pid, self.folder, requests, ["Name"])
+        colonists = hr.answer_data(answers[0])
+        self.assertEqual((colonists["count"], colonists["more"]), (12, False))
+        by_name = {i["values"]["Name"]: i["values"] for i in colonists["items"]}
+        first = by_name["Colonist 0"]
+        self.assertEqual((first["Age"], first["Mood"], first["Drafted"], first["Position.Z"], first["def.defName"]),
+                         ("20", "Content (0)", "true", "100", "Human"))
+        self.assertEqual((first["Bonded"], first["Bonded.Name"]), ("Colonist 1", "Colonist 1"))
+        self.assertIsNone(by_name["Colonist 2"]["Bonded"])
+        squads = {i["values"]["Name"]: i for i in hr.answer_data(answers[1])["items"]}
+        alpha = squads["Alpha"]["values"]
+        self.assertEqual(alpha["Members[].Name"], ["Colonist 0", "Colonist 2"])
+        self.assertEqual((alpha["Members#"], alpha["Scores#"]), (2, 3))
+        self.assertEqual(alpha["Scores[]"], ["3", "5"])     # two items asked for, of three
+        self.assertTrue(squads["Alpha"]["cut"])
+        self.assertEqual((alpha["Orders[]"], alpha["Posts[].Z"], alpha["Members[].Position.X"]), (["Hold"], ["2"], ["0", "2"]))
+        self.assertEqual(alpha["Members[].Bonded.Name"], ["Colonist 1"])   # the second member has no bond
+        empty = squads["Empty"]["values"]
+        self.assertEqual((empty["Members[].Name"], empty["Members#"], empty["Scores[]"]), ([], 0, []))
+        self.assertFalse(answers[2]["ok"])
+        self.assertIn("not a values path", answers[2]["error"])
+
+    def test_live_checks_judge_a_real_snapshot(self):
+        """Live checks (1.120.0) end to end: two checks, one snapshot."""
+        old = checks.parse_check({"id": "old", "title": "Nobody is over 30", "source": "live",
+                                  "select": {"type": "HeapFixture.Colonist"}, "read": {"age": "Age", "name": "Name"},
+                                  "fault": "age > 30", "says": "{name} is {age}"}, "test")
+        squads = checks.parse_check({"id": "squads", "title": "A squad has members", "source": "live",
+                                     "select": {"type": "HeapFixture.Squad"}, "read": {"members": "Members#", "name": "Name"},
+                                     "fault": "members == 0", "says": "{name} has nobody", "level": "look"}, "test")
+        ready, results = checks_live.run(self.pid, self.folder, [old, squads], ["Name"])
+        self.assertEqual(ready["pid"], self.pid)
+        self.assertEqual([[f.text for f in r.findings] for r in results], [["Colonist 11 is 31"], ["Empty has nobody"]])
+        self.assertEqual([r.read for r in results], [12, 2])
 
 
 if __name__ == "__main__":

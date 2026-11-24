@@ -23,6 +23,7 @@ python -m phobos_modkit rimworld-perf look --label "day 40"        every object 
 python -m phobos_modkit rimworld-perf look-kind Verse.Pawn --open   one kind's objects, each described, and the first in full
 python -m phobos_modkit rimworld-perf look-why System.Xml.XmlDocument   why a kind is still in memory
 python -m phobos_modkit rimworld-perf look-serve                    hold a snapshot; one JSON request a line on standard input
+python -m phobos_modkit rimworld-perf look-check                    a repository's live checks, all from one snapshot
 ```
 
 ## Outputs
@@ -37,6 +38,14 @@ python -m phobos_modkit rimworld-perf look-serve                    hold a snaps
 | `holders` | The objects that point to it, and through which field or array slot; whether it is a root; the static field that holds it |
 | `path` | One path from a root down to it, starting at the static field on the way when there is one |
 | `why` | Paths from roots to a kind's largest objects (up to 2,000 checked), each to a different one; or that nothing holds them |
+| `values` | Named paths read from every object of a kind (1.120.0, for [live checks](checks.md)): `{"op": "values", "type": NAME, "paths": [...]}`, with `take` (objects, default 5,000), `items` (items opened per path on one object, default 1,000) and `subclasses` (objects of kinds below it too). Each object gives its address, summary and a value for each path; `more` says objects were left out, and an object's `cut` that a list was |
+
+**A values path** follows fields by name, joined by dots, through links and structs (`parent.def.defName`, `Position.Z`). `[]`
+after a name opens a list, array, set or dictionary into its items (a dictionary's values), and the rest of the path is read from
+each item (`Members[].Name`); a final `#` gives a collection's count without reading its items (`Members#`). A path that opened
+anything answers with a list; one that did not, with one value or null (a null link on the way, or a field the object's kind does
+not have). Values come as text, as `object` gives them (an enum as its name and number); a link at the end gives its summary. A
+struct at the end gives null: name one of its fields.
 
 `look` keeps its overview as a heap in `rimworld-heaps/`, so `heap-report` reads it again and `heap-compare` sets it beside another
 `look` or a gcdump heap (mind that a gcdump forces a collection first and a snapshot does not). `look-serve` is for a program's page
