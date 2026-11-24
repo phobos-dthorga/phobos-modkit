@@ -98,7 +98,8 @@ class Sighting:
 
 @dataclass
 class Note:
-    """One seen-in-play line. `on`, `kind`, `variant` and `values` are optional (1.19.0); older lines have none."""
+    """One seen-in-play line. `on`, `kind`, `variant` and `values` are optional (1.19.0); older lines have none. A note read from a
+    save's history (1.121.0) carries its game `tick`, which orders notes sharing one save's time, and `source` "save"."""
     key: str
     time: str
     mod: str = ""
@@ -108,6 +109,8 @@ class Note:
     kind: str = ""
     variant: str = ""
     values: dict = field(default_factory=dict)
+    tick: int = None
+    source: str = ""
 
 
 @dataclass
@@ -432,20 +435,36 @@ def _figures(values):
     return {str(k): v for k, v in values.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
 
 
-def read_notes(paths):
-    """Every note, in the order written, and how many lines could not be read."""
+def note_from(line):
+    """A Note from one line's object, or None when it has no key or time."""
+    key, time = str(line.get("key") or ""), str(line.get("time") or "")
+    if not key or not time:
+        return None
+    tick = line.get("tick")
+    return Note(key, time, str(line.get("mod") or ""), str(line.get("version") or ""), str(line.get("detail") or ""),
+                str(line.get("on") or ""), str(line.get("kind") or ""), str(line.get("variant") or ""), _figures(line.get("values")),
+                tick if isinstance(tick, int) and not isinstance(tick, bool) else None, str(line.get("source") or ""))
+
+
+def read_notes(paths, extra=()):
+    """Every note, in the order written, then the extra notes' objects (saved histories, 1.121.0), and how many lines could not
+    be read."""
     notes, bad = [], 0
     for path in paths:
         lines, unread = _lines(path)
         bad += unread
         for line in lines:
-            key, time = str(line.get("key") or ""), str(line.get("time") or "")
-            if not key or not time:
+            note = note_from(line)
+            if note is None:
                 bad += 1
-                continue
-            notes.append(Note(key, time, str(line.get("mod") or ""), str(line.get("version") or ""), str(line.get("detail") or ""),
-                              str(line.get("on") or ""), str(line.get("kind") or ""), str(line.get("variant") or ""),
-                              _figures(line.get("values"))))
+            else:
+                notes.append(note)
+    for line in extra:
+        note = note_from(line)
+        if note is None:
+            bad += 1
+        else:
+            notes.append(note)
     return notes, bad
 
 
@@ -585,7 +604,8 @@ def check_order(rules, notes):
                 by_thing.setdefault(note.on, []).append(note)
         for on in sorted(by_thing):
             warned = False
-            for note in sorted(by_thing[on], key=lambda n: n.time):
+            # Within one time, a saved history's tick says which came first (1.121.0): its notes share their save's time.
+            for note in sorted(by_thing[on], key=lambda n: (n.time, n.tick if n.tick is not None else -1)):
                 if rule.first.matches(note):
                     warned = True
                 if rule.then.matches(note):
@@ -595,8 +615,9 @@ def check_order(rules, notes):
     return problems, unchecked
 
 
-def gather(root, seen_paths, verdict_paths, config=None, given=(), decision_paths=()):
-    """Everything the reports need. <given> are verdicts from the command line; each replaces the file's for its row."""
+def gather(root, seen_paths, verdict_paths, config=None, given=(), decision_paths=(), extra_notes=()):
+    """Everything the reports need. <given> are verdicts from the command line; each replaces the file's for its row.
+    <extra_notes> are note objects from elsewhere than a file: a game's saved histories (1.121.0)."""
     config = config or load_config(root)
     doc = Path(root) / config["doc"]
     try:
@@ -606,7 +627,7 @@ def gather(root, seen_paths, verdict_paths, config=None, given=(), decision_path
     mapping = parse_mapping(config)
     rules = parse_order(config)
     prefixes = tuple(config.get("prefixes", {}))
-    notes, bad_seen = read_notes(seen_paths)
+    notes, bad_seen = read_notes(seen_paths, extra_notes)
     verdicts, bad_verdicts = read_verdicts(verdict_paths)
     decisions, bad_decisions = read_decisions(decision_paths)
     for verdict in given:

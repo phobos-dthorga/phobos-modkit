@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.121.0] - 2026-11-25
+
+### Added
+
+- **test-pass reads saved histories as notes** (the owner's choice of 25 Nov 2026). Lists a mod keeps in its saves (phobos-rimworld's
+  vehicle event logs and logbooks) become notes in the seen-in-play format when the evidence map names them under `saved`, judged
+  beside the game's own: every occurrence, where the game's notes are once a session per thing and case. A mod's version ledger in
+  the save says which version ran at each item's tick; an item older than the ledger counts as stale for any row naming a version.
+  `--no-saves` leaves them out. RimWorld only, so far: [saved histories](docs/test-pass.md#saved-histories).
+
 ## [1.120.0] - 2026-11-25
 
 ### Added

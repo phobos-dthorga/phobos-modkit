@@ -77,6 +77,8 @@ def _parser():
         s.add_argument("--settings", help="a JSON settings file naming paths")
         s.add_argument("--verdict", action="append", default=[], metavar="ROW:WORD[:NOTE]",
                        help="a verdict the owner gave in conversation (WORD passed, partial or failed; repeatable)")
+        s.add_argument("--no-saves", action="store_true",
+                       help="leave out the saves' histories, when the evidence map names them (1.121.0); faster")
         s.add_argument("--all", action="store_true", help="list every row, not only those waiting")
         s.add_argument("--top", type=int, default=40, help="rows per table (default 40)")
         s.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
@@ -120,7 +122,7 @@ def _figures(values):
 
 def _note_data(note):
     return {"key": note.key, "time": note.time, "mod": note.mod, "version": note.version, "detail": note.detail, "on": note.on,
-            "kind": note.kind, "variant": note.variant, "values": note.values}
+            "kind": note.kind, "variant": note.variant, "values": note.values, "tick": note.tick, "source": note.source or "game"}
 
 
 def _kinds_words(kinds):
@@ -168,6 +170,32 @@ def _unrowed_data(evidence):
         rows.append({"key": key, "count": sighting.count, "last": sighting.last, "detail": sighting.detail,
                      "decision": decision.decision if decision else None, "note": decision.note if decision else ""})
     return rows
+
+
+def saved_notes(config, environ, settings, skip=False):
+    """(notes, saves read, a sentence for the report or None): the saves' histories when the evidence map names them and the
+    game's adapter reads them (1.121.0). A missing Saves folder or unreadable save is a sentence, not a failure: the game's own
+    notes still count."""
+    saved, game = config.get("saved"), config.get("game")
+    if not saved or not game:
+        return [], [], None
+    if skip:
+        return [], [], "The saves' histories were left out (--no-saves)."
+    try:
+        adapter = import_module(f".games.{game}.saved_notes", __package__)
+    except ImportError:
+        return [], [], f"The game {game} has no reader for saved histories, so its saves were not read."
+    try:
+        notes, read = adapter.for_test_pass(saved, environ, settings, Progress(environ))
+    except adapter.SavedError as error:
+        raise testpass.TestPassError(f"{testpass.CONFIG}: {error}") from None
+    except Exception as error:  # noqa: BLE001 - a save that cannot be read must not stop the report
+        return [], [], f"The saves' histories could not be read ({error})."
+    with_ledger = sum(1 for _, _, ledger in read if ledger)
+    sentence = (f"{len(notes):,} notes read from the histories in the newest {len(read):,} saves"
+                + (f"; {len(read) - with_ledger:,} of them hold no version ledger, so their notes count as stale for any row naming a "
+                   "version" if with_ledger < len(read) else "") + ".")
+    return notes, read, sentence
 
 
 def build_report(evidence, changed=None, applied=False, everything=False, top=40, map_problems=()):
@@ -270,7 +298,8 @@ def main(argv=None, environ=None, out=None, now=None):
         decisions = decisions_path(root, args.decisions, environ, args.settings)
         stamp = (now or datetime.now(timezone.utc)).isoformat()
         given = [testpass.parse_verdict(text, stamp) for text in args.verdict]
-        evidence = testpass.gather(root, seen, [verdicts], config, given, [decisions])
+        from_saves, saves_read, saves_sentence = saved_notes(config, environ, args.settings, args.no_saves)
+        evidence = testpass.gather(root, seen, [verdicts], config, given, [decisions], from_saves)
         problems = testpass.map_problems(config)
     except testpass.TestPassError as error:
         print(redact(str(error)), file=sys.stderr)
@@ -284,10 +313,13 @@ def main(argv=None, environ=None, out=None, now=None):
             with open(doc, "w", encoding="utf-8", newline="") as fh:
                 fh.write(written)
     report = build_report(evidence, changed, bool(getattr(args, "apply", False)), args.all, args.top, problems)
+    if saves_sentence:
+        report.lines.insert(2, saves_sentence)
     data = {"doc": config["doc"], "seen_files": [str(p) for p in seen], "verdicts_file": str(verdicts),
             "decisions_file": str(decisions), "rows": [_row_data(r, evidence) for r in evidence.rows],
             "order_problems": [_order_data(o) for o in evidence.order], "unchecked_order": evidence.unchecked_order,
-            "unrowed": _unrowed_data(evidence), "map_problems": problems}
+            "unrowed": _unrowed_data(evidence), "map_problems": problems,
+            "saves_read": [{"save": name, "notes": count, "ledger": ledger} for name, count, ledger in saves_read]}
     out.write((envelope_text("test-pass", report, redact, data) if args.json else render_markdown(report, redact)) + "\n")
     return EXIT_OK
 

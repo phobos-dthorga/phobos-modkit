@@ -43,6 +43,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--decisions VALUE` | `report`, `apply` | the owner's decisions on notes no row names (default: D'thorga Companion's) |  |
 | `--settings VALUE` | `report`, `apply` | a JSON settings file naming paths |  |
 | `--verdict ROW:WORD[:NOTE]` | `report`, `apply` | a verdict the owner gave in conversation (WORD passed, partial or failed; repeatable) |  |
+| `--no-saves` | `report`, `apply` | leave out the saves' histories, when the evidence map names them (1.121.0); faster |  |
 | `--all` | `report`, `apply` | list every row, not only those waiting |  |
 | `--top N` | `report`, `apply` | rows per table (default 40) | `40` |
 | `--apply` | `apply` | write the test list; without it, only show what would change |  |
@@ -66,6 +67,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `shared` | Keys with nothing narrowing them that stand for more than one row on purpose, with why |
 | `unrowed` | Keys that need no row, with why |
 | `versionNames` | How each mod is written in rows (`{"D'thorga Framework": "Framework"}`, or a list), for sightings older than the row |
+| `saved` | Optional (1.121.0): lists a mod keeps in its saves to read as notes too. See [Saved histories](#saved-histories) |
 
 **A piece of evidence** is a key, or an object narrowing it:
 
@@ -102,6 +104,38 @@ thing that is; `variant`, which case of the feature; `values`, figures by name a
 ```json
 {"format":1,"time":"2026-11-19T12:00:00Z","key":"vehicles.grid-hook-up","mod":"D'thorga Framework","version":"0.138.0","detail":"M2A3 Bradley: 960 W","on":"Vehicle_M2A3Bradley412","kind":"M2A3Bradley","values":{"W":960,"loadsA":30,"chargingA":4}}
 ```
+
+### Saved histories
+
+A mod may keep lists of what happened in its saves: phobos-rimworld's vehicles keep an event log (each stage entered, fault, service
+and jump-start, with its tick) and a logbook. **Named under `saved`, each list's items become notes** in the format above, judged
+beside the game's own notes by the same map: expectations, parts and order rules. They need no setting in the game, and catch
+every occurrence where the game's notes are once a session per thing and case. RimWorld only, so far (`games/rimworld/saved_notes.py`).
+
+```json
+"saved": {"saves": 4, "ledger": "PhobosFramework_VersionLedger", "sources": [
+  {"name": "vehicle events", "mod": "D'thorga Framework", "select": {"class": "Vehicles.VehiclePawn"},
+   "list": "PhobosVehicleSystems_Events", "tick": "tick", "defaults": {"kind": "Stage"},
+   "keyBy": "kind", "keys": {"Stage": "saved.vehicle-stage.{detail}", "Fault": "saved.vehicle-fault.{detail}"},
+   "variant": "{stage}", "detail": "{system} {detail} stage {stage}"}]}
+```
+
+| Field | What it holds |
+| --- | --- |
+| `saves` | How many of the newest saves to read (default 4) |
+| `ledger` | The mod's version ledger, by the name its save gives the list: lines `tick\|mod name\|version`, one each time a version began running |
+| `sources` | Each list to read: `name`; `mod` (as notes name it); `select` (which things keep it, as for [save checks](checks.md)); `list` (its name in the thing's saved data, items `li[N]`); `tick` (the item's field holding its tick) |
+| a source's `key` | The note's key, with `{field}` filled from the item (and `{thing}`, `{thingDef}`); or `keyBy`, a field, and `keys`, a template for each of its values (an item whose value has none is left out) |
+| a source's `defaults` | Fields an item leaves out when they hold their default (RimWorld writes no field at its default: an event's kind Stage) |
+| a source's `variant`, `detail`, `values` | The note's case and detail, as templates, and figures: `{"name": "field"}` |
+
+**Which version wrote an item:** the version the ledger says was running at its tick. **An item older than the ledger's first line
+is version "0"**, so it counts as stale for any row naming a version. **The same item in several saves is one note**, from the oldest
+save holding it: its time is that save's, and its `tick` orders it among the notes of the same time. A note read from a save carries
+`"source": "save"` and the save's name.
+
+`report` and `apply` read them unless given `--no-saves`. A save that cannot be read leaves a sentence in the report, and the game's
+own notes still count. Reading a save for the first time indexes it (a few seconds for 450 MB); later runs reuse the index.
 
 ### The owner's decisions on notes no row names
 
