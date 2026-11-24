@@ -103,6 +103,7 @@ recorders are out of scope) are in `AGENTS.md`, "What belongs here".
 | `installs.py`, `install_checks.py`, `backup_archive.py` | A repository's installed mods, their records and zipped backups, and what moving between them changes |
 | `changes.py`, `history.py`, `makeup.py`, `pins.py`, `repos.py` | The code behind a changelog entry; products over time; what a repository is made of; kit pins; each repository against its remote |
 | `testpass.py`, `testpass_code.py`, `artaudit.py` | The in-game test list with its evidence and verdicts; every shipped image with its record |
+| `checks.py` | Rules written as data that say when a game's saved or running state is wrong: a small safe language, judging and the report; adapters read the values ([checks](checks.md)) |
 | `claims.py`, `decisions.py`, `picks.py`, `screen_notes.py` | The boards agent sessions and the owner share: claims, questions, picture and sound picks, notes on the Companion |
 | `safe_copies.py`, `safe_copies_daily.py`, `records.py`, `cleanup.py`, `programs.py`, `feeds.py`, `issue_links.py`, `game_files.py`, `rules.py`, `source_clones.py` | Copies of what cannot be made again; leftovers; other programs; published feeds; where a fault is reported; what a game writes; the shared rules; lean clones of other authors' source |
 | `games_list.py`, `mcp.py` | The owner's games list as D'thorga Companion keeps it; the reports that read, offered to AI programs over the Model Context Protocol |

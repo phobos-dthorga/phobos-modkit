@@ -50,6 +50,7 @@ python -m phobos_modkit rimworld-save diff Autosave-12               what change
 python -m phobos_modkit rimworld-save diff PG2 --component "*RimPacts*"   the same, one mod's state only
 python -m phobos_modkit rimworld-save mood                           where the colony's mood suffers, and who may break
 python -m phobos_modkit rimworld-save mood --pawn Annie              one pawn's remembered events and needs
+python -m phobos_modkit rimworld-save checks --checks config/checks.json   a repository's rules over the save
 python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP BY def"
 ```
 
@@ -76,6 +77,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `atlas` | The whole world map for a program to draw: biomes, climate, terrain, pollution, places, roads and rivers. | reads only |
 | `mood` | Where the colony's mood suffers: who may break, what hurts and helps most, low needs and addictions. | reads only |
 | `diff` | What changed between this save and another. | reads only |
+| `checks` | A repository's save checks run over the save: states its rules say should never be. | reads only |
 | `sql` | Any read-only SQL query over the index. | reads only |
 
 | Option | Reports | What it does | Default |
@@ -148,6 +150,8 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `OTHER` | `diff` | the save to compare with (a name or path), usually an earlier one |  |
 | `--faction VALUE` | `diff` | whose pawns and hediffs to compare: player (default), any, or a faction's name or def | `player` |
 | `--component VALUE` | `diff` | compare only components whose class matches, e.g. \*RimPacts\* |  |
+| `--checks VALUE` | `checks` | the check file (default: config/checks.json in the current folder) | `config/checks.json` |
+| `--check VALUE` | `checks` | only checks whose id matches; \* and ? are wildcards |  |
 | `QUERY` | `sql` | one read-only SQL statement, in quotes |  |
 
 - Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
@@ -201,6 +205,7 @@ one. That tie order is approximated, so names whose number moved are marked `(?)
 | `grid` | A map's layers counted: terrain, foundations (bridges and the like), roofs, each gas, fog, snow, pollution and deep resources; one layer in full with a text picture (north up); or every layer at one cell with the things standing there | `--map`, `--kind`, `--render`, `--gas`, `--columns`, `--at X,Z`, `--area X1,Z1,X2,Z2`, `--no-names` |
 | `mood` | Where the colony's mood suffers: each pawn's mood against its break thresholds, the remembered events that cost the colony most and help it most, needs running low, and addictions and drug needs, with charts; `--pawn` gives one pawn's events and needs in full. See [Mood](#mood) for what a save cannot show | `--who` (`all`, `colonists`, `slaves`, `prisoners`), `--pawn`, `--patched-defs`, `--mood-file`, `--no-mood-file`, `--game`, `--workshop`, `--config`, `--no-defs` |
 | `diff OTHER` | What changed since another save: counts, things that appeared and went by def, stacks that grew or shrank, pawns that moved, arrived or left, pawns' hediffs gained, lost, worse or better, world objects that changed faction, appeared or went, and component values that changed and lists that grew or shrank | `--faction` (`player` by default, `any`, or a faction), `--component` |
+| `checks` | A repository's save checks run over the save: rules written as data saying what should never be, each with what breaks it. The file, its language and RimWorld's own kinds (NaN and infinity; references to things the save does not hold): [checks](checks.md) | `--checks FILE` (default `config/checks.json`), `--check ID` |
 | `sql QUERY` | Any query; the index is opened read-only, so nothing can change it | |
 
 ### Mood

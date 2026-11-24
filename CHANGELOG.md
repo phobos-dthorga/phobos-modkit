@@ -4,6 +4,22 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.119.0] - 2026-11-25
+
+### Added
+
+- **Checks: rules written as data that say when a game's state is wrong** (the owner's choice of 25 Nov 2026, after the HEMTT
+  in phobos-rimworld held 975 steel in its work store for a day before anyone noticed). A check file names what to read and a
+  condition that makes it a fault, in a small language that can never run code (`checks.py`); `rimworld-save checks` runs a
+  repository's save checks over a save. RimWorld's adapter adds two kinds with no rule of their own: values saved as NaN or
+  infinity, and references to things the save does not hold. Run over PG20, the first save the HEMTT's pile was in, it finds it.
+  How to write one: [checks](docs/checks.md).
+
+### Changed
+
+- **A thing another holds keeps its def, ID and stack count** in `rimworld-save thing`'s values and in checks, at the paths its
+  own XML would give, read from the index; before, only a line saying it was left out.
+
 ## [1.118.0] - 2026-11-25
 
 ### Added

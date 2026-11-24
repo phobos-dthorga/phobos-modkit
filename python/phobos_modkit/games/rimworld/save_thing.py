@@ -71,6 +71,11 @@ def flatten(element):
     def walk(node, path):
         if HELD in node.attrib:
             rows.append((path, f"held thing {node.get(HELD)} ({node.get('def')}), left out"))
+            # What the index knows of it, at the paths its own XML would give (1.119.0), so a check can count a store's stacks.
+            rows.append((f"{path}/def", node.get("def") or ""))
+            rows.append((f"{path}/id", node.get(HELD) or ""))
+            if node.get("stack"):
+                rows.append((f"{path}/stackCount", node.get("stack")))
             return
         for name, value in node.attrib.items():
             rows.append((f"{path}@{name}", value))
@@ -115,13 +120,27 @@ def _read_slice(save, meta, start, end):
 
 def _cut_held(data, start, held):
     """data with each held thing's bytes replaced by an empty element of the same tag naming it, so paths stay as saved."""
-    for thing_id, def_, h_start, h_end in sorted(held, key=lambda h: h[2], reverse=True):
+    for thing_id, def_, h_start, h_end, *rest in sorted(held, key=lambda h: h[2], reverse=True):
         a, b = h_start - start, h_end - start
         tag = re.match(rb"<([^\s/>]+)", data[a:b]) if 0 <= a < b <= len(data) else None
         if tag:
-            stand_in = f'<{tag.group(1).decode("utf-8")} {HELD}="{thing_id}" def="{def_}" />'
+            stack = f' stack="{rest[0]}"' if rest and rest[0] is not None else ""
+            stand_in = f'<{tag.group(1).decode("utf-8")} {HELD}="{thing_id}" def="{def_}"{stack} />'
             data = data[:a] + stand_in.encode("utf-8") + data[b:]
     return data
+
+
+def values_of(conn, save, meta, row_id, start, end):
+    """(path, value) for every value one thing saved, the things it holds left out (1.119.0, for checks and saved histories).
+    row_id, start and end are its index row's id and its place in the save."""
+    if start is None or end is None:
+        raise ThingError("The index does not say where things sit in the save. Run this again with --rebuild.")
+    held = conn.execute("SELECT thing_id, def, start, \"end\", stack FROM thing WHERE holder = ? ORDER BY id", (row_id,)).fetchall()
+    data = _cut_held(_read_slice(save, meta, start, end), start, held)
+    try:
+        return flatten(ET.fromstring(data))
+    except ET.ParseError as problem:
+        raise ThingError(f"A thing's part of the save could not be read as XML ({problem}).") from None
 
 
 def thing(conn, save, meta, thing_id, path=None, value=None, include_held=False, top=50):
@@ -146,7 +165,7 @@ def thing(conn, save, meta, thing_id, path=None, value=None, include_held=False,
                          "Name the save with --save.")
     if start is None or end is None:
         raise ThingError("The index does not say where this thing sits in the save. Run this again with --rebuild.")
-    held = conn.execute("SELECT thing_id, def, start, \"end\" FROM thing WHERE holder = ? ORDER BY id",
+    held = conn.execute("SELECT thing_id, def, start, \"end\", stack FROM thing WHERE holder = ? ORDER BY id",
                         (row_id,)).fetchall()
     data = _read_slice(save, meta, start, end)
     if not include_held:

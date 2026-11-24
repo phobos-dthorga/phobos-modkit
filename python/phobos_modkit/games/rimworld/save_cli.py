@@ -19,6 +19,7 @@
     python -m phobos_modkit rimworld-save diff Autosave-3             what changed since another save
     python -m phobos_modkit rimworld-save mood                        where the colony's mood suffers, and who may break
     python -m phobos_modkit rimworld-save mood --pawn Annie           one pawn's remembered events and needs
+    python -m phobos_modkit rimworld-save checks --checks config/checks.json   wrong states a repository's rules name
     python -m phobos_modkit rimworld-save sql "SELECT def, COUNT(*) FROM thing GROUP BY def"
 
 The first question about a save indexes a frozen copy of it (about a second and a half for 300 MB with the
@@ -53,12 +54,14 @@ from . import save as saves
 from . import save_diff
 from . import save_maps
 from . import save_reports as reports
+from . import save_checks
 from . import save_thing
+from ... import checks as check_engine
 from ...manifest import READS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 REPORTS = ("summary", "index", "schema", "things", "pawns", "hediffs", "find", "thing", "world", "components", "grid", "planet", "terrain",
-           "atlas", "mood", "diff", "sql")
+           "atlas", "mood", "diff", "checks", "sql")
 
 
 def _parser():
@@ -174,6 +177,11 @@ def _parser():
     d.add_argument("--faction", default="player", help="whose pawns and hediffs to compare: player (default), any, "
                                                        "or a faction's name or def")
     d.add_argument("--component", help="compare only components whose class matches, e.g. *RimPacts*")
+    ck = sub.add_parser("checks", parents=[common], help="a repository's save checks run over the save: states its rules say "
+                                                         "should never be")
+    ck.add_argument("--checks", dest="checks_file", default="config/checks.json",
+                    help="the check file (default: config/checks.json in the current folder)")
+    ck.add_argument("--check", help="only checks whose id matches; * and ? are wildcards")
     q = sub.add_parser("sql", parents=[common], help="any read-only SQL query over the index")
     q.add_argument("query", help="one read-only SQL statement, in quotes")
     return p
@@ -299,6 +307,25 @@ def _planet(conn, args, environ, settings_file, cache, top):
         raise saves.SaveError(str(problem)) from None
 
 
+def _checks(conn, args, save, meta):
+    """The save checks' report; its findings ride along for the JSON envelope's data."""
+    if save is None:
+        raise saves.SaveError("Checks read the save itself, which an index read with --index alone does not give. Name the save "
+                              "with --save.")
+    try:
+        chosen = check_engine.load_checks(args.checks_file, "save", save_checks.KINDS)
+    except check_engine.CheckError as problem:
+        raise saves.SaveError(str(problem)) from None
+    if args.check:
+        chosen = [c for c in chosen if fnmatch.fnmatch(c.id.lower(), args.check.lower())]
+    results = save_checks.run(conn, save, meta or {}, chosen)
+    report = check_engine.report("Save checks", results,
+                                 caveat="Read from the save, from a frozen copy. A finding is a state the rules say should not "
+                                        "happen; it is not an in-game test, and a check can be wrong.")
+    report.check_data = check_engine.data(results)
+    return report
+
+
 def _report(conn, args, environ=None, settings_file=None, other=None, save=None, meta=None):
     top = args.top
     if args.report == "thing":
@@ -334,6 +361,8 @@ def _report(conn, args, environ=None, settings_file=None, other=None, save=None,
         return _atlas(conn, args, environ, settings_file, top)
     if args.report == "mood":
         return _mood(conn, args, environ, settings_file, top)
+    if args.report == "checks":
+        return _checks(conn, args, save, meta)
     if args.report == "diff":
         other_index, other_name, this_name = other
         return save_diff.diff(conn, Path(other_index).resolve().as_uri() + "?mode=ro", other_name, this_name,
@@ -416,9 +445,9 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     counts = {} if built is None else {t: n for t, n in built.rows.items() if n and not t.startswith("mod_")}
 
     if args.json:
-        out.write(envelope_text("rimworld-save", report, redact,
-                                {"save": source, "index": str(index), "built": built is not None,
-                                 "elements": counts}) + "\n")
+        extra = {"save": source, "index": str(index), "built": built is not None, "elements": counts}
+        extra.update(getattr(report, "check_data", {}))     # the checks report's findings, for a program
+        out.write(envelope_text("rimworld-save", report, redact, extra) + "\n")
     else:
         out.write(render_markdown(report, redact) + "\n")
     return EXIT_OK
@@ -440,4 +469,5 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
     "terrain": {"question": "How high do my places stand, and how rough is the land around them?"},
     "atlas": {"question": "What does my world look like?", "surface": "globe"},
     "mood": {"question": "Where is my colony's mood suffering?"},
+    "checks": {"question": "Is anything in my save in a state it should never be?"},
 }}
