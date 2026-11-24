@@ -8,7 +8,8 @@ process, the install it trusts and how its objects are described; RimWorld's is 
 from __future__ import annotations
 
 from . import heap_reader as hr
-from .checks import Result, Row, judge
+from .checks import Result, Row, data, judge, report
+from .report import Fact, render_json
 
 SELECT_KEYS = ("type", "subclasses", "take", "items")
 CAVEAT = ("Read from one snapshot of the running game: it paused for the moment the snapshot took, then ran on, and nothing was "
@@ -51,18 +52,48 @@ def rows_of(check, data):
     return rows, limits
 
 
-def run(pid, runtime_folder, checks, describe=(), environ=None, run_requests=hr.run_requests):
-    """(the reader's first line, a Result for each live check). One snapshot answers them all. Raises heap_reader.LookError when
-    no snapshot could be taken."""
+def _asked(checks):
+    """([(check, its request)], [a Result for each check that cannot ask])."""
     results, asked = [], []
     for check in checks:
         try:
             asked.append((check, request_for(check)))
         except ValueError as problem:
             results.append(Result(check, problem=str(problem)))
+    return asked, results
+
+
+def run(pid, runtime_folder, checks, describe=(), environ=None, run_requests=hr.run_requests):
+    """(the reader's first line, a Result for each live check). One snapshot answers them all. Raises heap_reader.LookError when
+    no snapshot could be taken."""
+    asked, results = _asked(checks)
     if not asked:
         return {}, results
     ready, answers = run_requests(pid, runtime_folder, [request for _, request in asked], describe, environ)
+    return ready, _judged(checks, asked, answers, results)
+
+
+def run_held(checks, ask):
+    """A Result for each live check, asked of a snapshot already held (1.123.0, look-serve's checks request): ask(request) gives the
+    reader's answer. Raises heap_reader.LookError when the snapshot is let go meanwhile."""
+    asked, results = _asked(checks)
+    return _judged(checks, asked, [ask(request) for _, request in asked], results)
+
+
+def held_answer(checks, files, ask, redact=None):
+    """look-serve's checks answer (1.123.0): every live check asked of the snapshot held, as data for a program's page: the check
+    data, and the report under "report" as a program reads any report."""
+    results = run_held(checks, ask)
+    report = checks_report(results, files)
+    return dict(data(results), report=render_json(report, redact))
+
+
+def checks_report(results, files):
+    """The live checks' report, naming the check files it ran."""
+    return report("Live checks", results, facts=[Fact("Checks", ", ".join(files))], caveat=CAVEAT)
+
+
+def _judged(checks, asked, answers, results):
     for (check, _), answer in zip(asked, answers):
         if not answer.get("ok"):
             results.append(Result(check, problem=answer.get("error") or "The heap reader could not answer."))
@@ -71,4 +102,4 @@ def run(pid, runtime_folder, checks, describe=(), environ=None, run_requests=hr.
         results.append(judge(check, rows, limits))
     order = {c.id: n for n, c in enumerate(checks)}
     results.sort(key=lambda r: order[r.check.id])
-    return ready, results
+    return results

@@ -75,9 +75,11 @@ def refuse(message, stdout=None):
 
 
 def serve(pid, folder, heaps_root, owners_for, label="", limit_seconds=hr.LIMIT_SECONDS, top=200, stdin=None, stdout=None,
-          session_class=hr.Session, now=None):
+          session_class=hr.Session, now=None, checks_answer=None):
     """Hold a snapshot and answer one JSON request a line from stdin, one answer a line on stdout (the reader's requests). An
-    overview's answer gains who each type belongs to, and is kept as a heap for heap-compare. Returns an exit code."""
+    overview's answer gains who each type belongs to, and is kept as a heap for heap-compare. `{"op": "checks"}` (1.123.0) runs
+    every live check from the snapshot held: checks_answer(ask) gives its data, ask being one request to the held snapshot.
+    Returns an exit code."""
     stdin, stdout = stdin or sys.stdin, stdout or sys.stdout
 
     def say(message):
@@ -97,7 +99,12 @@ def serve(pid, folder, heaps_root, owners_for, label="", limit_seconds=hr.LIMIT_
             try:
                 request = json.loads(line)
                 given = request.pop("id", None)
-                answer = session.ask(request)
+                if request.get("op") == "checks":
+                    if checks_answer is None:
+                        raise ValueError("These tools have no live checks to run.")
+                    answer = {"ok": True, "data": checks_answer(session.ask)}
+                else:
+                    answer = session.ask(request)
                 if request.get("op") == "overview" and answer.get("ok"):
                     data = answer["data"]
                     kept, heap = save_overview(heaps_root, session.ready, data, label, now)

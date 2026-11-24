@@ -53,7 +53,7 @@ from ...dotnet_snapshots import SnapshotError
 from ... import process_memory as pm
 from ...manifest import READS, RUNS, WRITES
 from ...progress import Progress
-from ...report import Fact, Report, Table, envelope_text, home_redactor, keep, render_markdown
+from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
 from ...sampling import CPU, MOD, UNKNOWN, Recording, SamplingError, index_speedscope, modules, read_counters, write_counters, write_owners
 from ... import heap_reader as hreader
 from ... import checks as check_engine
@@ -578,10 +578,20 @@ def _look_check(args, environ, settings_file, run, run_requests=None):
     pid = _pid(args, run, "RimWorld is not running. Load the save you want to check first.")
     ready, results = checks_live.run(pid, look.runtime_folder(args.game, environ, settings_file), chosen, look.DESCRIBE, environ,
                                      run_requests or hreader.run_requests)
-    report = check_engine.report("Live checks", results, facts=[Fact("Checks", ", ".join(files))], caveat=checks_live.CAVEAT)
+    report = checks_live.checks_report(results, files)
     if ready.get("snapshotMs") is not None:
         report.lines.insert(1, f"The snapshot paused the game for {ready['snapshotMs']:,} ms.")
     return report, check_engine.data(results)
+
+
+def _held_checks(environ, redact):
+    """look-serve's checks request (1.123.0): every live check, answered from the snapshot already held, as data for a program's
+    page: the check data, and the report under "report" as render_json gives it. A check file that cannot be used is a ValueError,
+    which serve answers in words."""
+    def answer(ask):
+        chosen, files = check_engine.load_files(check_engine.check_files("rimworld", None, environ), "live")
+        return checks_live.held_answer(chosen, files, ask, redact)
+    return answer
 
 
 def _watch(args, environ, settings_file, run, popen, now, sleep, clock):
@@ -676,7 +686,7 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
             _, heaps_root = snap.roots(args.cache, environ, settings_file)
             return look.serve(pid, look.runtime_folder(args.game, environ, settings_file), heaps_root,
                               lambda names: _owners(names, args, environ, settings_file), args.label or "", args.limit_seconds,
-                              stdout=out)
+                              stdout=out, checks_answer=_held_checks(environ, redact))
         elif args.report in ("look", "look-kind", "look-why"):
             report, data = _look(args, environ, settings_file, run, now or datetime.now())
         elif args.report == "look-check":

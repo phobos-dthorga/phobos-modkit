@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.123.0] - 2026-11-25
+
+### Added
+
+- **`look-serve` runs the live checks from the snapshot it holds** (`{"op": "checks"}`), for D'thorga Companion's Explorer page:
+  the person's one snapshot answers them, with no second pause. Its data is the check data with the report under `report`.
+  [The heap reader](docs/heap-reader.md).
+
 ## [1.122.0] - 2026-11-25
 
 ### Changed

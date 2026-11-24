@@ -134,6 +134,29 @@ class Relay(unittest.TestCase):
         self.assertNotIn("forced a full garbage collection", text)
         self.assertNotIn("PerfView", text)
 
+    def test_checks_run_from_the_snapshot_held(self):
+        """1.123.0: {"op": "checks"} answers every live check from the snapshot look-serve holds, with no second snapshot."""
+        asked = []
+
+        def checks_answer(ask):
+            asked.append(ask({"op": "overview"})["ok"])
+            return {"faults": 0, "looks": 1, "report": {"title": "Live checks"}}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = io.StringIO()
+            requests = io.StringIO('{"op": "checks", "id": "c"}\n{"op": "release", "id": "z"}\n')
+            look.serve(5, tmp, tmp, lambda names: ({}, []), "", 60, stdin=requests, stdout=out, session_class=FakeSession,
+                       checks_answer=checks_answer)
+            lines = [json.loads(line) for line in out.getvalue().splitlines()]
+            self.assertEqual((lines[1]["id"], lines[1]["ok"], lines[1]["data"]["looks"]), ("c", True, 1))
+            self.assertEqual(asked, [True])
+            out = io.StringIO()
+            look.serve(5, tmp, tmp, lambda names: ({}, []), "", 60, stdin=io.StringIO('{"op": "checks"}\n'), stdout=out,
+                       session_class=FakeSession)
+            refused = json.loads(out.getvalue().splitlines()[1])
+            self.assertFalse(refused["ok"])
+            self.assertIn("no live checks", refused["error"])
+
     def test_a_game_not_running_is_one_json_line_too(self):
         out = io.StringIO()
         code = perf_cli.main(["look-serve"], environ={}, out=out,
@@ -256,6 +279,17 @@ class Reading(unittest.TestCase):
         self.assertEqual((empty["Members[].Name"], empty["Members#"], empty["Scores[]"]), ([], 0, []))
         self.assertFalse(answers[2]["ok"])
         self.assertIn("not a values path", answers[2]["error"])
+
+    def test_live_checks_from_a_snapshot_already_held(self):
+        squads = checks.parse_check({"id": "squads", "title": "A squad has members", "source": "live",
+                                     "select": {"type": "HeapFixture.Squad"}, "read": {"members": "Members#", "name": "Name"},
+                                     "fault": "members == 0", "says": "{name} has nobody"}, "test")
+        session = hr.Session(self.pid, self.folder, ["Name"])
+        try:
+            results = checks_live.run_held([squads], session.ask)
+        finally:
+            session.close()
+        self.assertEqual([f.text for f in results[0].findings], ["Empty has nobody"])
 
     def test_live_checks_judge_a_real_snapshot(self):
         """Live checks (1.120.0) end to end: two checks, one snapshot."""

@@ -47,6 +47,10 @@ anything answers with a list; one that did not, with one value or null (a null l
 not have). Values come as text, as `object` gives them (an enum as its name and number); a link at the end gives its summary. A
 struct at the end gives null: name one of its fields.
 
+**`look-serve` answers `{"op": "checks"}` too** (1.123.0): every live check in the game's check files ([checks](checks.md)),
+asked of the snapshot it already holds, so a program's "run the checks" button takes no second snapshot. Its data is the check
+data (`checks`, `faults`, `looks`) with the report itself under `report`, as `render_json` gives it.
+
 `look` keeps its overview as a heap in `rimworld-heaps/`, so `heap-report` reads it again and `heap-compare` sets it beside another
 `look` or a gcdump heap (mind that a gcdump forces a collection first and a snapshot does not). `look-serve` is for a program's page
 (the manifest's `look-inside` surface): its first line says whether the snapshot was taken, each request may carry an `id` its
