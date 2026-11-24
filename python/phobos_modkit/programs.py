@@ -39,7 +39,10 @@ STAMP = "bundle.json"
 BUNDLE_FORMAT = 1
 DOTNET_MAJOR = "10."
 # The only programs a fetch command may start (1.118.0); a test holds every command to it, and D'thorga Companion checks again.
-FETCHERS = ("winget", "dotnet")
+# pkexec (1.124.0) is Linux's own way to ask the person for an administrator's yes in a window, for a package manager.
+FETCHERS = ("winget", "dotnet", "pkexec")
+# The package managers a Linux fetch may name after pkexec, by the family /etc/os-release says the system belongs to (1.124.0).
+LINUX_FAMILIES = {"apt": ("debian", "ubuntu"), "dnf": ("fedora", "rhel", "centos"), "pacman": ("arch",)}
 
 
 @dataclass
@@ -68,6 +71,52 @@ def system(platform=None):
     """This system as `fetch` names it: windows, macos or linux."""
     platform = sys.platform if platform is None else platform
     return "windows" if platform.startswith("win") else "macos" if platform == "darwin" else "linux"
+
+
+def os_release(text):
+    """/etc/os-release's fields, as a dict: `ID=ubuntu`, `ID_LIKE="debian"`, quotes taken off."""
+    fields = {}
+    for line in text.splitlines():
+        key, sep, value = line.strip().partition("=")
+        if sep and key and not key.startswith("#"):
+            fields[key] = value.strip().strip('"').strip("'")
+    return fields
+
+
+def linux_family(read=None):
+    """The package manager family of this Linux (apt, dnf or pacman), from /etc/os-release's ID and ID_LIKE; None when it is
+    none of them or the file can't be read (1.124.0)."""
+    if read is None:
+        def read():
+            return Path("/etc/os-release").read_text(encoding="utf-8", errors="replace")
+    try:
+        fields = os_release(read())
+    except OSError:
+        return None
+    names = [fields.get("ID", "").lower()] + fields.get("ID_LIKE", "").lower().split()
+    for family, ids in LINUX_FAMILIES.items():
+        if any(name in ids for name in names):
+            return family
+    return None
+
+
+def linux_package(apt=None, dnf=None, pacman=None):
+    """A program's fetch commands for each Linux family that has it in its own package feed, through pkexec, which asks the
+    person for an administrator's yes in a window of the system's own (1.124.0)."""
+    commands = {}
+    if apt:
+        commands["linux-apt"] = ["pkexec", "apt-get", "install", "-y", apt]
+    if dnf:
+        commands["linux-dnf"] = ["pkexec", "dnf", "install", "-y", dnf]
+    if pacman:
+        commands["linux-pacman"] = ["pkexec", "pacman", "-S", "--noconfirm", "--needed", pacman]
+    return commands
+
+
+def fetch_for(fetch, here, family):
+    """The command that fetches a program here: this system's own, a Linux family's, or the one for every system."""
+    fetch = fetch or {}
+    return fetch.get(here) or (fetch.get(f"linux-{family}") if here == "linux" and family else None) or fetch.get("any")
 
 
 def winget(package):
@@ -177,7 +226,8 @@ def _steam(environ):
 CORE = [
     Program("git", "git", "Every repository's history: Home, Changes, the Timeline, the code viewer, What changed",
             "Git for Windows, https://git-scm.com", _git,
-            url="https://git-scm.com/downloads", fetch=winget("Git.Git"), everyday=True),
+            url="https://git-scm.com/downloads",
+            fetch={**winget("Git.Git"), **linux_package(apt="git", dnf="git", pacman="git")}, everyday=True),
     Program("xml-index", "The kit's XML indexer", "Reading large XML files fast, such as a game's saves",
             "Comes with D'thorga Companion's installer; or Rust from https://rustup.rs, and the kit builds it", _xml_index),
     Program("assembly-reader", "The kit's assembly reader",
@@ -195,12 +245,15 @@ CORE = [
     Program("dotnet", ".NET 10 runtime",
             "Running the assembly, heap and names readers: the Code map's C# links, Harmony patches, names in C# code",
             "Microsoft, https://dotnet.microsoft.com/download (the runtime; the SDK brings it too)", _dotnet,
-            url="https://dotnet.microsoft.com/download/dotnet/10.0", fetch=winget("Microsoft.DotNet.Runtime.10")),
+            url="https://dotnet.microsoft.com/download/dotnet/10.0",
+            fetch={**winget("Microsoft.DotNet.Runtime.10"), **linux_package(apt="dotnet-runtime-10.0", dnf="dotnet-runtime-10.0")},
+            everyday=True),
     Program("dotnet-sdk", ".NET 10 SDK",
             "Watching a running game's memory (the kit installs Microsoft's diagnostics tools with it), fetching ilspycmd, "
             "and building the kit's own tools",
             "Microsoft, https://dotnet.microsoft.com/download (the SDK, which brings the runtime too)", _dotnet_sdk,
-            url="https://dotnet.microsoft.com/download/dotnet/10.0", fetch=winget("Microsoft.DotNet.SDK.10")),
+            url="https://dotnet.microsoft.com/download/dotnet/10.0",
+            fetch={**winget("Microsoft.DotNet.SDK.10"), **linux_package(apt="dotnet-sdk-10.0", dnf="dotnet-sdk-10.0")}),
     Program("dotnet-diagnostics", "Microsoft's .NET diagnostics tools",
             "Watching a running game's memory, and where it spends its time",
             "The kit installs them itself, with the .NET 10 SDK", _diagnostics, after=("dotnet-sdk",)),
@@ -230,24 +283,25 @@ def game_programs():
     return found
 
 
-def status(environ=None, platform=None, which=shutil.which):
+def status(environ=None, platform=None, which=shutil.which, family=None):
     """Every program, core first, then each game's: what it is, what needs it, whether it is here, where to get it and, where a
     command is known for this system, how it is fetched."""
     environ = os.environ if environ is None else environ
     here = system(platform)
+    family = family if family is not None else (linux_family() if here == "linux" else None)
     rows = []
     for game, program in [(None, p) for p in CORE] + game_programs():
         try:
             found = program.find(environ)
         except Exception as problem:  # noqa: BLE001 - a lookup that fails is reported as such, never a crash of the report
             found = Found(False, None, f"could not be looked for: {problem}")
-        fetch = (program.fetch or {}).get(here) or (program.fetch or {}).get("any")
+        fetch = fetch_for(program.fetch, here, family)
         rows.append({"key": program.key, "name": program.name, "game": game, "neededBy": program.needed_by,
                      "get": program.get, "here": found.here, "where": found.where, "how": found.how,
                      "url": program.url, "fetch": list(fetch) if fetch else None,
                      "fetchHere": bool(fetch and which(fetch[0])), "after": list(program.after),
                      "everyday": program.everyday})
-    return {"python": sys.version.split()[0], "system": here, "programs": rows,
+    return {"python": sys.version.split()[0], "system": here, "family": family, "programs": rows,
             "missing": sum(1 for r in rows if not r["here"])}
 
 

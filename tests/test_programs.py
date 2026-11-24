@@ -109,11 +109,38 @@ class StatusTests(unittest.TestCase):
         self.assertFalse(rows["xml-index"]["everyday"])
 
     def test_a_system_with_no_known_command_is_given_the_page_only(self):
-        rows = {p["key"]: p for p in programs.status({}, platform="linux", which=lambda name: "there")["programs"]}
+        rows = {p["key"]: p for p in programs.status({}, platform="linux", which=lambda name: "there", family="")["programs"]}
         self.assertIsNone(rows["git"]["fetch"])
         self.assertFalse(rows["git"]["fetchHere"])
         self.assertTrue(rows["git"]["url"])
         self.assertEqual(rows["ilspycmd"]["fetch"][0], "dotnet")
+
+    def test_linux_fetches_from_its_own_package_feed_through_pkexec(self):
+        found = programs.status({}, platform="linux", which=lambda name: "there", family="apt")
+        rows = {p["key"]: p for p in found["programs"]}
+        self.assertEqual(found["family"], "apt")
+        self.assertEqual(rows["git"]["fetch"], ["pkexec", "apt-get", "install", "-y", "git"])
+        self.assertEqual(rows["dotnet-sdk"]["fetch"][-1], "dotnet-sdk-10.0")
+        rows = {p["key"]: p for p in programs.status({}, platform="linux", which=lambda n: None, family="pacman")["programs"]}
+        self.assertEqual(rows["git"]["fetch"][:3], ["pkexec", "pacman", "-S"])
+        # Arch's .NET names and Steam everywhere on Linux are not known: the page only.
+        self.assertIsNone(rows["dotnet"]["fetch"])
+        self.assertIsNone(rows["steam"]["fetch"])
+
+    def test_the_linux_family_is_read_from_os_release(self):
+        self.assertEqual(programs.linux_family(lambda: 'ID=linuxmint\nID_LIKE="ubuntu debian"\n'), "apt")
+        self.assertEqual(programs.linux_family(lambda: "ID=fedora\n"), "dnf")
+        self.assertEqual(programs.linux_family(lambda: "ID=endeavouros\nID_LIKE=arch\n"), "pacman")
+        self.assertIsNone(programs.linux_family(lambda: "ID=nixos\n"))
+
+        def missing():
+            raise OSError("no such file")
+        self.assertIsNone(programs.linux_family(missing))
+
+    def test_net_10_is_named_where_everyday_pages_are(self):
+        rows = {p["key"]: p for p in programs.status({}, platform="win32", which=lambda n: None)["programs"]}
+        self.assertTrue(rows["dotnet"]["everyday"])
+        self.assertFalse(rows["dotnet-sdk"]["everyday"])
 
     def test_every_fetch_command_starts_a_program_the_kit_names_and_every_after_is_a_row(self):
         keys = {p.key for p in programs.CORE} | {p.key for _, p in programs.game_programs()}

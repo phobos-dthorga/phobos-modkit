@@ -57,7 +57,8 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | Steam | Game files, adding a game, Workshop reports | Its usual install, or `steamPath` |
 | A game's own | Whatever its adapter says | `games/<game>/programs.py`, a `PROGRAMS` list of `programs.Program` (RimWorld: RimSort's todds) |
 
-`--json` gives `data.python`, `data.system` (`windows`, `linux` or `macos`), `data.missing` and `data.programs`, each with `key`,
+`--json` gives `data.python`, `data.system` (`windows`, `linux` or `macos`), `data.family` (on Linux, `apt`, `dnf`, `pacman` or
+null; 1.124.0), `data.missing` and `data.programs`, each with `key`,
 `name`, `game` (null for the core), `neededBy`, `get`, `here`, `where` and `how`. A lookup that fails is reported on its row, as
 not here, with the reason.
 
@@ -69,7 +70,7 @@ Since 1.118.0 each program also has:
 | `fetch` | The command that fetches it on this system, as a list of words, or null where none is known |
 | `fetchHere` | Whether the program that command starts (`winget`, `dotnet`) is on the PATH |
 | `after` | The keys of the programs that must be here first (ilspycmd and the diagnostics tools need the SDK) |
-| `everyday` | True for what a page most people open needs: git and Steam |
+| `everyday` | True for what a page most people open needs: git, Steam and, since 1.124.0, the .NET 10 runtime (the owner's choice) |
 
 When something a command can fetch is missing, the Markdown report adds **Commands that fetch what is missing**.
 
@@ -88,8 +89,13 @@ debug files. About 2.5 MB in all (20 November 2026).
 ## Limits
 
 - Windows is the only platform built and checked so far; the code names programs the same way elsewhere.
-- **A fetch command is known for Windows only**, but for ilspycmd: Linux's package managers differ by distribution, so a row
-  there gives the page alone. A next system needs one more entry in a program's `fetch` (`"linux"` or `"macos"`), no code.
+- **Linux (1.124.0): git and .NET 10 are fetched from the system's own package feed** through `pkexec`, which asks for an
+  administrator's yes in a window: `apt-get` on Debian, Ubuntu and their kin, `dnf` on Fedora, `pacman` on Arch (git only), the
+  family read from `/etc/os-release`'s `ID` and `ID_LIKE`. .NET 10's names (`dotnet-runtime-10.0`, `dotnet-sdk-10.0`) are
+  Microsoft's for Ubuntu's and Fedora's own feeds; Arch's were not confirmed, and Steam on Linux comes from repositories that
+  must be switched on first (multiverse, RPM Fusion, multilib) or as a community Flatpak installed where the tools don't look,
+  so both give the page alone. **No Linux command has been run**: there is no Linux build yet. macOS has none.
+- A next system or family is one more entry in a program's `fetch` (`"macos"`, or `"linux-<family>"`), no code.
 - winget's package names were read from winget on 25 November 2026 (`Git.Git`, `Microsoft.DotNet.Runtime.10`,
   `Microsoft.DotNet.SDK.10`, `Valve.Steam`); no fetch command has been run by the kit or its tests.
 - Whether a program works is not checked, only whether it is there: an old ilspycmd, or a Steam that won't start, still reads

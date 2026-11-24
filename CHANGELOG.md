@@ -4,6 +4,20 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.124.0] - 2026-11-25
+
+### Added
+
+- **`programs status` fetches git and .NET 10 on Linux from the system's own package feed** (the owner's choice by card,
+  25 Nov 2026). Through `pkexec`, which asks for an administrator's yes in a window: `apt-get` on Debian and Ubuntu, `dnf` on
+  Fedora, `pacman` on Arch (git only), the family read from `/etc/os-release`. Steam on Linux and Arch's .NET still give the page
+  alone. `data.family` names the family. **No Linux command has been run.**
+
+### Changed
+
+- **The .NET 10 runtime counts as everyday**, so D'thorga Companion's Home names it while it is missing (the owner's choice by
+  card, 25 Nov 2026: "Steam and .NET 10").
+
 ## [1.123.1] - 2026-11-25
 
 ### Fixed
