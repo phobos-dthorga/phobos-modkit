@@ -279,9 +279,11 @@ def main(argv=None, out=None, environ=None):
     report = Report(f"Picks: {waiting} waiting")
     for repository in repositories:
         if repository["picks"]:
+            # The owner's words with the pick (1.123.1): a "none" with a reason, or a wish beside a pick, was read by nobody.
             report.section(repository["repository"], Bullets([
                 f"{p['id']}: {p['title']} ({p['kind']}, {len(p['tries'])} tries)"
-                + (f" PICKED {p['answer']['pick']}" if p["answer"] else " waiting") for p in repository["picks"]]))
+                + (f" PICKED {p['answer']['pick']}" if p["answer"] else " waiting")
+                + (f': "{p["answer"]["words"]}"' if p["answer"] and p["answer"].get("words") else "") for p in repository["picks"]]))
     write(report, {"waiting": waiting, "repositories": repositories})
     return EXIT_OK
 

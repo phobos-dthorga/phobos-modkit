@@ -84,4 +84,5 @@ last line for a pick decides, so a pick can be changed until it is settled.
 ### What `list` answers with
 
 Each repository's `grounds` and `picks`, waiting ones first; every path made absolute with `there` (the try's file is on this PC)
-and `inUseThere`; and `answer` (`pick`, `words`, `time`) or null.
+and `inUseThere`; and `answer` (`pick`, `words`, `time`) or null. The Markdown list puts the owner's words after the pick, in
+quotes (1.123.1): a "none" with its reason, or a wish beside a pick, must reach the session applying it.

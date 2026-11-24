@@ -105,3 +105,11 @@ class PicksTests(unittest.TestCase):
         out = io.StringIO()
         self.assertEqual(picks.main(["answer", "--root", str(self.root), "--id", "x", "--pick", "3", "--json"], out, self.environ),
                          picks.EXIT_REFUSED)
+
+    def test_the_owners_words_are_shown_with_the_pick(self):
+        # 1.123.1: the list showed "PICKED none" without the reason the owner gave, so nobody read it.
+        picks.offer(self.root, kettle())
+        picks.answer(self.root, "billy-kettle", "none", "white left in the centre of try 4", environ=self.environ)
+        out = io.StringIO()
+        picks.main(["list", "--root", str(self.root)], out, self.environ)
+        self.assertIn('PICKED none: "white left in the centre of try 4"', out.getvalue())

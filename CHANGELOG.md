@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.123.1] - 2026-11-25
+
+### Fixed
+
+- **`picks list` shows the owner's words with each pick**: a pick of "none" with the reason why, or a wish beside a pick ("use
+  both"), was saved by D'thorga Companion's Picks page but left out of the list, so the sessions applying picks never read it.
+  [Picks](docs/picks.md).
+
 ## [1.123.0] - 2026-11-25
 
 ### Added
