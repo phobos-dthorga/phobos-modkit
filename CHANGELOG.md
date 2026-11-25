@@ -4,6 +4,21 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.125.0] - 2026-11-25
+
+### Added
+
+- **`picks`: cards that ship as the same file are one pick, and a pick already in the game settles by itself** (the owner's
+  answers of 23 Nov 2026 on D'thorga Companion's Decisions page, Picks round two). A pick's optional `slot` names the file it ships
+  as; answering one card answers the rest of its slot with "none", saying which was picked. `list` says `inGame` when the picked
+  try is the file in use, byte for byte, and `settle --applied` removes every such pick with its slot's other cards.
+
+### Changed
+
+- **`picks list` with no `--root` reads every repository on the games list**, and says which it read and which have no
+  `config/picks.json` ("Every repository on the games list"); run from the kit's own folder it said "0 waiting" while picks waited.
+- **`picks settle` says what it settled, with which answer, and a refusal says why** in its title, instead of "Refused" alone.
+
 ## [1.124.0] - 2026-11-25
 
 ### Added

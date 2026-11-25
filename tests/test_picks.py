@@ -113,3 +113,80 @@ class PicksTests(unittest.TestCase):
         out = io.StringIO()
         picks.main(["list", "--root", str(self.root)], out, self.environ)
         self.assertIn('PICKED none: "white left in the centre of try 4"', out.getvalue())
+
+
+class RoundTwoTests(unittest.TestCase):
+    """Round two (1.125.0): one pick per file, picks in the game settled by themselves, every listed repository, settle said."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        base = Path(self.temp.name)
+        self.root = base / "sample-repo"
+        (self.root / "tries").mkdir(parents=True)
+        (self.root / "mods").mkdir()
+        for name, data in (("a-1.png", b"one"), ("a-2.png", b"two"), ("b-1.png", b"three")):
+            (self.root / "tries" / name).write_bytes(data)
+        self.environ = {"PHOBOS_PICKS": str(base / "answers"), "PHOBOS_COMPANION_GAMES": str(base / "games.json")}
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def card(self, pick_id, tries, slot="mods/Purge.png"):
+        return {"id": pick_id, "title": pick_id, "kind": "picture", "inUse": "mods/Purge.png", "slot": slot,
+                "tries": [{"id": t, "path": f"tries/{pick_id}-{t}.png"} for t in tries]}
+
+    def test_answering_one_card_answers_the_others_of_its_slot(self):
+        picks.offer(self.root, self.card("a", ["1", "2"]))
+        picks.offer(self.root, self.card("b", ["1"]))
+        picks.offer(self.root, self.card("c", ["1"], slot="mods/Other.png"))
+        line = picks.answer(self.root, "a", "2", environ=self.environ)
+        self.assertEqual(line["alsoAnswered"], ["b"])
+        found = {p["id"]: p for p in picks.listed(self.root, self.environ)[1]}
+        self.assertEqual(found["b"]["answer"]["pick"], "none")
+        self.assertIn("picked in a: 2", found["b"]["answer"]["words"])
+        self.assertIsNone(found["c"]["answer"])
+
+    def test_a_slot_must_be_inside_the_repository(self):
+        for bad in ("../x.png", "C:/x.png"):
+            with self.assertRaises(picks.PickError):
+                picks.check_pick(self.card("a", ["1"], slot=bad))
+
+    def test_a_picked_try_that_is_the_file_in_use_is_in_the_game_and_settles_by_itself(self):
+        picks.offer(self.root, self.card("a", ["1", "2"]))
+        picks.offer(self.root, self.card("b", ["1"]))
+        picks.answer(self.root, "a", "2", environ=self.environ)
+        self.assertFalse(picks.listed(self.root, self.environ)[1][0]["inGame"])
+        (self.root / "mods" / "Purge.png").write_bytes(b"two")
+        found = {p["id"]: p for p in picks.listed(self.root, self.environ)[1]}
+        self.assertTrue(found["a"]["inGame"])
+        self.assertFalse(found["b"]["inGame"], "a card answered none is never in the game itself")
+        settled = picks.settle_applied(self.root, self.environ)
+        self.assertEqual([pick_id for pick_id, _ in settled], ["a", "b"])
+        self.assertEqual(picks.listed(self.root, self.environ)[1], [])
+        self.assertEqual(picks.settle_applied(self.root, self.environ), [])
+
+    def test_settle_says_what_it_settled_and_why_it_refused(self):
+        picks.offer(self.root, self.card("a", ["1"], slot=None))
+        picks.answer(self.root, "a", "1", environ=self.environ)
+        out = io.StringIO()
+        self.assertEqual(picks.main(["settle", "--root", str(self.root), "--id", "a"], out=out, environ=self.environ), 0)
+        self.assertIn("Settled a (picked 1)", out.getvalue())
+        out = io.StringIO()
+        self.assertEqual(picks.main(["settle", "--root", str(self.root), "--id", "a"], out=out, environ=self.environ), 3)
+        self.assertIn("settled already", out.getvalue())
+
+    def test_list_with_no_root_reads_every_repository_on_the_games_list_and_says_so(self):
+        other = Path(self.temp.name) / "no-picks-repo"
+        other.mkdir()
+        picks.offer(self.root, self.card("a", ["1"], slot=None))
+        Path(self.environ["PHOBOS_COMPANION_GAMES"]).write_text(json.dumps(
+            {"games": [{"id": "g", "name": "G", "repositories": [str(self.root), str(other)]}]}), encoding="utf-8")
+        out = io.StringIO()
+        self.assertEqual(picks.main(["list", "--json"], out=out, environ=self.environ), 0)
+        data = json.loads(out.getvalue())["data"]
+        self.assertEqual(data["readFrom"], "games list")
+        self.assertEqual(data["waiting"], 1)
+        self.assertEqual([r["hasFile"] for r in data["repositories"]], [True, False])
+        out = io.StringIO()
+        picks.main(["list"], out=out, environ=self.environ)
+        self.assertIn("no-picks-repo (no config/picks.json)", out.getvalue())

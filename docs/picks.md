@@ -12,6 +12,13 @@ them.
 - **Apply a pick, then settle it in the same commit**: export the chosen try and record it as the repository records its art, then
   `picks settle` removes the pick ([owner queues](owner-queues.md)).
 - **"none" is an answer too**, usually with words: what to try next.
+- **Cards that ship as the same file are one pick** (1.125.0; the owner's choice "One pick per file"): give each the same `slot`,
+  the file it ships as. Answering one answers the others of its slot with "none", saying which was picked.
+- **A pick already in the game settles by itself** (1.125.0; "Settle it by itself"): `picks settle --applied` removes every
+  answered pick whose picked try is the file in use, byte for byte, with the other cards of its slot. D'thorga Companion's Picks
+  page runs it when it reads.
+- **`list` with no `--root` reads every repository on the games list** (1.125.0; "Every repository on the games list"), and says
+  which, naming one with no `config/picks.json`; with no games list, the current folder.
 - **A path may be anywhere on this PC**, since tries are often made outside the repository (a working folder on another drive); a
   relative path is the repository's own. The list says whether each file is there. A program shows only the files the list names.
 
@@ -35,17 +42,19 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `list` | Every pick, waiting ones first, with any answer. | reads only |
 | `answer` | Records the owner's pick. Appends the owner's pick to the Companion's picks file. | writes |
 | `offer` | Adds or replaces one waiting pick. Adds a waiting pick to the repository's config/picks.json. | writes |
-| `settle` | Removes a pick once its answer is applied. Removes an applied pick from the repository's config/picks.json. | writes |
+| `settle` | Removes a pick once its answer is applied. Removes an applied pick, or with `--applied` every one in the game, from the repository's config/picks.json. | writes |
 
 | Option | Reports | What it does | Default |
 | --- | --- | --- | --- |
-| `--root VALUE` | `list` | a repository (repeatable; default: the current folder) |  |
+| `--root VALUE` | `list` | a repository (repeatable; default: every repository on the games list, else the current folder) |  |
 | `--root VALUE` | `answer` | the repository the pick belongs to. Required. |  |
-| `--id VALUE` | `answer`, `settle` | the pick. Required. |  |
+| `--id VALUE` | `answer` | the pick. Required. |  |
 | `--pick VALUE` | `answer` | the chosen try's id, or 'none' (say why with `--words`). Required. |  |
 | `--words VALUE` | `answer` | anything the owner added |  |
 | `--root VALUE` | `offer`, `settle` | the repository. Required. |  |
 | `--file VALUE` | `offer` | a JSON file holding one pick, as config/picks.json holds them. Required. |  |
+| `--id VALUE` | `settle` | the pick (or `--applied`) |  |
+| `--applied` | `settle` | every answered pick whose try is in the game, byte for byte |  |
 
 - Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
 - [Common options](common-options.md) explains `--root`, `--json` and `--no-redact`, which many commands share.
@@ -71,6 +80,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `id` | Lower-case letters, digits, dots, hyphens and underscores; a try's id is never `none` |
 | `kind` | `picture` (any picture or DDS texture the Companion draws) or `sound` |
 | `inUse` | The file it would replace, or null for something new |
+| `slot` | Optional (1.125.0): the file it ships as, relative to the repository; cards with the same slot are one pick |
 | `tries` | Up to 40: `id`, `label`, `path`, and a `note` (an edge check's figures, a seed) |
 | `context`, `from`, `asked` | Why it was made, the request it came from, and when it was offered (today when left out) |
 
@@ -84,5 +94,7 @@ last line for a pick decides, so a pick can be changed until it is settled.
 ### What `list` answers with
 
 Each repository's `grounds` and `picks`, waiting ones first; every path made absolute with `there` (the try's file is on this PC)
-and `inUseThere`; and `answer` (`pick`, `words`, `time`) or null. The Markdown list puts the owner's words after the pick, in
+and `inUseThere`; `answer` (`pick`, `words`, `time`) or null; and `inGame` (1.125.0: the picked try is the file in use, byte for
+byte). `data.readFrom` says where the repositories came from (`named`, `games list` or `this folder`), and each has `hasFile`.
+`settle` says what it settled and with which answer, and a refusal says why in its title. The Markdown list puts the owner's words after the pick, in
 quotes (1.123.1): a "none" with its reason, or a wish beside a pick, must reach the session applying it.
