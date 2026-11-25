@@ -125,7 +125,9 @@ class FeedTests(unittest.TestCase):
 
     def test_clone_into_makes_the_confirmed_clones_and_reads_them(self):
         clones = Path(self.tmp.name) / "clones"
-        data = self.run_json("--clone-into", str(clones))
+        # A drive with room, whatever this PC's temporary drive has (1.125.0: the owner's C: at 0.7% free refused the clone).
+        with mock.patch("phobos_modkit.source_clones.short_of_space", return_value=False):
+            data = self.run_json("--clone-into", str(clones))
         self.assertEqual([("Vehicle Framework", "cloned")], [(c["mod"], c["action"]) for c in data["clones"]])
         subjects = [p["subject"] for p in data["pending"]]
         self.assertIn("VF-412: research check", subjects)
