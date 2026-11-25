@@ -12,7 +12,7 @@ import tempfile
 import unittest
 
 from support import FIXTURES
-from phobos_modkit import native
+from phobos_modkit import file_lock, native
 from phobos_modkit.games.rimworld import loading
 from phobos_modkit.games.rimworld.mods import ModIndex
 from phobos_modkit.games.rimworld.patches import build_reader, mod_assemblies, read_assemblies, reader_path
@@ -29,8 +29,11 @@ def fixture_dll():
     out = native.build_dir() / "dotnet" / "fixtures" / "PatchFixture"
     dll = out / "PatchFixture.dll"
     if not getattr(fixture_dll, "built", False):
-        result = subprocess.run(["dotnet", "build", str(FIXTURE_PROJECT), "-c", "Release", "-o", str(out), "--nologo",
-                                 "-v", "q"], capture_output=True, text=True, check=False)
+        # The gate runs the tests under two Pythons at once, and both build the fixture into the same folders: one waits for the
+        # other (1.128.0: "Cannot open PatchFixture.dll for writing" failed gate runs at random).
+        with file_lock.held(native.build_dir() / "dotnet" / "PatchFixture.lock", wait_s=300, stale_s=600):
+            result = subprocess.run(["dotnet", "build", str(FIXTURE_PROJECT), "-c", "Release", "-o", str(out), "--nologo",
+                                     "-v", "q"], capture_output=True, text=True, check=False)
         if result.returncode != 0:
             raise AssertionError("the fixture did not build:\n" + result.stdout[-2000:])
         fixture_dll.built = True
