@@ -35,6 +35,11 @@ theirs by the agent that moved them, for the owner to revise.
 - **Never control the owner's mouse or keyboard**; give instructions for interactive steps. **Never edit, replace or delete the
   owner's saves**; read-only copies for diagnosis are fine, and are deleted afterwards.
 - **Owner choices, agent defaults and agent choices are labelled as such** in design records, so the owner can revise them.
+- **Choices for the owner to revise, and questions left open, go in the repository's `config/decisions.json`** (owner, on D'thorga
+  Companion's Decisions page, answered "Yes, every repository"; moved here 25 Nov 2026): a question, two or more options, the
+  agent's lean and why, so the Decisions page lists them for every repository. A question answered by card in the session needs
+  no entry. Read the answers at the start of a session (`python -m phobos_modkit decisions list --root REPO`), **act on each and
+  remove its decision from the file in the same commit**.
 - **Write plainly**: answer first, short sentences, **bold** for must-dos, tables for comparisons. Diagrams are Mermaid in the
   Markdown; never use Figma.
 

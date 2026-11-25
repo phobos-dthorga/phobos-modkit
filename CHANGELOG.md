@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.126.0] - 2026-11-25
+
+### Changed
+
+- **A shared rule: choices for the owner to revise, and questions left open, go in each repository's `config/decisions.json`**
+  (`rules/every-session.md`; the owner's answer on D'thorga Companion's Decisions page, "Yes, every repository"). It was the
+  Companion's own rule; D'thorga Companion's Decisions page already reads every repository on the games list. A question
+  answered by card in the session needs no entry.
+
 ## [1.125.0] - 2026-11-25
 
 ### Added
