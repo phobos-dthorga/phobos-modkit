@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 import support  # noqa: F401  (puts the package on the path)
 from phobos_modkit import makeup, makeup_cli
@@ -107,6 +108,46 @@ class MakeupTests(unittest.TestCase):
             boats = json.loads(out.getvalue())["data"]["products"]["Sample Boats"]
             self.assertEqual(boats["defs"], {"ThingDef": 2, "RecipeDef": 1})
             self.assertEqual((boats["pictures"], boats["sounds"], boats["keys"]), (1, 0, 2))
+
+
+class InstalledSizeTests(unittest.TestCase):
+    """Size as installed (1.127.0): each mod's installed folder beside its folder in the repository."""
+
+    def test_no_installs_file_means_nothing_measured(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.assertIsNone(makeup.installed_sizes(Path(temp)))
+
+    def test_each_mod_is_measured_where_its_game_installs_it(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "repo"
+            (root / "mods" / "Alpha" / "Textures").mkdir(parents=True)
+            (root / "mods" / "Alpha" / "Textures" / "a.png").write_bytes(b"x" * 10)
+            (root / "mods" / "Beta").mkdir(parents=True)
+            target = Path(temp) / "game" / "Mods"
+            (target / "Alpha" / "Textures").mkdir(parents=True)
+            (target / "Alpha" / "Textures" / "a.png").write_bytes(b"x" * 10)
+            (target / "Alpha" / "Textures" / "a.dds").write_bytes(b"y" * 90)
+            (root / "config").mkdir()
+            (root / "config" / "installs.json").write_text(json.dumps(
+                {"schemaVersion": 1, "game": "rimworld", "mods": "mods", "backups": ".local/b", "install": ["x", "{mod}"]}),
+                encoding="utf-8")
+            place = mock.Mock(config={"mods": "mods"}, target=target, installed=lambda mod: target / mod)
+            with mock.patch("phobos_modkit.installs.place", return_value=place):
+                found = makeup.installed_sizes(root)
+            self.assertIsNone(found["problem"])
+            alpha, beta = found["mods"]
+            self.assertEqual((alpha["mod"], alpha["found"], alpha["bytes"], alpha["files"], alpha["repositoryBytes"]),
+                             ("Alpha", True, 100, 2, 10))
+            self.assertEqual((beta["mod"], beta["found"], beta["bytes"]), ("Beta", False, 0))
+
+    def test_a_game_folder_that_cannot_be_found_is_said(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "config").mkdir()
+            (root / "config" / "installs.json").write_text("{}", encoding="utf-8")
+            with mock.patch("phobos_modkit.installs.place", side_effect=ValueError("no game folder in the settings")):
+                found = makeup.installed_sizes(root)
+            self.assertEqual(found["problem"], "no game folder in the settings")
 
 
 if __name__ == "__main__":

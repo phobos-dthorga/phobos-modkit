@@ -1,6 +1,7 @@
 """makeup: what a repository is made of, how it grew, where the work goes, and what each product holds for players (1.39.0).
 
-    makeup now --root REPO              every committed file by product, kind, language, lines and size
+    makeup now --root REPO              every committed file by product, kind, language, lines and size; and since 1.127.0,
+                                        each mod's size as installed, where the repository's installs.json says where
     makeup growth --root REPO           the same, totalled by kind and by product, one point a day since the first commit
     makeup churn --root REPO [--days N] the files commits changed lately: how often, lines added and removed, last change
     makeup census --root REPO           each product's Defs by type, pictures, sounds and text keys
@@ -61,6 +62,17 @@ def now_report(root, environ, progress, top):
                      ", ".join(f"{k} {kinds[k][1]:,}" for k in makeup.KINDS if kinds.get(k) and kinds[k][1])])
     report = Report(f"Make-up of {data['repository']}: {len(data['files']):,} committed files")
     report.section("By product", Table(["Product", "Files", "Lines", "Size", "Lines by kind"], rows[:top], total=len(rows)))
+    installed = makeup.installed_sizes(root, environ)
+    data["installed"] = installed
+    if installed is not None:
+        if installed["problem"]:
+            report.section("Size as installed", [f"Not measured: {installed['problem']}"])
+        else:
+            mods = installed["mods"]
+            report.section("Size as installed", Table(
+                ["Mod", "Installed", "Files", "In the repository"],
+                [[m["mod"], f"{m['bytes'] / 1e6:.1f} MB" if m["found"] else "not installed", f"{m['files']:,}",
+                  f"{m['repositoryBytes'] / 1e6:.1f} MB"] for m in mods][:top], total=len(mods)))
     return report, data
 
 

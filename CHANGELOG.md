@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.127.0] - 2026-11-25
+
+### Added
+
+- **`makeup now` measures each mod's size as installed** (the owner's answer on D'thorga Companion's Decisions page, "Add it"):
+  for a repository with `config/installs.json`, each mod's folder where its game installs it, encoded textures and all, beside its
+  folder in the repository (`data.installed`, and a **Size as installed** table). Reads only.
+
 ## [1.126.0] - 2026-11-25
 
 ### Changed

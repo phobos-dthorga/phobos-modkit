@@ -61,6 +61,16 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 
 ## Outputs
 
+### Size as installed (`now`, 1.127.0)
+
+The owner's answer on D'thorga Companion's Decisions page, "Add it". For a repository with `config/installs.json`, `now` measures
+each mod folder under its `mods` where its game's adapter installs it (encoded textures and all) beside its folder in the
+repository: `data.installed` is `{problem, folder, mods: [{mod, found, bytes, files, repositoryBytes}]}`, largest first, and the
+report adds a **Size as installed** table. It is null for a repository with no installs.json, and `problem` says why when the
+installed mods can't be found (no game folder in the settings, no adapter for the game). It only reads. Checked on
+phobos-rimworld (Phobos Vehicles: 786 MB installed, 60 MB in the repository); phobos-ostranauts keeps no installs.json yet, so it
+says nothing there.
+
 The answers (`data`):
 
 - `now`: `files`, each `{path, product, group, kind, language, bytes, lines}` (`group` is the top folder of a file outside any

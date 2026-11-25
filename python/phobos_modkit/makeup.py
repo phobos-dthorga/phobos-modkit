@@ -227,6 +227,41 @@ def _lines(root, blobs, conn, progress=None):
 
 # ---------------------------------------------------------------- growth
 
+def folder_size(folder):
+    """(bytes, files) of everything under a folder; (0, 0) when it is not there."""
+    total, count = 0, 0
+    for path in Path(folder).rglob("*"):
+        try:
+            if path.is_file():
+                total += path.stat().st_size
+                count += 1
+        except OSError:
+            continue
+    return total, count
+
+
+def installed_sizes(root, environ=None):
+    """Each mod's size as installed (1.127.0; the owner's answer on D'thorga Companion's Decisions page, "Add it"): the folder the
+    repository's installs.json and its game's adapter name for it, encoded textures and all, beside its folder in the repository.
+    None for a repository with no installs.json; a problem, in words, when the installed mods can't be found."""
+    from . import installs
+    if not (Path(root) / "config" / "installs.json").is_file():
+        return None
+    try:
+        place = installs.place(root, environ=environ)
+    except Exception as problem:  # noqa: BLE001 - an adapter's or a settings file's failure is said, never a crash of the report
+        return {"problem": str(problem) or type(problem).__name__, "folder": None, "mods": []}
+    source = Path(root) / place.config["mods"]
+    mods = []
+    for folder in sorted((p for p in source.iterdir() if p.is_dir()), key=lambda p: p.name.lower()) if source.is_dir() else []:
+        installed = place.installed(folder.name)
+        size, files = folder_size(installed)
+        repository_size, _ = folder_size(folder)
+        mods.append({"mod": folder.name, "found": installed.is_dir(), "bytes": size, "files": files,
+                     "repositoryBytes": repository_size})
+    return {"problem": None, "folder": str(place.target), "mods": sorted(mods, key=lambda m: -m["bytes"])}
+
+
 def daily_commits(root):
     """[(day, commit)] the last commit of each day on the first-parent line, oldest first."""
     log = git(root, "log", "--first-parent", "--format=%H %cs", "HEAD").decode().split("\n")
