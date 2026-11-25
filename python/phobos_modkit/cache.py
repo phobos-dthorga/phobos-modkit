@@ -20,13 +20,36 @@ import shutil
 import sqlite3
 import stat
 
+from . import file_lock
 from .paths import cache_root
 
 DIGEST_LENGTH = 16
+# One run builds a derived file at a time (1.128.1). The Defs index takes minutes to build, and a second build of it started
+# meanwhile deleted the first one's half-written file under it ("being used by another process"; the owner's screen note of
+# 26 Nov 2026). The second waits up to BUILD_WAIT_S; a lock older than BUILD_STALE_S was left by a run that stopped.
+BUILD_WAIT_S = 20 * 60
+BUILD_STALE_S = 60 * 60
 
 
 class CacheError(RuntimeError):
     pass
+
+
+@contextmanager
+def one_builder(target, error=CacheError, wait_s=BUILD_WAIT_S, stale_s=BUILD_STALE_S):
+    """Holds the build lock of the derived file `target` (a `.lock` file beside it) while the block builds it.
+
+    Inside the block, a caller checks again whether the file is current: the run it waited for may have just built it. Raises
+    `error` when another run held the lock for longer than `wait_s`.
+    """
+    target = Path(target)
+    lock = target.with_name(target.name + ".lock")
+    try:
+        with file_lock.held(lock, wait_s, stale_s):
+            yield
+    except file_lock.LockBusy:
+        raise error(f"Another run has been building {target.name} for over {wait_s / 60:.0f} minutes. Try again once it has "
+                    f"finished, or delete {lock} if nothing is building it.") from None
 
 
 def folder(namespace, explicit=None, environ=None, settings_file=None):

@@ -60,8 +60,17 @@ def ensure(dump, cache):
     expected = provenance(dump)
     if derived.is_current(target, expected):
         return target, None
-    started = time.monotonic()
     target.parent.mkdir(parents=True, exist_ok=True)
+    with derived.one_builder(target, PatchedError):
+        # The run this one waited for may have built it just now (1.128.1).
+        if derived.is_current(target, expected):
+            return target, None
+        return target, _build(dump, target, expected)
+
+
+def _build(dump, target, expected):
+    """Streams the patched-Defs file into a new index at `target`; returns the seconds it took."""
+    started = time.monotonic()
     temporary = target.with_suffix(".building")
     derived.remove(temporary)
     root_attributes, count = {}, 0
@@ -90,7 +99,7 @@ def ensure(dump, cache):
         conn.commit()
     derived.remove(target)
     temporary.replace(target)
-    return target, time.monotonic() - started
+    return time.monotonic() - started
 
 
 def _written(conn, def_type, name, abstract):

@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import sqlite3
 import tempfile
+import threading
 import time
 import unittest
 from contextlib import closing
@@ -171,6 +172,19 @@ class Folders(Install):
 
 
 class Building(Install):
+    def test_a_second_run_waits_for_the_first_build_and_reuses_it(self):
+        # The owner's screen note of 26 Nov 2026 (1.128.1): two runs built the index at once, and one deleted the other's file.
+        index, found = defs.index_path(self.cache), {}
+        self.cache.mkdir(parents=True)
+        with derived.one_builder(index):
+            waiting = threading.Thread(target=lambda: found.update(second=defs.ensure(self.install, self.cache)))
+            waiting.start()
+            time.sleep(0.2)
+            self.assertTrue(waiting.is_alive())
+            defs.build(self.install, self.cache)
+        waiting.join(30)
+        self.assertEqual(found["second"], (index, None))
+
     def test_counts_and_mods(self):
         _, built = self.built()
         self.assertEqual((built.mods, built.patches), (4, 2))

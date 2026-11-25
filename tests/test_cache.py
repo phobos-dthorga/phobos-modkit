@@ -5,6 +5,7 @@ import shutil
 import sqlite3
 import stat
 import tempfile
+import threading
 import time
 import unittest
 from contextlib import closing
@@ -96,6 +97,44 @@ class FrozenCopies(Provenance):
         cache.remove(target)
         self.assertFalse(target.exists())
         cache.remove(target)  # already gone: no error
+
+
+class OneBuilder(unittest.TestCase):
+    """Two runs building one derived file at once (the owner's screen note of 26 Nov 2026, 1.128.1)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.target = Path(self.tmp.name) / "derived.sqlite"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_second_builder_waits_for_the_first(self):
+        order = []
+
+        def second():
+            with cache.one_builder(self.target):
+                order.append("second")
+
+        with cache.one_builder(self.target):
+            waiting = threading.Thread(target=second)
+            waiting.start()
+            time.sleep(0.2)
+            self.assertTrue(waiting.is_alive())
+            order.append("first")
+        waiting.join(10)
+        self.assertEqual(order, ["first", "second"])
+        self.assertFalse(self.target.with_name("derived.sqlite.lock").exists())
+
+    def test_waiting_too_long_raises_the_callers_error_in_words(self):
+        class Mine(RuntimeError):
+            pass
+
+        with cache.one_builder(self.target):
+            with self.assertRaises(Mine) as raised:
+                with cache.one_builder(self.target, Mine, wait_s=0.1):
+                    pass
+        self.assertIn("derived.sqlite", str(raised.exception))
 
 
 class Folders(unittest.TestCase):

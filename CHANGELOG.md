@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.128.1] - 2026-11-26
+
+### Fixed
+
+- **Two runs never build the RimWorld Def index at once** (the owner's screen note of 26 Nov 2026 on D'thorga Companion's update
+  check: "being used by another process"). The Def index and the patched-Defs index are each built by one run at a time; a second
+  run waits for the first, then uses what it built rather than building it again. It gives up after 20 minutes, saying so.
+
 ## [1.128.0] - 2026-11-25
 
 ### Added

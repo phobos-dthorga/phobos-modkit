@@ -281,7 +281,12 @@ def ensure(install, cache, rebuild=False, scan=None):
     index = index_path(cache)
     if not rebuild and derived.is_current(index, provenance(install)):
         return index, None
-    built = build(install, cache, scan)
+    Path(cache).mkdir(parents=True, exist_ok=True)
+    with derived.one_builder(index, DefsError):
+        # The run this one waited for may have built it just now (1.128.1).
+        if not rebuild and derived.is_current(index, provenance(install)):
+            return index, None
+        built = build(install, cache, scan)
     return built.index, built
 
 
