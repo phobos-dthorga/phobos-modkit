@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.128.0] - 2026-11-25
+
+### Added
+
+- **`connections` reads TypeScript, Svelte and Rust, and joins a window's asks to the host commands that answer them** (the
+  owner's answer on D'thorga Companion's Decisions page, "All three"). Functions, classes, components and Rust types with their
+  lines; imports and a Svelte file's components exactly; calls by name; and each `ask("command")` or `invoke("command")` joined
+  exactly to the `#[tauri::command]` function of that name. `names` reads names in those files by name too. On D'thorga
+  Companion: every one of its 177 commands joined. The graph's schema moves to 2, so caches are read again once.
+
 ## [1.127.0] - 2026-11-25
 
 ### Added

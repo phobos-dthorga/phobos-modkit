@@ -9,6 +9,8 @@ overrides, patches, uses, imports), each marked exact or by name. Four readers f
 - XML Defs, from the files: a Def's parent, the Defs it names and the C# classes it uses (`defs.py`).
 - Lua, by name: Lua cannot be read exactly without running it (`lua.py`).
 - Python, read by Python's own parser; calls by name (`pycode.py`).
+- TypeScript and Svelte (`webcode.py`) and Rust (`rustcode.py`), by name, since 1.128.0; and the window's asks joined to the host's
+  Tauri commands that answer them (`join_window_to_host`).
 
 When the game is named and has a table of them (`data_names`, 1.117.0), a fifth adds the names that cross between its data
 files and its code: the things its data files declare (a translation key, a data object) and what names each (`datanames.py`).
@@ -30,7 +32,7 @@ import time
 from .. import cache as derived
 
 CACHE_NAMESPACE = "connections"
-SCHEMA = "1"
+SCHEMA = "2"   # 2 (1.128.0): TypeScript, Svelte and Rust
 SKIP = {".git", "obj", "node_modules", "external", ".local", "target", "dist", "__pycache__", ".venv", "venv", "artifacts",
         ".claude", ".vs", ".idea"}
 GROUP_LIMIT = 80
@@ -131,18 +133,36 @@ def _cache_file(root, environ=None, settings=None, table=None):
     return derived.folder(CACHE_NAMESPACE, None, environ, settings) / f"{safe}-{tag}{game}.sqlite"
 
 
+def join_window_to_host(root, graph, environ=None):
+    """Each window function that asks the host for a command, joined to the `#[tauri::command]` function that answers it, exactly:
+    a command's name is one function's (1.128.0)."""
+    from . import rustcode, webcode
+    commands = rustcode.commands(root)
+    if not commands:
+        return None
+    joined = 0
+    for asker, command in webcode.asked(root):
+        target = commands.get(command)
+        if target and asker in graph.nodes and target in graph.nodes:
+            graph.link(asker, target, "calls")
+            joined += 1
+    return f"exactly, by the command's name ({joined} asks joined)"
+
+
 def _inputs(root, table=None):
-    from . import csharp, datanames, defs, lua, pycode
-    found = csharp.inputs(root) + defs.inputs(root) + lua.inputs(root) + pycode.inputs(root)
+    from . import csharp, datanames, defs, lua, pycode, rustcode, webcode
+    found = (csharp.inputs(root) + defs.inputs(root) + lua.inputs(root) + pycode.inputs(root) + webcode.inputs(root)
+             + rustcode.inputs(root))
     return found + (datanames.inputs(root, table) if table else [])
 
 
 def read_graph(root, environ=None, progress=None, table=None):
     """Every reader's part of the graph, freshly read. `table` is a game's table of the names that cross between its data files
     and its code (`data_names.table_for`), read last, over what the others found."""
-    from . import csharp, datanames, defs, lua, pycode
+    from . import csharp, datanames, defs, lua, pycode, rustcode, webcode
     graph = Graph()
-    steps = [("C#", csharp.read), ("XML Defs", defs.read), ("Lua", lua.read), ("Python", pycode.read)]
+    steps = [("C#", csharp.read), ("XML Defs", defs.read), ("Lua", lua.read), ("Python", pycode.read),
+             ("TypeScript and Svelte", webcode.read), ("Rust", rustcode.read), ("window to host", join_window_to_host)]
     if table:
         steps.append(("data names", lambda root, graph, environ: datanames.read(root, graph, environ, table)))
     for position, (label, reader) in enumerate(steps, 1):

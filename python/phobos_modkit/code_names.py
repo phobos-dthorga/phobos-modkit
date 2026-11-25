@@ -19,7 +19,7 @@ import subprocess
 import tempfile
 
 from . import changes
-from .connections import lua, source_files
+from .connections import lua, rustcode, source_files, webcode
 from .dotnet_tools import DotnetTool, ToolBuildError
 
 
@@ -156,7 +156,9 @@ def read(root, file, commit=None, environ=None, run=subprocess.run, progress=Non
 # ---------------------------------------------------------------- by name, for the languages Roslyn does not read (1.115.0)
 
 #: The languages read by name, by file suffix, and the graph's languages a name in each may stand for.
-BY_NAME = {".lua": ("lua", ("lua",)), ".py": ("python", ("python",)), ".xml": ("xml", ("xml", "csharp"))}
+BY_NAME = {".lua": ("lua", ("lua",)), ".py": ("python", ("python",)), ".xml": ("xml", ("xml", "csharp")),
+           ".ts": ("typescript", ("typescript", "svelte")), ".svelte": ("svelte", ("typescript", "svelte")),
+           ".rs": ("rust", ("rust",))}
 MAX_CANDIDATES = 8
 _WORD = re.compile(r"[A-Za-z_]\w*(?:[.:][A-Za-z_]\w*)*")
 _PART = re.compile(r"[A-Za-z_]\w*")
@@ -176,6 +178,10 @@ def _code_lines(text, language):
         return lua._code(text).split("\n")
     if language == "python":
         return _PY_SKIP.sub(_blank, text).split("\n")
+    if language in ("typescript", "svelte"):       # 1.128.0
+        return webcode.code_of(text, language == "svelte").split("\n")
+    if language == "rust":
+        return rustcode.code_of(text).split("\n")
     text = _XML_COMMENT.sub(_blank, text)
     kept = [" "] * len(text)
     for match in _XML_VALUE.finditer(text):

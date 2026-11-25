@@ -28,7 +28,7 @@ import sys
 import time
 
 from . import changes, code_calls, code_names, connections, data_names
-from .connections import csharp, defs, lineage, lua, pycode
+from .connections import csharp, defs, lineage, lua, pycode, rustcode, webcode
 from .manifest import READS
 from .progress import Progress
 from .report import Bullets, Report, Table, envelope_text, home_redactor, keep, render_markdown
@@ -36,7 +36,7 @@ from .report import Bullets, Report, Table, envelope_text, home_redactor, keep, 
 EXIT_OK, EXIT_REFUSED, EXIT_USAGE = 0, 1, 2
 COMMIT = re.compile(r"^[0-9a-f]{7,40}$")
 NODE = re.compile(r"^(cs|def|lua|py|data):[^\n\r\0]{1,400}$")
-READERS = {".cs": csharp, ".xml": defs, ".lua": lua, ".py": pycode}
+READERS = {".cs": csharp, ".xml": defs, ".lua": lua, ".py": pycode, ".ts": webcode, ".svelte": webcode, ".rs": rustcode}
 RELATION_WORDS = {
     "calls": "Calls", "called-by": "Called by", "holds": "Holds", "belongs-to": "Belongs to", "builds-on": "Builds on",
     "built-on-by": "Built on by", "overrides": "Overrides", "overridden-by": "Overridden by", "patches": "Patches",

@@ -87,9 +87,14 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | XML Defs | each Def (`def:ThingDef/Name`), abstract ones by their `Name` | builds on (`ParentName`); uses a Def (a value that is its defName); uses a C# class (a `Class` attribute, or an element whose name ends in `Class`) | Parents exact; a defName unique in the repository counts as exact |
 | Lua | each file, and its functions (`function A.b(`, `function A:b(`, `local function b(`, `b = function(`) | holds; calls (a name followed by `(`, comments and strings blanked); imports (`require`) | By name |
 | Python | modules, classes, functions, methods (Python's own parser) | holds; builds on (bases in the repository); imports; calls | Shape exact; calls by name |
+| TypeScript and Svelte (1.128.0) | each file (a Svelte file is a `component`), its functions (`function f(`, `const f = (`, `const f = async (`) and classes | holds; imports (`import … from "./x"`, followed to the file); uses (a component a Svelte file's markup names as `<Name`); calls (to what the file imported by that name, else by name) | Imports and components exact; calls by name |
+| Rust (1.128.0) | each file, its functions (`Type::name` inside `impl Type`), `struct`, `enum` and `trait` types, each to its closing brace | holds (functions; files a `mod name;` names); calls (`name(`, `Type::name(`, `.name(`, by name) | Modules and impl blocks exact; calls by name |
+| Window to host (1.128.0) | (none of its own) | calls: each TypeScript or Svelte function that asks `ask<…>("command"` or `invoke("command"`, to the Rust function under `#[tauri::command]` of that name | Exact: a command's name is one function's |
 
 A thing's id starts with its language: `cs:Namespace.Type.Member`, `def:DefType/Name`, `lua:Name` (or `lua:file:path:Name` for a
-local function, `lua:file:path` for a file), `py:module.name`. Things outside the repository (the game, other mods) are in the graph
+local function, `lua:file:path` for a file), `py:module.name`, `ts:path:name` (`ts:file:path` for a file), `rs:path:name` or
+`rs:path:Type::name` (`rs:file:path`). On D'thorga Companion (25 Nov 2026): 1,999 TypeScript and Svelte things, 1,797 Rust, and
+every one of its 177 commands joined to the 178 asks for them, in about five seconds. Things outside the repository (the game, other mods) are in the graph
 as `external`, with the assembly that holds them where the reader knows it.
 
 ### Names in one C# file (`names`)
