@@ -51,6 +51,7 @@
     "zeroed": "docs/zeroed.md",
     "safe-copies": "docs/safe-copies.md",
     "rules": "rules/README.md",
+    "effects": "docs/effects.md",
     "settings": "docs/settings.md",
     "test-pass": "docs/test-pass.md",
     "art-audit": "docs/art-audit.md",

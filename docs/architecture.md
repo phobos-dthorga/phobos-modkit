@@ -93,6 +93,7 @@ recorders are out of scope) are in `AGENTS.md`, "What belongs here".
 | `code/` | The C# declaration scanner (`scan.py`), one SQLite index per source tree (`index.py`), build comparison, Harmony patches read from source |
 | `connections/` | How a repository's code fits together, one reader per language: C#, XML Defs, Lua, Python, and each thing's git lineage; with a game named, the names between its data files and its code (`datanames.py`) |
 | `data_names.py` | The names that cross between a game's data files and its code, read by a table of the game's adapter (`games/<game>/data-names.json`): things, rules, and the count every rule passes |
+| `effects.py`, `effects_cli.py` | What a repository's data declares a thing does, and whether anything reads it, by the repository's own `config/effects.json` ([effects](effects.md)) |
 | `gate/` | A repository's checks from `config/gate.json`: runner, output parsers, the passing-run stamp the commit guard checks |
 | `release/` | Changelogs in the Phobos form, version constants kept in step, the history screen before going public |
 | `steam/` | Workshop research (`workshop.py`, cached and paced), the Steam client (`client.py`), BBCode, VDF; `publish/` for notes, staging, the owner's uploader and the per-game publishing data |

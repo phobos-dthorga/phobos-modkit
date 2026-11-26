@@ -4,6 +4,17 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.133.0] - 2026-11-27
+
+### Added
+
+- **effects: whether anything reads what a repository's data declares** (the owner's choice of 27 Nov 2026, "yes, as a gate check,
+  and maybe put it into Companion too", after an audit of phobos-rimworld's vehicle fittings found promises only partly kept).
+  `effects check --root REPO` fails on a name a thing declares as an effect (a grant, a figure, a mount, an upgrade node) that no
+  other data file or quoted string in code reads; `effects list` adds the accepted ones and why. Which things count is the
+  repository's own `config/effects.json`, so it knows no game. `list` has a question and counts what waits, so D'thorga Companion's
+  Reports page offers it. How: [effects](docs/effects.md).
+
 ## [1.132.0] - 2026-11-27
 
 ### Added
