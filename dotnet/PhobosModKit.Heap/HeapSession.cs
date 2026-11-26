@@ -32,6 +32,9 @@ public sealed class HeapSession : IDisposable
 
     public int Pid { get; }
     public long SnapshotMilliseconds { get; }
+    /// <summary>Read in place with the program frozen (1.132.0), not from a snapshot.</summary>
+    public bool Frozen { get; private init; }
+    private int disposed;
     public string RuntimeFolder { get; }
     public string Dac { get; }
 
@@ -54,14 +57,21 @@ public sealed class HeapSession : IDisposable
     /// <paramref name="runtimeFolder"/>. That library may not be signed by Microsoft (a game that ships its own build of .NET, as
     /// RimWorld 1.7 does), so the signature check is off; the folder check is what makes it the trusted install's own file.
     /// </summary>
-    public static HeapSession Open(int pid, string runtimeFolder, IEnumerable<string> describe, Progress progress)
+    /// <remarks>
+    /// <paramref name="freeze"/> (1.132.0): suspend the program's threads and read it in place instead of taking a snapshot, for
+    /// when Windows has no room to clone it (error 1450, a game near the machine's free commit). The program stays frozen until
+    /// the session is disposed, so the caller holds it no longer than it must and always disposes it.
+    /// </remarks>
+    public static HeapSession Open(int pid, string runtimeFolder, IEnumerable<string> describe, Progress progress, bool freeze = false)
     {
         if (!OperatingSystem.IsWindows())
             throw new SessionError("A snapshot of a running program can be read on Windows only.");
         string folder = Normal(runtimeFolder);
-        progress.Say("Taking a snapshot of the game");
+        progress.Say(freeze ? "Freezing the game to read it" : "Taking a snapshot of the game");
         var clock = Stopwatch.StartNew();
-        DataTarget target = DataTarget.CreateSnapshotAndAttach(pid, new DataTargetOptions { VerifyDacOnWindows = false });
+        var targetOptions = new DataTargetOptions { VerifyDacOnWindows = false };
+        DataTarget target = freeze ? DataTarget.AttachToProcess(pid, suspend: true, targetOptions)
+                                   : DataTarget.CreateSnapshotAndAttach(pid, targetOptions);
         long snapshotMs = clock.ElapsedMilliseconds;
         try
         {
@@ -81,7 +91,7 @@ public sealed class HeapSession : IDisposable
                 throw new SessionError("The game was in the middle of a garbage collection when the snapshot was taken, so its memory "
                                        + "cannot be read; take another.");
             }
-            return new HeapSession(pid, target, runtime, snapshotMs, folder, dac, describe, progress);
+            return new HeapSession(pid, target, runtime, snapshotMs, folder, dac, describe, progress) { Frozen = freeze };
         }
         catch
         {
@@ -92,16 +102,25 @@ public sealed class HeapSession : IDisposable
 
     private static string Normal(string path) => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
+    /// <summary>Lets the snapshot go, or (frozen) lets the program run on. Safe to call twice, and from the time limit's thread.</summary>
     public void Dispose()
     {
-        runtime.Dispose();
-        target.Dispose();
+        if (Interlocked.Exchange(ref disposed, 1) == 1) return;
+        try
+        {
+            runtime.Dispose();
+        }
+        finally
+        {
+            target.Dispose();
+        }
     }
 
     public JsonObject Info() => new()
     {
         ["pid"] = Pid,
         ["snapshotMs"] = SnapshotMilliseconds,
+        ["attach"] = Frozen ? "freeze" : "snapshot",
         ["ageSeconds"] = Math.Round(age.Elapsed.TotalSeconds, 1),
         ["runtime"] = runtime.ClrInfo.Version.ToString(),
         ["runtimeFolder"] = RuntimeFolder,

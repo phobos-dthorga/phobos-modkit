@@ -24,6 +24,7 @@ values. The design and its reasons: phobos-rimworld's
 python -m phobos_modkit rimworld-save checks --checks config/checks.json        every save check, on the newest save
 python -m phobos_modkit rimworld-save checks --save PG20 --check "work-store*"  some checks, on one save
 python -m phobos_modkit rimworld-perf look-check --checks config/checks.json    every live check, from one snapshot (ask first)
+python -m phobos_modkit rimworld-perf look-check --freeze    the same, the game frozen and read in place, when a snapshot has no room
 ```
 
 ## Inputs

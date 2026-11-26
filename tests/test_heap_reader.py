@@ -101,6 +101,63 @@ class Answers(unittest.TestCase):
         line = hr.command("reader", "run", 42, "C:/Games/RimWorld", ["defName"], None, [{"op": "overview"}])
         self.assertEqual(line, ["reader", "run", "--pid", "42", "--runtime-folder", "C:/Games/RimWorld", "--describe", "defName",
                                 "--request", '{"op": "overview"}'])
+        self.assertEqual(hr.command("reader", "run", 42, "C:/G", freeze=True)[6:], ["--attach", "freeze"])
+
+
+class FakeRun:
+    """subprocess.run for the reader: each call's line kept, and its standard output from the list given, in order."""
+
+    def __init__(self, *outputs):
+        self.outputs, self.lines = list(outputs), []
+
+    def __call__(self, line, **_):
+        self.lines.append(line)
+        return subprocess.CompletedProcess(line, 0, self.outputs.pop(0), None)
+
+
+def lines_of(*entries):
+    return "".join(json.dumps(e) + chr(10) for e in entries)
+
+
+class Freezing(unittest.TestCase):
+    """1.132.0: a read with the game frozen instead of a snapshot, and the thaw that follows any reader that stops early."""
+
+    def ensure(self, _environ):
+        return "reader"
+
+    def test_a_frozen_read_says_how_long_and_thaws_nothing_more(self):
+        run = FakeRun(lines_of({"ready": True, "pid": 7, "attach": "freeze"}, {"ok": True, "data": {"n": 1}},
+                               {"event": "thawed", "frozenMs": 8400}))
+        ready, answers = hr.run_requests(7, "C:/G", [{"op": "overview"}], environ={}, run=run, ensure=self.ensure, freeze=True)
+        self.assertEqual((ready["frozenMs"], answers), (8400, [{"ok": True, "data": {"n": 1}}]))
+        self.assertEqual(len(run.lines), 1)
+        self.assertIn("freeze", run.lines[0])
+
+    def test_a_reader_that_stops_before_letting_go_is_followed_by_a_thaw(self):
+        run = FakeRun(lines_of({"ready": True, "pid": 7}, {"ok": True, "data": {}}),
+                      lines_of({"pid": 7, "thawed": True, "says": "Every one of its 90 threads was suspended; each was resumed once."}))
+        with self.assertRaises(hr.LookError) as caught:
+            hr.run_requests(7, "C:/G", [{"op": "overview"}], environ={}, run=run, ensure=self.ensure, freeze=True)
+        self.assertEqual(run.lines[1], ["reader", "thaw", "--pid", "7"])
+        self.assertIn("each was resumed once", str(caught.exception))
+
+    def test_a_reader_stopped_at_its_limit_is_followed_by_a_thaw(self):
+        calls = []
+
+        def run(line, **kwargs):
+            calls.append(line)
+            if line[1] == "run":
+                raise subprocess.TimeoutExpired(line, kwargs["timeout"])
+            return subprocess.CompletedProcess(line, 0, lines_of({"thawed": False, "says": "running"}), None)
+        with self.assertRaises(hr.LookError):
+            hr.run_requests(7, "C:/G", [], environ={}, run=run, ensure=self.ensure, freeze=True)
+        self.assertEqual(calls[1][1], "thaw")
+
+    def test_a_snapshot_with_no_room_says_to_freeze(self):
+        run = FakeRun(lines_of({"ready": False, "error": "Could not create snapshot to process. Error 1450."}))
+        with self.assertRaises(hr.LookError) as caught:
+            hr.run_requests(7, "C:/G", [], environ={}, run=run, ensure=self.ensure)
+        self.assertIn("--freeze", str(caught.exception))
 
 
 class Relay(unittest.TestCase):
@@ -303,6 +360,52 @@ class Reading(unittest.TestCase):
         self.assertEqual(ready["pid"], self.pid)
         self.assertEqual([[f.text for f in r.findings] for r in results], [["Colonist 11 is 31"], ["Empty has nobody"]])
         self.assertEqual([r.read for r in results], [12, 2])
+
+    def test_live_checks_read_the_program_frozen_and_let_it_go(self):
+        """1.132.0: the same checks with the program frozen instead of a snapshot; afterwards its threads run again."""
+        old = checks.parse_check({"id": "old", "title": "Nobody is over 30", "source": "live",
+                                  "select": {"type": "HeapFixture.Colonist"}, "read": {"age": "Age", "name": "Name"},
+                                  "fault": "age > 30", "says": "{name} is {age}"}, "test")
+        ready, results = checks_live.run(self.pid, self.folder, [old], ["Name"], freeze=True)
+        self.assertEqual(ready["attach"], "freeze")
+        self.assertIsNotNone(ready["frozenMs"])
+        self.assertEqual([f.text for f in results[0].findings], ["Colonist 11 is 31"])
+        self.assertFalse(hr.thaw(self.pid)["thawed"])       # running again: the thaw finds nothing to do
+
+    def test_a_program_left_frozen_is_thawed_and_a_running_one_left_alone(self):
+        suspend_every_thread(self.pid)
+        found = hr.thaw(self.pid)
+        self.assertTrue(found["thawed"], found)
+        again = hr.thaw(self.pid)
+        self.assertFalse(again["thawed"], again)
+
+
+def suspend_every_thread(pid):
+    """Leave a program as a reader that stopped mid-read would: every thread suspended once (Windows only)."""
+    import ctypes
+    from ctypes import wintypes
+
+    class Entry(ctypes.Structure):
+        _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ThreadID", wintypes.DWORD),
+                    ("th32OwnerProcessID", wintypes.DWORD), ("tpBasePri", wintypes.LONG), ("tpDeltaPri", wintypes.LONG),
+                    ("dwFlags", wintypes.DWORD)]
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel.OpenThread.restype = wintypes.HANDLE
+    snapshot = kernel.CreateToolhelp32Snapshot(0x4, 0)
+    try:
+        entry = Entry()
+        entry.dwSize = ctypes.sizeof(Entry)
+        more = kernel.Thread32First(wintypes.HANDLE(snapshot), ctypes.byref(entry))
+        while more:
+            if entry.th32OwnerProcessID == pid:
+                handle = kernel.OpenThread(0x2, False, entry.th32ThreadID)
+                if handle:
+                    kernel.SuspendThread(wintypes.HANDLE(handle))
+                    kernel.CloseHandle(wintypes.HANDLE(handle))
+            more = kernel.Thread32Next(wintypes.HANDLE(snapshot), ctypes.byref(entry))
+    finally:
+        kernel.CloseHandle(wintypes.HANDLE(snapshot))
 
 
 if __name__ == "__main__":

@@ -15,6 +15,9 @@ SELECT_KEYS = ("type", "subclasses", "take", "items")
 CAVEAT = ("Read from one snapshot of the running game: it paused for the moment the snapshot took, then ran on, and nothing was "
           "written to it. A snapshot holds what was in memory at that instant, garbage not yet collected included. A finding is a "
           "state the rules say should not happen; it is not an in-game test, and a check can be wrong.")
+FROZEN_CAVEAT = ("Read from the running game frozen (1.132.0): it stood still while it was read, then ran on, and nothing was "
+                 "written to it. What was in memory then is what was read, garbage not yet collected included. A finding is a "
+                 "state the rules say should not happen; it is not an in-game test, and a check can be wrong.")
 
 
 def request_for(check):
@@ -63,13 +66,15 @@ def _asked(checks):
     return asked, results
 
 
-def run(pid, runtime_folder, checks, describe=(), environ=None, run_requests=hr.run_requests):
-    """(the reader's first line, a Result for each live check). One snapshot answers them all. Raises heap_reader.LookError when
-    no snapshot could be taken."""
+def run(pid, runtime_folder, checks, describe=(), environ=None, run_requests=hr.run_requests, freeze=False):
+    """(the reader's first line, a Result for each live check). One snapshot answers them all, or (freeze, 1.132.0) one read of
+    the game frozen. Raises heap_reader.LookError when no snapshot could be taken."""
     asked, results = _asked(checks)
     if not asked:
         return {}, results
-    ready, answers = run_requests(pid, runtime_folder, [request for _, request in asked], describe, environ)
+    requests = [request for _, request in asked]
+    ready, answers = (run_requests(pid, runtime_folder, requests, describe, environ, freeze=True) if freeze
+                      else run_requests(pid, runtime_folder, requests, describe, environ))
     return ready, _judged(checks, asked, answers, results)
 
 
@@ -88,9 +93,9 @@ def held_answer(checks, files, ask, redact=None):
     return dict(data(results), report=render_json(report, redact))
 
 
-def checks_report(results, files):
+def checks_report(results, files, frozen=False):
     """The live checks' report, naming the check files it ran."""
-    return report("Live checks", results, facts=[Fact("Checks", ", ".join(files))], caveat=CAVEAT)
+    return report("Live checks", results, facts=[Fact("Checks", ", ".join(files))], caveat=FROZEN_CAVEAT if frozen else CAVEAT)
 
 
 def _judged(checks, asked, answers, results):

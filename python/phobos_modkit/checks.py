@@ -425,12 +425,20 @@ def load_checks(path, source=None, kinds=()):
         raise CheckError(f"{path.name} holds no list of checks under \"checks\".")
     checks, ids = [], set()
     for n, entry in enumerate(entries, 1):
+        # Only the checks asked for are read in full (1.132.0): a save check's kind belongs to the save adapter, which the live
+        # reader does not know, so reading it here refused a whole file of live checks.
+        if source is not None and isinstance(entry, dict) and entry.get("source") in SOURCES and entry.get("source") != source:
+            check_id = entry.get("id")
+            if isinstance(check_id, str) and check_id in ids:
+                raise CheckError(f"{path.name}: two checks share the id {check_id}.")
+            ids.add(check_id)
+            continue
         check = parse_check(entry, f"{path.name}, check {n}", kinds)
         if check.id in ids:
             raise CheckError(f"{path.name}: two checks share the id {check.id}.")
         ids.add(check.id)
         checks.append(check)
-    return [c for c in checks if source is None or c.source == source]
+    return checks
 
 
 CHECK_FILE = Path("config") / "checks.json"

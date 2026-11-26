@@ -174,6 +174,9 @@ def _parser():
                     help="the check file (default: config/checks.json here, else in RimWorld's repositories on the games list)")
     lc.add_argument("--check", help="only checks whose id matches; * and ? are wildcards")
     lc.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
+    lc.add_argument("--freeze", action="store_true",
+                    help="freeze the game and read it in place instead of a snapshot, when Windows has no room to copy it (error "
+                         f"1450); it stands still while it is read, {hreader.FREEZE_SECONDS} s at most")
     lv = sub.add_parser("look-serve", parents=[common], help="hold a snapshot and answer JSON requests a line at a time, for a program")
     lv.add_argument("--label", help="a few words to keep its overview by")
     lv.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
@@ -577,9 +580,11 @@ def _look_check(args, environ, settings_file, run, run_requests=None):
         raise PerfError(", ".join(files) + " hold no live checks" + (f" matching {args.check}" if args.check else "") + ".")
     pid = _pid(args, run, "RimWorld is not running. Load the save you want to check first.")
     ready, results = checks_live.run(pid, look.runtime_folder(args.game, environ, settings_file), chosen, look.DESCRIBE, environ,
-                                     run_requests or hreader.run_requests)
-    report = checks_live.checks_report(results, files)
-    if ready.get("snapshotMs") is not None:
+                                     run_requests or hreader.run_requests, freeze=bool(getattr(args, "freeze", False)))
+    report = checks_live.checks_report(results, files, frozen=ready.get("frozenMs") is not None)
+    if ready.get("frozenMs") is not None:
+        report.lines.insert(1, f"The game was frozen for {ready['frozenMs']:,} ms while it was read, then let go.")
+    elif ready.get("snapshotMs") is not None:
         report.lines.insert(1, f"The snapshot paused the game for {ready['snapshotMs']:,} ms.")
     return report, check_engine.data(results)
 

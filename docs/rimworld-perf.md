@@ -127,6 +127,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--sample N` | `look-why` | paths to show, each to a different object (default 3) | `3` |
 | `--checks VALUE` | `look-check` | the check file (default: config/checks.json here, else in RimWorld's repositories on the games list) |  |
 | `--check VALUE` | `look-check` | only checks whose id matches; \* and ? are wildcards |  |
+| `--freeze` | `look-check` | freeze the game and read it in place instead of a snapshot, when Windows has no room to copy it (error 1450); it stands still while it is read, 120 s at most |  |
 | `--label VALUE` | `look-serve` | a few words to keep its overview by |  |
 | `--limit-seconds N` | `look-serve` | let the snapshot go after this long (default 600: it costs memory while held) | `600` |
 
@@ -260,7 +261,9 @@ collection. See [the heap reader](heap-reader.md).
 **`look-check` (1.120.0) runs a repository's live checks** from one snapshot: every check with `"source": "live"` in the check
 file (default `config/checks.json`) becomes one values request, all answered before the snapshot is let go, then judged and
 reported as `rimworld-save checks` reports a save's. How checks are written, and what a live check's `select` and paths take:
-[checks](checks.md). **Ask before every run on someone's game**, as for every snapshot.
+[checks](checks.md). **Ask before every run on someone's game**, as for every snapshot. **`--freeze`** (1.132.0) reads the game
+frozen instead of from a snapshot, when Windows has no room to copy it (error 1450): the game stands still for the whole read, 120 s
+at most, and is always let go; see [the heap reader](heap-reader.md#read-this-first).
 
 ## Effects
 

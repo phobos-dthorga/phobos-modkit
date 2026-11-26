@@ -43,8 +43,10 @@ class LookError(RuntimeError):
 TOOL = DotnetTool("PhobosModKit.Heap", "heap", "look inside a running game", HeapReaderError)
 
 
-def command(tool, mode, pid, runtime_folder, describe=(), limit_seconds=None, requests=()):
+def command(tool, mode, pid, runtime_folder, describe=(), limit_seconds=None, requests=(), freeze=False):
     line = [str(tool), mode, "--pid", str(int(pid)), "--runtime-folder", str(runtime_folder)]
+    if freeze:
+        line += ["--attach", "freeze"]
     if limit_seconds:
         line += ["--limit-seconds", str(int(limit_seconds))]
     for path in describe:
@@ -58,19 +60,67 @@ def _lines(text):
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
-def run_requests(pid, runtime_folder, requests, describe=(), environ=None, run=subprocess.run, ensure=None):
-    """(ready, answers): a snapshot of process pid, the requests answered in order, then let go. Progress lines, when wanted,
-    pass straight to this program's standard error. Raises LookError when no snapshot could be read."""
+# Freezing instead of a snapshot (1.132.0): Windows clones the program for a snapshot, which needs about the program's own size
+# in free commit (RAM plus page file). A game near that fails with error 1450; frozen, it is read in place with no copy, and
+# stands still for the whole read instead of half a second.
+FREEZE_SECONDS = 120    # the reader lets a frozen game go after this long at most (its own default)
+FREEZE_MARGIN = 60      # then this long more before this side stops the reader and thaws the game itself
+NO_ROOM_HINT = ("Windows had no room to copy the game for a snapshot (error 1450: the game's memory is near the machine's free "
+                "RAM and page file). Read it frozen instead (--freeze: the game stands still while it is read, no copy needed), "
+                "or give Windows more room: a larger page file, or fewer programs open.")
+
+
+def thaw(pid, environ=None, run=subprocess.run, ensure=None):
+    """The reader's thaw (1.132.0): lets the game run on if a freezing reader left every thread of it suspended; changes nothing
+    when any thread runs. What it found, as data ({"thawed": bool, "says": ...} or {"error": ...})."""
     tool = (ensure or TOOL.ensure)(environ)
-    result = run(command(tool, "run", pid, runtime_folder, describe, None, requests), stdout=subprocess.PIPE, stderr=None,
-                 text=True, encoding="utf-8", errors="replace", check=False, timeout=RUN_TIMEOUT)
+    result = run([str(tool), "thaw", "--pid", str(int(pid))], stdout=subprocess.PIPE, stderr=None, text=True, encoding="utf-8",
+                 errors="replace", check=False, timeout=120)
     lines = _lines(result.stdout or "")
+    return lines[0] if lines else {"error": f"The thaw stopped without an answer (exit {result.returncode})."}
+
+
+def run_requests(pid, runtime_folder, requests, describe=(), environ=None, run=subprocess.run, ensure=None, freeze=False):
+    """(ready, answers): a snapshot of process pid, the requests answered in order, then let go. Progress lines, when wanted,
+    pass straight to this program's standard error. Raises LookError when no snapshot could be read.
+
+    freeze (1.132.0): read the game frozen instead of from a snapshot. ready then carries frozenMs, how long it stood still.
+    Whenever the reader does not say it let the game go, this side thaws it, so a reader that stops early never leaves it hung."""
+    tool = (ensure or TOOL.ensure)(environ)
+    line = command(tool, "run", pid, runtime_folder, describe, None, requests, freeze)
+    try:
+        result = run(line, stdout=subprocess.PIPE, stderr=None, text=True, encoding="utf-8", errors="replace", check=False,
+                     timeout=FREEZE_SECONDS + FREEZE_MARGIN if freeze else RUN_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        if freeze:
+            found = thaw(pid, environ, run, lambda _environ: tool)
+            raise LookError("The heap reader ran past its time limit and was stopped. " + _thaw_said(found)) from None
+        raise
+    lines = _lines(result.stdout or "")
+    events = [entry for entry in lines[1:] if "event" in entry]
+    answers = [entry for entry in lines[1:] if "event" not in entry]
+    thawed = next((e for e in events if e.get("event") == "thawed"), None)
+    if freeze and thawed is None:
+        found = thaw(pid, environ, run, lambda _environ: tool)
+        if not lines or lines[0].get("ready"):
+            raise LookError(f"The heap reader stopped before it let the game go (exit {result.returncode}). " + _thaw_said(found))
     if not lines:
         raise LookError(f"The heap reader stopped without an answer (exit {result.returncode}).")
-    ready, answers = lines[0], lines[1:]
+    ready = lines[0]
     if not ready.get("ready"):
-        raise LookError(ready.get("error") or "The snapshot could not be read.")
+        error = ready.get("error") or "The snapshot could not be read."
+        raise LookError(error + (" " + NO_ROOM_HINT if not freeze and "1450" in error else ""))
+    if thawed is not None:
+        ready = dict(ready, frozenMs=thawed.get("frozenMs"))
+        if thawed.get("reason"):
+            raise LookError(f"The game was let go before every answer was read: {thawed['reason']}.")
     return ready, answers
+
+
+def _thaw_said(found):
+    if found.get("error"):
+        return f"Checking the game afterwards failed ({found['error']}): if it stands still, close it; the last save is safe."
+    return found.get("says", "")
 
 
 class Session:

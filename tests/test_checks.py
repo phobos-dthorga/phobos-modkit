@@ -99,6 +99,13 @@ class Parsing(unittest.TestCase):
                 {"id": "b", "title": "B", "source": "live", "read": {"x": "x"}, "fault": "x"}]}), encoding="utf-8")
             self.assertEqual([c.id for c in checks.load_checks(path, "live")], ["b"])
             self.assertEqual(len(checks.load_checks(path)), 2)
+            # 1.132.0: a save check of the save adapter's own kind no longer refuses the file's live checks
+            path.write_text(json.dumps({"checks": [
+                {"id": "n", "title": "N", "source": "save", "kind": "numbers"},
+                {"id": "b", "title": "B", "source": "live", "read": {"x": "x"}, "fault": "x"}]}), encoding="utf-8")
+            self.assertEqual([c.id for c in checks.load_checks(path, "live")], ["b"])
+            with self.assertRaises(checks.CheckError):
+                checks.load_checks(path)
             path.write_text(json.dumps({"checks": [{"id": "a", "title": "A", "source": "save", "read": {"x": "x"}, "fault": "x"}] * 2}),
                             encoding="utf-8")
             with self.assertRaises(checks.CheckError):

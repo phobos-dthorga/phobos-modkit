@@ -4,6 +4,23 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.132.0] - 2026-11-27
+
+### Added
+
+- **Live checks can read the game frozen, when a snapshot has no room** (the owner's choice of 27 Nov 2026, "freeze-and-read
+  mode"). The first live check on the owner's game failed: Windows copies a game for a snapshot, and the game's 21.3 GB of private
+  memory was more than the 19.6 GB of commit left, so Windows refused with error 1450. `rimworld-perf look-check --freeze` freezes
+  the game and reads it in place with no copy: the owner's game stood still for 28.6 s, and both live checks found nothing across
+  216 vehicles. The game is always let go: when the read is done, at a 120 s limit, on Ctrl+C, and, if the reader is stopped before
+  it can, by the reader's new `thaw`, which the kit runs at once. A snapshot refused with error 1450 now says to use `--freeze`. How:
+  [the heap reader](docs/heap-reader.md#read-this-first).
+
+### Fixed
+
+- **A file of live and save checks no longer refuses its live checks.** The live reader read the save checks too, and refused the
+  save adapter's own kinds (`numbers`, `references`) as unknown; it now reads only the checks it runs.
+
 ## [1.131.0] - 2026-11-26
 
 ### Added
