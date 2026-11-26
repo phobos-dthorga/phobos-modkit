@@ -97,6 +97,11 @@ finding names the object by its summary (RimWorld's: a pawn's name, a Def's defN
 | `isnan(x)` | Whether a value, or any in a list, is NaN or infinite |
 | `contains(x, value)` | Whether a list holds a value |
 | `unique(x)` | A list's values, each once, in their first order |
+| `samples(text, low, high)` | A series saved as base64 text, each value a little-endian 16-bit number scaled over low..high, oldest first (1.130.0; D'thorga Framework's graph histories). None when the text is not one |
+| `first(x)`, `last(x)`, `at(x, i)` | A list's first or last item, or the one at place i (from 0; a negative place counts from the end); None when there is none |
+| `tail(x, n)` | The last n items: a series' last hours (the Framework's histories keep ten samples an hour) |
+| `diffs(x)` | Each number's change from the one before: `min(diffs(x))` is the largest single drop, `max(diffs(x))` the largest rise |
+| `mean(x)` | The numbers' average, or None |
 
 **How values are read:** text that reads as a number is a number (whole numbers stay whole); `True` and `False` are flags; `NaN`
 and the infinities are numbers, for `isnan`; anything else is text. Arithmetic on anything but numbers, or dividing by nothing,
@@ -129,6 +134,24 @@ that misses lands in "Seen, but not with the figures the row expects". A rule ma
 **Each save gives its own notes**: a figure is a state at a moment, so the same thing in four saves is four readings, each with its
 save's time. Live checks cannot take a `note` yet: a snapshot is not kept, and its version would need the running game's own ledger.
 `rimworld-save checks` lists what each figure check noted, under "Figures noted for the test list".
+
+### A saved series (1.130.0)
+
+D'thorga Framework saves a vehicle's last day of each quantity it shows as one string,
+`PhobosVehicleSystems_History_<system>_<quantity>`: 240 samples, one each tenth of an hour, oldest first, each scaled over the
+quantity's `min` and `max` from its system Def. **The range is written in the rule**, from the Def: the wrong range gives wrong
+figures without any error. Derived quantities are in it too, so a figure the saved values leave out (flight control, crew oxygen)
+is readable. A vehicle new to the world may hold only a sample or two: narrow a rule with `count(samples(...)) >= N`.
+
+```json
+{"id": "camp-night-heater", "title": "A camped truck's night heater holds its coolant warm", "source": "save",
+ "select": {"class": "*VehiclePawn", "place": "world object"},
+ "read": {"heater": "PhobosVehicleSystems_Loads[nightHeater]",
+          "coolant": "PhobosVehicleSystems_History_PhobosVehicleSystem_Cooling_coolantTemperature"},
+ "when": "heater == True and count(samples(coolant, -60, 200)) >= 100",
+ "note": {"key": "check.vehicle.camp-coolant", "mod": "D'thorga Framework",
+          "figures": {"low": "min(tail(samples(coolant, -60, 200), 100))", "high": "max(tail(samples(coolant, -60, 200), 100))"}}}
+```
 
 ### RimWorld's own kinds (save checks)
 

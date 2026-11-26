@@ -14,10 +14,16 @@ check file can never run code.
 figures become notes in the seen-in-play format (`notes_of`), which a test list's evidence map judges with its own `expect`, so a
 row's claim about a number is read from the game's own state rather than taken on trust. A note is evidence for the owner, never a
 verdict.
+
+**Series** (1.130.0): `samples(text, low, high)` reads a series a game saved as base64 text, each value a little-endian 16-bit number
+scaled over low..high (D'thorga Framework's graph histories), so a rule can take a rate, a step or a level over time with `first`,
+`last`, `at`, `tail`, `diffs` and `mean`.
 """
 from __future__ import annotations
 
 import ast
+import base64
+import binascii
 from dataclasses import dataclass, field
 import json
 import math
@@ -109,6 +115,52 @@ def _contains(values, wanted):
     return any(v == wanted for v in _flat(values))
 
 
+SAMPLE_TOP = 0xFFFF
+
+
+def _samples(text, low, high):
+    """The values of a series saved as base64 text: each a little-endian unsigned 16-bit number, 0 standing for <low> and 65535 for
+    <high>, oldest first. Text that is not such a series, or a range that is not two numbers, gives None."""
+    if text is None or not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (low, high)):
+        return None
+    try:
+        raw = base64.b64decode(str(text).strip(), validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    span = high - low
+    return [low + span * (raw[i] | raw[i + 1] << 8) / SAMPLE_TOP for i in range(0, len(raw) - 1, 2)]
+
+
+def _items(values):
+    """A list's values, None left out; a single value as a list of one."""
+    return [v for v in (values if isinstance(values, list) else [values]) if v is not None]
+
+
+def _at(values, index):
+    """The item at a place in a list, counting from 0, or from the end with a negative place; None when there is none."""
+    found = _items(values)
+    if not isinstance(index, int) or isinstance(index, bool) or not -len(found) <= index < len(found):
+        return None
+    return found[index]
+
+
+def _tail(values, n):
+    """The last n items of a list: a series' last hours (D'thorga Framework's histories keep ten samples an hour)."""
+    found = _items(values)
+    return found[-int(n):] if isinstance(n, (int, float)) and not isinstance(n, bool) and n >= 1 else []
+
+
+def _diffs(values):
+    """Each number's change from the one before it: a series' steps, so min(diffs(x)) is its largest single drop."""
+    found = _numbers(values)
+    return [b - a for a, b in zip(found, found[1:])]
+
+
+def _mean(values):
+    found = _numbers(values)
+    return sum(found) / len(found) if found else None
+
+
 FUNCTIONS = {
     "sum": _sum,          # the numbers in a list (or one value), added up; text and None are left out
     "count": _count,      # how many values there are; None is left out
@@ -121,6 +173,13 @@ FUNCTIONS = {
     "isnan": _isnan,      # whether a value, or any in a list, is NaN or infinite
     "contains": _contains,  # whether a list holds a value
     "unique": _unique,    # a list's values, each once, in their first order
+    "samples": _samples,  # a series saved as base64 16-bit values scaled over low..high (1.130.0)
+    "first": lambda values: _at(values, 0),   # a list's first item, or None
+    "last": lambda values: _at(values, -1),   # a list's last item, or None
+    "at": _at,            # the item at a place (from 0; negative from the end), or None
+    "tail": _tail,        # the last n items
+    "diffs": _diffs,      # each number's change from the one before
+    "mean": _mean,        # the numbers' average, or None
 }
 
 _ALLOWED = (ast.Expression, ast.BoolOp, ast.And, ast.Or, ast.UnaryOp, ast.Not, ast.USub, ast.UAdd, ast.BinOp, ast.Add, ast.Sub,

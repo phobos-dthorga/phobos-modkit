@@ -153,6 +153,36 @@ class Judging(unittest.TestCase):
         self.assertEqual([f.row.id for f in checks.judge(check, rows).findings], ["b"])
 
 
+class Series(unittest.TestCase):
+    """A series saved as base64 16-bit values (1.130.0): D'thorga Framework's graph histories, read and taken apart."""
+
+    @staticmethod
+    def saved(*shares):
+        import base64
+        import struct
+        return base64.b64encode(struct.pack(f"<{len(shares)}H", *(round(s * 0xFFFF) for s in shares))).decode()
+
+    def test_a_series_decodes_over_its_range_oldest_first(self):
+        found = checks.Expression("samples(h, -60, 80)")({"h": self.saved(0, 0.5, 1)})
+        self.assertEqual([round(v, 2) for v in found], [-60.0, 10.0, 80.0])
+        self.assertIsNone(checks.Expression("samples(h, 0, 1)")({"h": "not base64!"}))
+        self.assertIsNone(checks.Expression("samples(h, 0, 1)")({"h": None}))
+        self.assertIsNone(checks.Expression("samples(h, 'a', 1)")({"h": self.saved(1)}))
+
+    def test_rates_steps_and_levels(self):
+        values = {"h": self.saved(1, 0.9, 0.5, 0.45, 0.4)}
+        e = lambda text: checks.Expression(text)(values)  # noqa: E731
+        self.assertEqual(e("first(samples(h, 0, 1))"), 1.0)
+        self.assertAlmostEqual(e("last(samples(h, 0, 1))"), 0.4, 4)
+        self.assertAlmostEqual(e("at(samples(h, 0, 1), -2)"), 0.45, 4)
+        self.assertIsNone(e("at(samples(h, 0, 1), 9)"))
+        self.assertEqual(e("count(tail(samples(h, 0, 1), 2))"), 2)
+        self.assertAlmostEqual(e("min(diffs(samples(h, 0, 1)))"), -0.4, 4)     # the largest single drop
+        self.assertAlmostEqual(e("mean([1, 2, None, 3])"), 2)
+        self.assertIsNone(e("mean([])"))
+        self.assertEqual(e("tail([1, 2, 3], 0)"), [])
+
+
 class FigureNotes(unittest.TestCase):
     """A rule's note (1.129.0): figures read from each thing it applies to, as seen-in-play notes for a test list."""
 

@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.130.0] - 2026-11-26
+
+### Added
+
+- **A check can read a saved series** (the owner's go-ahead of 26 Nov 2026: "build the graph history decoding too"). `samples(text,
+  low, high)` reads a series saved as base64 16-bit values scaled over a range, as D'thorga Framework keeps each vehicle's last day of
+  every quantity it shows; `first`, `last`, `at`, `tail`, `diffs` and `mean` take a level, a rate or a step from it. So a figure rule
+  can judge what happened over a day, and quantities the saved values leave out. How: [checks](docs/checks.md#a-saved-series).
+
 ## [1.129.0] - 2026-11-26
 
 ### Added
