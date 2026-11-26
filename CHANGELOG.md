@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.131.0] - 2026-11-26
+
+### Added
+
+- **A save check knows the save's tick and whose a thing is** (the owner's go-ahead of 26 Nov 2026 to look into the leads the
+  histories showed). Every rule may use `now`, the game's tick when the save was written, and `ofPlayer`, whether the thing is the
+  player's; RimWorld's save checks give both. Another faction's vehicle off a map is never updated, so its saved history can be
+  months old: two raiders' engines "at 200 C for ten hours" in the owner's save were a day from 157 days before.
+
 ## [1.130.0] - 2026-11-26
 
 ### Added

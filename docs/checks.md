@@ -86,7 +86,7 @@ finding names the object by its summary (RimWorld's: a pawn's name, a Def's defN
 
 | Part | What it is |
 | --- | --- |
-| Names | The values `read` names, plus `id` and `label` (the thing's) |
+| Names | The values `read` names, plus `id` and `label` (the thing's), and (1.131.0) `now`, the game's tick when the state was read, and `ofPlayer`, whether the thing is the player's: None where the adapter cannot tell (RimWorld's save checks give both; live checks neither yet) |
 | Constants | Numbers, text in quotes, `True`, `False`, `None`, lists in `[ ]` |
 | Operators | `==`, `!=`, `<`, `<=`, `>`, `>=`, `and`, `or`, `not`, `+`, `-`, `*`, `/`, `%`, `A if test else B` |
 | `sum(x)` | The numbers in a list, added up; text and None are left out |
@@ -141,7 +141,10 @@ D'thorga Framework saves a vehicle's last day of each quantity it shows as one s
 `PhobosVehicleSystems_History_<system>_<quantity>`: 240 samples, one each tenth of an hour, oldest first, each scaled over the
 quantity's `min` and `max` from its system Def. **The range is written in the rule**, from the Def: the wrong range gives wrong
 figures without any error. Derived quantities are in it too, so a figure the saved values leave out (flight control, crew oxygen)
-is readable. A vehicle new to the world may hold only a sample or two: narrow a rule with `count(samples(...)) >= N`.
+is readable. A vehicle new to the world may hold only a sample or two: narrow a rule with `count(samples(...)) >= N`. **A history ends at the
+vehicle's last update, not at the save**: another faction's vehicle off a map is not updated, and one in PG23 held a day from 157
+days before. Narrow with `ofPlayer`, or with `now` and the vehicle's `PhobosVehicleSystems_LastUpdate` (`now - updated < 2500`, an
+hour).
 
 ```json
 {"id": "camp-night-heater", "title": "A camped truck's night heater holds its coolant warm", "source": "save",

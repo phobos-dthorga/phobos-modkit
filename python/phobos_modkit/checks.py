@@ -34,6 +34,9 @@ from . import games_list
 from .report import Bullets, Report, Table
 
 SOURCES = ("save", "live")
+# Names every rule may use besides those it reads (1.131.0 adds now and ofPlayer): the thing's id and label; the game's own clock when
+# the state was read; whether the thing is the player's. An adapter that cannot tell gives None, so a comparison with it is false.
+BUILT_IN_NAMES = ("id", "label", "now", "ofPlayer")
 LEVELS = ("fault", "look")
 LEVEL_WORDS = {"fault": "Fault", "look": "Worth a look"}
 MAX_SHOWN = 20          # findings listed per check; the count says how many in all
@@ -373,8 +376,9 @@ def parse_check(entry, where, kinds=()):
     if not isinstance(read, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in read.items()):
         raise CheckError(f"{where}: \"read\" names each value with its path, as text.")
     for name in read:
-        if not name.isidentifier() or name in FUNCTIONS or name in _CONSTANTS:
-            raise CheckError(f"{where}: \"{name}\" cannot name a value; use letters, digits and _, and not a function's name.")
+        if not name.isidentifier() or name in FUNCTIONS or name in _CONSTANTS or name in BUILT_IN_NAMES:
+            raise CheckError(f"{where}: \"{name}\" cannot name a value; use letters, digits and _, and not a function's or "
+                             "built-in name (" + ", ".join(BUILT_IN_NAMES) + ").")
     select = entry.get("select") or {}
     if not isinstance(select, dict):
         raise CheckError(f"{where}: \"select\" is an object.")
@@ -393,7 +397,7 @@ def parse_check(entry, where, kinds=()):
         if check.fault is None and not check.note:
             raise CheckError(f"{where}: a rule needs \"fault\", the condition that makes it one, or \"note\", the figures it "
                              "notes for a test list.")
-        known = set(read) | {"id", "label"}
+        known = set(read) | set(BUILT_IN_NAMES)
         for expression in (check.when, check.fault, *check.note.get("figures", {}).values()):
             unknown = [n for n in (expression.names if expression else []) if n not in known]
             if unknown:
@@ -508,6 +512,8 @@ def judge(check, rows, limits=()):
         values = {name: value_of(v) for name, v in row.values.items()}
         values.setdefault("id", row.id)
         values.setdefault("label", row.label)
+        values.setdefault("now", None)
+        values.setdefault("ofPlayer", None)
         if check.when is not None and not check.when(values):
             continue
         if check.fault is not None and check.fault(values):

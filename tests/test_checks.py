@@ -189,6 +189,14 @@ class FigureNotes(unittest.TestCase):
     NOTE = {"key": "check.example.skill", "mod": "Example Widgets", "figures": {"level": "level", "double": "level * 2"},
             "variant": "{kind}"}
 
+    def test_built_in_names_are_known_and_cannot_be_read_over(self):
+        self.assertIsNotNone(rule(fault="now != None and ofPlayer").fault)
+        with self.assertRaises(checks.CheckError) as raised:
+            rule(read={"now": "x"})
+        self.assertIn("built-in", str(raised.exception))
+        result = checks.judge(rule(fault="now == None"), [checks.Row("a", "a", {"x": "1"})])
+        self.assertEqual(len(result.findings), 1)     # an adapter that cannot tell gives None
+
     def test_a_note_is_checked_when_read(self):
         check = rule(fault=None, read={"level": "l", "kind": "k"}, note=self.NOTE)
         self.assertIsNone(check.fault)
@@ -269,6 +277,18 @@ class SaveChecks(unittest.TestCase):
         code = main(["checks", "--saves", str(self.saves), "--cache", str(self.cache), "--checks", str(self.checks), *args],
                     environ=ONLY_INDEXER, out=out)
         return code, out.getvalue()
+
+    def test_a_rule_knows_the_saves_tick_and_whose_a_thing_is(self):
+        """1.131.0: now and ofPlayer, for rules that must skip a thing no one has updated for months."""
+        self.write({"id": "mine", "title": "Whose", "source": "save", "select": {"class": "Pawn", "def": "Human"},
+                    "read": {"born": "ageTracker/ageBiologicalTicks"}, "fault": "now != None",
+                    "says": "now {now}, mine {ofPlayer}"})
+        code, text = self.run_main("--json")
+        self.assertEqual(code, EXIT_OK)
+        findings = json.loads(text)["data"]["checks"][0]["findings"]
+        self.assertTrue(findings)
+        self.assertTrue(all("now " in f["text"] for f in findings))
+        self.assertIn("mine True", " ".join(f["text"] for f in findings if f["id"] == "Human200"))
 
     def test_a_rule_reads_a_held_things_stack_from_the_index(self):
         self.write({"id": "carry", "title": "Nobody carries meals", "source": "save", "select": {"class": "Pawn", "def": "Human"},

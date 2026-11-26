@@ -11,6 +11,9 @@ Two kinds of check need no rule of their own, because the adapter knows what to 
   nothing. RimWorld writes a float's NaN as "NaN" and its infinities as "Infinity" and "-Infinity".
 - `references`: any value under the paths named that refers to a thing (RimWorld writes "Thing_" and the thing's ID) that is not in
   the save. The game drops such a reference when it loads, with an error in its log.
+
+Every rule also has `now`, the game's tick when the save was written, and `ofPlayer`, whether the thing's saved faction is the
+player's (1.131.0): a vehicle another faction keeps off a map is not updated, so its saved histories can be months old.
 """
 from __future__ import annotations
 
@@ -18,6 +21,7 @@ import re
 
 from ...checks import Expression, Row, judge, Result
 from ...query import Filters
+from .save_reports import PLAYER_FACTION_PREFIX
 from . import save_thing
 
 KINDS = ("numbers", "references")
@@ -94,6 +98,20 @@ class SaveReader:
             self._values[row_id] = save_thing.values_of(self.conn, self.save, self.meta, row_id, start, end)
         return self._values[row_id]
 
+    def now(self):
+        """The game's tick when the save was written, or None."""
+        if not hasattr(self, "_now"):
+            row = self.conn.execute("SELECT ticks_game FROM game").fetchone()
+            self._now = int(row[0]) if row and row[0] is not None else None
+        return self._now
+
+    def player_factions(self):
+        """The player's factions as a thing saves them ("Faction_" and the load ID)."""
+        if not hasattr(self, "_players"):
+            self._players = {f"Faction_{r[0]}" for r in self.conn.execute("SELECT load_id FROM faction WHERE def LIKE ?",
+                                                                          (PLAYER_FACTION_PREFIX + "%",))}
+        return self._players
+
     def thing_ids(self):
         if self._ids is None:
             self._ids = {r[0].lower() for r in self.conn.execute("SELECT thing_id FROM thing WHERE thing_id IS NOT NULL")}
@@ -115,6 +133,9 @@ def _rows_for(check, reader, things):
                               and (m := _REFERENCE.fullmatch(v.strip())) and m.group(1).lower() not in known]}
         else:
             values = read_values(saved, check.read)
+            values.setdefault("now", reader.now())
+            faction = next((v for p, v in saved if p == "faction"), None)
+            values.setdefault("ofPlayer", faction is not None and faction.strip() in reader.player_factions())
         rows.append(Row(thing[1], label, values, thing[2] or ""))
     return rows
 
