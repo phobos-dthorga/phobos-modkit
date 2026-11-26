@@ -134,6 +134,12 @@ is version "0"**, so it counts as stale for any row naming a version. **The same
 save holding it: its time is that save's, and its `tick` orders it among the notes of the same time. A note read from a save carries
 `"source": "save"` and the save's name.
 
+**Figures from save checks** (1.129.0): when the repository keeps `config/checks.json`, every save check there with a `note` is run
+over the same saves, and each thing it applies to gives a note with its figures (`"source": "check"`, the check's `id` and the
+save's name), at the version the ledger says was running when the save was written. Unlike a history's items, each save's figures
+are their own note. A row takes them as any key, with `expect` for what each figure should be ([checks](checks.md#figures-for-a-test-list)).
+A check file that cannot be read leaves the figures out, with a sentence saying why.
+
 `report` and `apply` read them unless given `--no-saves`. A save that cannot be read leaves a sentence in the report, and the game's
 own notes still count. Reading a save for the first time indexes it (a few seconds for 450 MB); later runs reuse the index.
 

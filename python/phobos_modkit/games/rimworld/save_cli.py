@@ -471,5 +471,5 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
     "terrain": {"question": "How high do my places stand, and how rough is the land around them?"},
     "atlas": {"question": "What does my world look like?", "surface": "globe"},
     "mood": {"question": "Where is my colony's mood suffering?"},
-    "checks": {"question": "Is anything in my save in a state it should never be?"},
+    "checks": {"question": "Is anything in my save in a state it should never be?", "waits": "waiting"},
 }}

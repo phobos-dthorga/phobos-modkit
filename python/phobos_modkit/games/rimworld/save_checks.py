@@ -115,7 +115,7 @@ def _rows_for(check, reader, things):
                               and (m := _REFERENCE.fullmatch(v.strip())) and m.group(1).lower() not in known]}
         else:
             values = read_values(saved, check.read)
-        rows.append(Row(thing[1], label, values))
+        rows.append(Row(thing[1], label, values, thing[2] or ""))
     return rows
 
 

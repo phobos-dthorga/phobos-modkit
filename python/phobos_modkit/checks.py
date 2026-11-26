@@ -9,6 +9,11 @@ judges the rows and writes the report. The design: phobos-rimworld's `docs/devel
 Conditions are expressions in a small language: names of the values read, numbers, text in quotes, `True`, `False` and `None`;
 comparisons, `and`, `or`, `not`, `+ - * / %`, and the functions in FUNCTIONS. Anything else is refused when the file is read, so a
 check file can never run code.
+
+**Figures for a test list** (1.129.0): a rule may also carry a `note`, naming figures to read from each thing it applies to. Those
+figures become notes in the seen-in-play format (`notes_of`), which a test list's evidence map judges with its own `expect`, so a
+row's claim about a number is read from the game's own state rather than taken on trust. A note is evidence for the owner, never a
+verdict.
 """
 from __future__ import annotations
 
@@ -250,6 +255,7 @@ class Check:
     row: str = ""
     why: str = ""
     options: dict = field(default_factory=dict)
+    note: dict = field(default_factory=dict)  # figures for a test list: key, mod, figures {name: Expression}, variant, detail
 
 
 def _text(entry, name, where, required=True):
@@ -261,6 +267,32 @@ def _text(entry, name, where, required=True):
     if not isinstance(value, str):
         raise CheckError(f"{where}: \"{name}\" is text.")
     return value
+
+
+NOTE_FIELDS = ("key", "mod", "figures", "variant", "detail")
+
+
+def _parse_note(entry, where):
+    """A rule's `note` (1.129.0), checked: the key and mod its notes carry, and each figure's expression."""
+    note = entry.get("note")
+    if note is None:
+        return {}
+    if not isinstance(note, dict):
+        raise CheckError(f"{where}: \"note\" is an object, with its \"key\", \"mod\" and \"figures\".")
+    unknown = sorted(set(note) - set(NOTE_FIELDS))
+    if unknown:
+        raise CheckError(f"{where}: \"note\" takes " + ", ".join(NOTE_FIELDS) + ", not " + ", ".join(unknown) + ".")
+    parsed = {"key": _text(note, "key", f"{where} note"), "mod": _text(note, "mod", f"{where} note"),
+              "variant": _text(note, "variant", f"{where} note", False), "detail": _text(note, "detail", f"{where} note", False)}
+    figures = note.get("figures")
+    if not isinstance(figures, dict) or not figures:
+        raise CheckError(f"{where}: \"note\" needs \"figures\": each figure's name and the expression that gives it.")
+    parsed["figures"] = {}
+    for name, text in figures.items():
+        if not isinstance(name, str) or not name.isidentifier():
+            raise CheckError(f"{where}: \"{name}\" cannot name a figure; use letters, digits and _.")
+        parsed["figures"][name] = Expression(text, f"{where} note figure {name}")
+    return parsed
 
 
 def parse_check(entry, where, kinds=()):
@@ -292,17 +324,27 @@ def parse_check(entry, where, kinds=()):
                   Expression(entry["fault"], f"{where} fault") if entry.get("fault") else None,
                   _text(entry, "says", where, required=False), str(entry.get("row") or ""), _text(entry, "why", where, False),
                   {k: v for k, v in entry.items() if k not in ("id", "title", "source", "level", "kind", "select", "read", "when",
-                                                                "fault", "says", "row", "why")})
+                                                                "fault", "says", "row", "why", "note")},
+                  _parse_note(entry, where))
+    if check.note and kind != "rule":
+        raise CheckError(f"{where}: only a rule takes \"note\"; {kind} has no figures of its own.")
+    if check.note and source != "save":
+        raise CheckError(f"{where}: figures are noted from saves only, so far; a live check cannot take \"note\".")
     if kind == "rule":
-        if check.fault is None:
-            raise CheckError(f"{where}: a rule needs \"fault\", the condition that makes it one.")
+        if check.fault is None and not check.note:
+            raise CheckError(f"{where}: a rule needs \"fault\", the condition that makes it one, or \"note\", the figures it "
+                             "notes for a test list.")
         known = set(read) | {"id", "label"}
-        for expression in (check.when, check.fault):
+        for expression in (check.when, check.fault, *check.note.get("figures", {}).values()):
             unknown = [n for n in (expression.names if expression else []) if n not in known]
             if unknown:
                 raise CheckError(f"{where}: \"{expression.text}\" names {', '.join(unknown)}, which \"read\" does not.")
-        for match in _PLACEHOLDER.finditer(check.says):
-            Expression(match.group(1), f"{where} says")
+        for template in (check.says, check.note.get("key", ""), check.note.get("variant", ""), check.note.get("detail", "")):
+            for match in _PLACEHOLDER.finditer(template):
+                expression = Expression(match.group(1), f"{where} says")
+                unknown = [n for n in expression.names if n not in known]
+                if unknown:
+                    raise CheckError(f"{where}: \"{{{expression.text}}}\" names {', '.join(unknown)}, which \"read\" does not.")
     return check
 
 
@@ -364,10 +406,12 @@ def load_files(paths, source=None, kinds=()):
 
 @dataclass
 class Row:
-    """One thing a check read: its id, a label a person knows it by, and its values by name."""
+    """One thing a check read: its id, a label a person knows it by, its values by name, and what kind of thing it is (a def's name,
+    for a note's `kind`; empty when the adapter does not say)."""
     id: str
     label: str
     values: dict
+    kind: str = ""
 
 
 @dataclass
@@ -378,6 +422,16 @@ class Finding:
 
 
 @dataclass
+class Noted:
+    """The figures one thing gave a rule's note (1.129.0): the note's key, case and detail filled in, and the figures by name."""
+    row: Row
+    key: str
+    variant: str
+    detail: str
+    figures: dict
+
+
+@dataclass
 class Result:
     """One check's outcome: how many things it read, what it found, and why it could not run when it could not."""
     check: Check
@@ -385,6 +439,7 @@ class Result:
     findings: list = field(default_factory=list)
     problem: str = ""
     limits: list = field(default_factory=list)
+    noted: list = field(default_factory=list)
 
 
 def judge(check, rows, limits=()):
@@ -396,10 +451,48 @@ def judge(check, rows, limits=()):
         values.setdefault("label", row.label)
         if check.when is not None and not check.when(values):
             continue
-        if check.fault(values):
+        if check.fault is not None and check.fault(values):
             text = _say(check.says, values, check.id) if check.says else check.title
             result.findings.append(Finding(check, row, text))
+        if check.note:
+            result.noted.append(_noted(check, row, values))
     return result
+
+
+def _figure(value):
+    """A figure as a note keeps it: a number (a flag as 1 or 0), else nothing."""
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)) and not (isinstance(value, float) and (math.isnan(value) or math.isinf(value))):
+        return value
+    return None
+
+
+def _noted(check, row, values):
+    note = check.note
+    figures = {name: _figure(expression(values)) for name, expression in note["figures"].items()}
+    kept = {name: value for name, value in figures.items() if value is not None}
+    shown = ", ".join(f"{name} {_say('{' + name + '}', kept, check.id)}" for name in kept)
+    detail = _say(note["detail"], values, check.id) if note["detail"] else shown
+    return Noted(row, _say(note["key"], values, check.id), _say(note["variant"], values, check.id) if note["variant"] else "",
+                 detail, kept)
+
+
+def notes_of(result, time, version, source="check", extra=None):
+    """The figures a rule noted, as notes in the seen-in-play format (1.129.0), for a test list's evidence map to judge.
+    <time> is when the state was read (a save's time), <version> the version of the note's mod that wrote that state."""
+    notes = []
+    for noted in result.noted:
+        note = {"format": 1, "time": time, "key": noted.key, "mod": result.check.note["mod"], "version": version,
+                "on": noted.row.id, "kind": noted.row.kind, "source": source, "check": result.check.id,
+                "detail": f"{noted.row.kind}: {noted.detail}" if noted.row.kind else noted.detail}
+        if noted.variant:
+            note["variant"] = noted.variant
+        if noted.figures:
+            note["values"] = noted.figures
+        note.update(extra or {})
+        notes.append(note)
+    return notes
 
 
 def report(title, results, facts=(), caveat=""):
@@ -408,12 +501,16 @@ def report(title, results, facts=(), caveat=""):
     rep.facts.extend(facts)
     faults = [r for r in results if r.findings and r.check.level == "fault"]
     looks = [r for r in results if r.findings and r.check.level == "look"]
-    clean = [r for r in results if not r.findings and not r.problem]
+    clean = [r for r in results if not r.findings and not r.problem and r.check.fault is not None]
+    noting = [r for r in results if r.check.note and not r.problem]
     failed = [r for r in results if r.problem]
     found = sum(len(r.findings) for r in faults)
     rep.lines.append(f"**{len(results):,} checks: {found:,} faults from {len(faults):,} of them, "
                      f"{sum(len(r.findings) for r in looks):,} things worth a look, {len(clean):,} found nothing"
                      + (f", {len(failed):,} could not run" if failed else "") + ".**")
+    if noting:
+        rep.lines.append(f"{len(noting):,} checks noted the figures of {sum(len(r.noted) for r in noting):,} things for the test "
+                         "list: test-pass reads them from the newest saves and judges them against what each row expects.")
     if caveat:
         rep.lines.append(caveat)
     for heading, chosen in (("Faults", faults), ("Worth a look", looks)):
@@ -433,16 +530,25 @@ def report(title, results, facts=(), caveat=""):
     if clean:
         rep.section("Found nothing", Table(["Check", "Read", "Level"],
                                            [[r.check.title, f"{r.read:,}", LEVEL_WORDS[r.check.level]] for r in clean]))
+    if noting:
+        rep.section("Figures noted for the test list", Table(
+            ["Check", "Things", "Row", "Example"],
+            [[r.check.title, f"{len(r.noted):,}", r.check.row,
+              f"{(r.noted[0].row.label or r.noted[0].row.id)}: {r.noted[0].detail}" if r.noted else ""] for r in noting]))
     if failed:
         rep.section("Could not run", Table(["Check", "Why"], [[r.check.title, r.problem] for r in failed]))
     return rep
 
 
 def data(results):
-    """Every result for a program: each check, what it read, and every finding."""
+    """Every result for a program: each check, what it read, every finding and every thing's noted figures. `waiting` (1.129.0) is
+    the faults and things worth a look together: what waits on the person, which the manifest's `waits` names for a program."""
+    faults = sum(len(r.findings) for r in results if r.check.level == "fault")
+    looks = sum(len(r.findings) for r in results if r.check.level == "look")
     return {"checks": [{"id": r.check.id, "title": r.check.title, "source": r.check.source, "level": r.check.level,
                         "row": r.check.row, "read": r.read, "problem": r.problem, "limits": r.limits,
-                        "findings": [{"id": f.row.id, "label": f.row.label, "text": f.text} for f in r.findings]}
+                        "findings": [{"id": f.row.id, "label": f.row.label, "text": f.text} for f in r.findings],
+                        "noted": [{"id": n.row.id, "label": n.row.label, "key": n.key, "variant": n.variant, "figures": n.figures}
+                                  for n in r.noted]}
                        for r in results],
-            "faults": sum(len(r.findings) for r in results if r.check.level == "fault"),
-            "looks": sum(len(r.findings) for r in results if r.check.level == "look")}
+            "faults": faults, "looks": looks, "waiting": faults + looks}

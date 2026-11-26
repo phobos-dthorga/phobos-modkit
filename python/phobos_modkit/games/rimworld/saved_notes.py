@@ -12,6 +12,10 @@ it is stale for any row naming a version.
 **The same item in several saves is one note**, kept from the oldest save holding it (its time is that save's), with its tick, so
 order rules sort by tick within one save's time. The mapping lives in the repository's evidence map, under `saved`
 (`docs/test-pass.md`).
+
+**Figures from save checks** (1.129.0): a save check with a `note` (`checks.py`) gives one note per thing it applies to, in each save
+read, with the save's time and the version its ledger says was running when it was saved. Unlike a history's items, each save's
+figures are their own note: a figure is a state at a moment, so the same thing in two saves is two readings.
 """
 from __future__ import annotations
 
@@ -20,6 +24,7 @@ from datetime import datetime, timezone
 import re
 
 from ... import cache as derived
+from ...checks import notes_of
 from . import paths
 from . import save as saves
 from . import save_checks
@@ -153,9 +158,31 @@ def notes_from_save(conn, save, meta, sources, ledger_key):
     return found, bool(ledger)
 
 
-def gather(saved, folder, cache, indexer=None, environ=None, progress=None):
+LATEST = 2 ** 62    # a tick after every line of a ledger: the version running when the save was written
+
+
+def figures_from_save(conn, save, meta, figure_checks, ledger_key):
+    """Every note the figure checks give in one save (1.129.0): one per thing each applies to, at the save's time and the version
+    its ledger says was running then. A check that cannot run here gives nothing."""
+    if not figure_checks:
+        return []
+    ledger = read_ledger(conn, ledger_key)
+    time = _iso(save)
+    found = []
+    for result in save_checks.run(conn, save, meta, figure_checks):
+        found.extend(notes_of(result, time, version_at(ledger, result.check.note["mod"], LATEST), "check", {"save": save.name}))
+    return found
+
+
+def _read_one(conn, save, meta, sources, ledger_key, figure_checks):
+    found, has_ledger = notes_from_save(conn, save, meta, sources, ledger_key)
+    return found, figures_from_save(conn, save, meta, figure_checks, ledger_key), has_ledger
+
+
+def gather(saved, folder, cache, indexer=None, environ=None, progress=None, figure_checks=()):
     """(notes, sources read): the notes from the newest saves the saved section names, each item once, from the oldest save
-    holding it. sources read is one row per save: (name, notes, whether it held a ledger)."""
+    holding it, and each save's figures from the figure checks (1.129.0). sources read is one row per save: (name, notes, whether
+    it held a ledger)."""
     sources, ledger_key, count = check_config(saved)
     chosen = list(reversed(saves.saves_in(folder)[:count]))     # oldest first, so an item keeps its first save
     seen, notes, read = set(), [], []
@@ -165,11 +192,12 @@ def gather(saved, folder, cache, indexer=None, environ=None, progress=None):
         index, _ = saves.ensure(save, cache, indexer, environ)
         with closing(saves.open_read_only(index)) as conn:
             try:
-                found, has_ledger = notes_from_save(conn, save, saves.read_meta(index), sources, ledger_key)
+                found, figures, has_ledger = _read_one(conn, save, saves.read_meta(index), sources, ledger_key, figure_checks)
             except save_thing.ThingError:
                 index, _ = saves.ensure(save, cache, indexer, environ, True)     # saved again while it was being read: once more
                 with closing(saves.open_read_only(index)) as again:
-                    found, has_ledger = notes_from_save(again, save, saves.read_meta(index), sources, ledger_key)
+                    found, figures, has_ledger = _read_one(again, save, saves.read_meta(index), sources, ledger_key,
+                                                           figure_checks)
         fresh = 0
         for note in found:
             identity = (note["on"], note["key"], note.get("variant", ""), note["tick"])
@@ -177,13 +205,15 @@ def gather(saved, folder, cache, indexer=None, environ=None, progress=None):
                 seen.add(identity)
                 notes.append(note)
                 fresh += 1
-        read.append((save.name, fresh, has_ledger))
+        notes.extend(figures)
+        read.append((save.name, fresh + len(figures), has_ledger))
     return notes, read
 
 
-def for_test_pass(saved, environ=None, settings_file=None, progress=None):
+def for_test_pass(saved, environ=None, settings_file=None, progress=None, figure_checks=()):
     """What test-pass calls (testpass_cli): the notes from the player's own Saves folder and the kit's index cache, found as every
-    save tool finds them. Raises SavedError for a section that cannot be used, saves.SaveError when there is no Saves folder."""
+    save tool finds them, with the figure checks' notes (1.129.0). Raises SavedError for a section that cannot be used,
+    saves.SaveError when there is no Saves folder."""
     folder = paths.saves_path(None, environ, settings_file)
     cache = derived.folder(saves.CACHE_FOLDER, None, environ, settings_file)
-    return gather(saved, folder, cache, None, environ, progress)
+    return gather(saved, folder, cache, None, environ, progress, figure_checks)

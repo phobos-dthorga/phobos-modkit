@@ -14,6 +14,9 @@ values. The design and its reasons: phobos-rimworld's
 - **Save checks only read**, from a frozen copy of the save, as every save tool does. **Live checks take a snapshot of the running
   game**, which pauses it for about half a second: ask before every one ([the heap reader](heap-reader.md)).
 - **A missing value never makes a fault by comparison**: `x > 1` is false when `x` was not saved. Test for it with `x == None`.
+- **A figure is evidence, never a verdict** (1.129.0). A rule's `note` turns the figures it reads into seen-in-play notes, which a
+  test list's evidence map judges against what each row expects. A figure that meets the expectation says the state was right at
+  that moment; whether it *looked* right, and whether the row passes, is still the owner's word.
 
 ## Examples
 
@@ -57,10 +60,11 @@ game's checks with nothing typed. The report's facts name the files it ran.
 | `select` | Which things to read. Save checks (RimWorld): `def`, `class` (both take `*` and `?`), `place`, `map`; required, as reading every thing would take minutes. Live checks: `type` (a kind's full name, as `look` lists it; required), `subclasses` (kinds below it too), `take` (objects, default 5,000) and `items` (items opened per path on one object, default 1,000) |
 | `read` | Each value's name and its path. A name is letters, digits and `_`, and not a function's name |
 | `when` | Optional: a condition saying which things the rule applies to |
-| `fault` | The condition that makes it a fault. Required for a rule |
+| `fault` | The condition that makes it a fault. A rule needs it, or a `note`, or both |
 | `says` | The sentence for each finding: each `{expression}` is replaced by its value. Without it, the title is used |
 | `row` | Optional: the test row the rule belongs to, shown beside its findings |
 | `why` | Optional: a sentence on why the rule holds, shown beside its findings |
+| `note` | Optional (1.129.0), save checks only: the figures to note for a test list, from each thing the rule applies to. See [Figures for a test list](#figures-for-a-test-list) |
 
 ### Paths
 
@@ -98,6 +102,34 @@ finding names the object by its summary (RimWorld's: a pawn's name, a Def's defN
 and the infinities are numbers, for `isnan`; anything else is text. Arithmetic on anything but numbers, or dividing by nothing,
 gives None. A comparison between text and a number is false.
 
+### Figures for a test list
+
+A rule with a `note` (1.129.0) gives, for each thing it applies to (after `when`), a note in the
+[seen-in-play format](test-pass.md#the-seen-in-play-notes): its key, the mod it stands for, the thing as `on` and its def as `kind`,
+and the figures as `values`. **test-pass reads them from the same newest saves as the saved histories**, when the repository's
+evidence map has a `saved` section, and judges them like any note: a row's `expect` says what each figure should be, and a figure
+that misses lands in "Seen, but not with the figures the row expects". A rule may have a `fault` too: its findings still show here.
+
+```json
+{"id": "shooting", "title": "A colonist's shooting skill", "source": "save", "select": {"class": "Pawn", "def": "Human"},
+ "read": {"skills": "skills/skills/li[*]/def", "levels": "skills/skills/li[*]/level"},
+ "when": "contains(skills, 'Shooting')",
+ "note": {"key": "check.example.shooting", "mod": "Example Widgets", "figures": {"level": "max(levels)"}},
+ "row": "12"}
+```
+
+| A note's field | What it holds |
+| --- | --- |
+| `key` | The note's key; `{expression}` is filled from the values read, as in `says` |
+| `mod` | The mod the figures stand for, as the version ledger names it: the note's version is the one running when the save was written |
+| `figures` | Each figure's name and its expression. Only numbers are kept (a flag as 1 or 0); a figure that is text or None is left out |
+| `variant` | Optional: the note's case, as a template, for an evidence map's `variant` |
+| `detail` | Optional: the note's sentence, as a template; else the figures, named |
+
+**Each save gives its own notes**: a figure is a state at a moment, so the same thing in four saves is four readings, each with its
+save's time. Live checks cannot take a `note` yet: a snapshot is not kept, and its version would need the running game's own ledger.
+`rimworld-save checks` lists what each figure check noted, under "Figures noted for the test list".
+
 ### RimWorld's own kinds (save checks)
 
 | Kind | Finds | Option |
@@ -111,7 +143,9 @@ gives None. A comparison between text and a number is false.
 one), then the checks that found nothing with how many things each read, then any that could not run and why.
 
 **`--json`** carries the report and, under `data`, `checks` (each with `id`, `title`, `source`, `level`, `row`, `read`,
-`problem`, `limits` and `findings`, each finding an `id`, `label` and `text`), `faults` and `looks` (counts).
+`problem`, `limits`, `findings`, each finding an `id`, `label` and `text`, and `noted`, each thing's `id`, `label`, `key`,
+`variant` and `figures`), `faults` and `looks` (counts), and `waiting` (1.129.0: the two together, what waits on the person;
+the manifest's `waits` names it, so a program such as D'thorga Companion can show the count without reading the words).
 
 ## Limits
 

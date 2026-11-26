@@ -125,6 +125,45 @@ class FromSaves(unittest.TestCase):
                            "--decisions", str(repo / "d.jsonl"), "--no-saves"], environ=self.environ, out=out)
         self.assertIn("left out (--no-saves)", out.getvalue())
 
+    def test_figure_checks_note_each_saves_figures_for_test_pass(self):
+        """1.129.0: a save check with a note gives one note per thing in each save, judged by the row's expect."""
+        repo = Path(self.tmp.name) / "repo"
+        (repo / "config").mkdir(parents=True)
+        (repo / "docs").mkdir()
+        (repo / "docs" / "tests.md").write_text(
+            "| # | What | What passes |\n| --- | --- | --- |\n"
+            "| 1 | **Ann shoots** (Widgets 1.1.0) | Level 8 |\n| 2 | **Ann shoots well** (Widgets 1.1.0) | Level 12 |\n",
+            encoding="utf-8")
+        figure = {"id": "shooting", "title": "Ann's shooting", "source": "save", "select": {"def": "Human", "class": "Pawn"},
+                  "read": {"skills": "skills/skills/li[*]/def", "levels": "skills/skills/li[*]/level"},
+                  "when": "contains(skills, 'Shooting')",
+                  "note": {"key": "check.example.shooting", "mod": "Example Widgets", "figures": {"level": "max(levels)"}}}
+        (repo / "config" / "checks.json").write_text(json.dumps({"checks": [figure]}), encoding="utf-8")
+        config = {"doc": "docs/tests.md", "game": "rimworld", "versionNames": {"Example Widgets": "Widgets"},
+                  "rows": {"1": [{"key": "check.example.shooting", "expect": {"level": "8..10"}}],
+                           "2": [{"key": "check.example.shooting", "expect": {"level": ">= 12"}}]},
+                  "saved": SAVED}
+        (repo / "config" / "test-evidence.json").write_text(json.dumps(config), encoding="utf-8")
+        out = io.StringIO()
+        code = testpass_cli.main(["report", "--root", str(repo), "--seen", str(repo / "none.jsonl"), "--verdicts",
+                                  str(repo / "v.jsonl"), "--decisions", str(repo / "d.jsonl"), "--json"],
+                                 environ=self.environ, out=out)
+        self.assertEqual(code, 0)
+        envelope = json.loads(out.getvalue())
+        rows = {r["id"]: r for r in envelope["data"]["rows"]}
+        self.assertEqual(rows["1"]["parts"][0]["state"], "expected")    # level 8 in both saves, on 1.1.0
+        self.assertEqual(rows["2"]["parts"][0]["state"], "off")         # never 12
+        self.assertEqual([s["notes"] for s in envelope["data"]["saves_read"]], [2, 2])    # each save: its new history item and its own figure
+        self.assertTrue(any("figures noted by 1 save checks" in line for line in envelope["report"]["lines"]))
+
+    def test_a_broken_check_file_leaves_the_figures_out_and_says_why(self):
+        repo = Path(self.tmp.name) / "repo"
+        (repo / "config").mkdir(parents=True)
+        (repo / "config" / "checks.json").write_text('{"checks": [{"id": "x"}]}', encoding="utf-8")
+        figures, problem = testpass_cli.figure_checks(repo, "rimworld")
+        self.assertEqual(figures, [])
+        self.assertIn("left out", problem)
+
 
 class NotesFromObjects(unittest.TestCase):
     def test_a_note_object_keeps_its_tick_and_source(self):

@@ -4,6 +4,18 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.129.0] - 2026-11-26
+
+### Added
+
+- **A save check can note figures for the test list** (the owner's choice of 26 Nov 2026, "#2", figures as evidence). A rule's
+  `note` names figures to read from each thing it applies to; test-pass reads them from the newest saves, beside the saved
+  histories, and a row's `expect` judges them, so a claim about a number is read from the save rather than taken on trust. Live
+  checks cannot take a note yet. How: [checks](docs/checks.md#figures-for-a-test-list).
+- **A report can say which count waits on the person** (the owner's choice of 26 Nov 2026, "#3", checks on each new save). The
+  manifest's `waits` names it in the report's data: `rimworld-save checks` gives `waiting`, its faults and things worth a look
+  together, for D'thorga Companion to show without reading the report's words.
+
 ## [1.128.1] - 2026-11-26
 
 ### Fixed

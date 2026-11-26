@@ -23,7 +23,7 @@ import os
 from pathlib import Path
 import sys
 
-from . import connections, testpass, testpass_code
+from . import checks as check_engine, connections, testpass, testpass_code
 from .progress import Progress
 from .manifest import READS, WRITES
 from .paths import COMPANION_ID, companion_data, resolve  # noqa: F401  (COMPANION_ID: read by callers)
@@ -172,30 +172,50 @@ def _unrowed_data(evidence):
     return rows
 
 
-def saved_notes(config, environ, settings, skip=False):
-    """(notes, saves read, a sentence for the report or None): the saves' histories when the evidence map names them and the
-    game's adapter reads them (1.121.0). A missing Saves folder or unreadable save is a sentence, not a failure: the game's own
-    notes still count."""
+def figure_checks(root, game):
+    """(the repository's save checks that note figures, a sentence when its check file could not be read) (1.129.0). A broken
+    check file never stops the report: its figures are left out, and the report says why."""
+    path = Path(root) / check_engine.CHECK_FILE
+    if not path.is_file():
+        return [], None
+    try:
+        kinds = import_module(f".games.{game}.save_checks", __package__).KINDS
+    except ImportError:
+        return [], None
+    try:
+        return [c for c in check_engine.load_checks(path, "save", kinds) if c.note], None
+    except check_engine.CheckError as error:
+        return [], f"The figure checks were left out: {error}"
+
+
+def saved_notes(config, environ, settings, skip=False, root=None):
+    """(notes, saves read, sentences for the report): the saves' histories when the evidence map names them and the game's
+    adapter reads them (1.121.0), with the figures the repository's save checks note in the same saves (1.129.0). A missing Saves
+    folder or unreadable save is a sentence, not a failure: the game's own notes still count."""
     saved, game = config.get("saved"), config.get("game")
     if not saved or not game:
-        return [], [], None
+        return [], [], []
     if skip:
-        return [], [], "The saves' histories were left out (--no-saves)."
+        return [], [], ["The saves' histories and figures were left out (--no-saves)."]
     try:
         adapter = import_module(f".games.{game}.saved_notes", __package__)
     except ImportError:
-        return [], [], f"The game {game} has no reader for saved histories, so its saves were not read."
+        return [], [], [f"The game {game} has no reader for saved histories, so its saves were not read."]
+    figures, problem = figure_checks(root, game) if root else ([], None)
+    sentences = [problem] if problem else []
     try:
-        notes, read = adapter.for_test_pass(saved, environ, settings, Progress(environ))
+        notes, read = adapter.for_test_pass(saved, environ, settings, Progress(environ), figures)
     except adapter.SavedError as error:
         raise testpass.TestPassError(f"{testpass.CONFIG}: {error}") from None
     except Exception as error:  # noqa: BLE001 - a save that cannot be read must not stop the report
-        return [], [], f"The saves' histories could not be read ({error})."
+        return [], [], sentences + [f"The saves' histories could not be read ({error})."]
     with_ledger = sum(1 for _, _, ledger in read if ledger)
-    sentence = (f"{len(notes):,} notes read from the histories in the newest {len(read):,} saves"
-                + (f"; {len(read) - with_ledger:,} of them hold no version ledger, so their notes count as stale for any row naming a "
-                   "version" if with_ledger < len(read) else "") + ".")
-    return notes, read, sentence
+    from_checks = sum(1 for note in notes if note.get("source") == "check")
+    sentences.insert(0, f"{len(notes) - from_checks:,} notes read from the histories in the newest {len(read):,} saves"
+                     + (f", and {from_checks:,} figures noted by {len(figures):,} save checks" if figures else "")
+                     + (f"; {len(read) - with_ledger:,} of them hold no version ledger, so their notes count as stale for any row "
+                        "naming a version" if with_ledger < len(read) else "") + ".")
+    return notes, read, sentences
 
 
 def build_report(evidence, changed=None, applied=False, everything=False, top=40, map_problems=()):
@@ -298,7 +318,7 @@ def main(argv=None, environ=None, out=None, now=None):
         decisions = decisions_path(root, args.decisions, environ, args.settings)
         stamp = (now or datetime.now(timezone.utc)).isoformat()
         given = [testpass.parse_verdict(text, stamp) for text in args.verdict]
-        from_saves, saves_read, saves_sentence = saved_notes(config, environ, args.settings, args.no_saves)
+        from_saves, saves_read, saves_sentences = saved_notes(config, environ, args.settings, args.no_saves, root)
         evidence = testpass.gather(root, seen, [verdicts], config, given, [decisions], from_saves)
         problems = testpass.map_problems(config)
     except testpass.TestPassError as error:
@@ -313,8 +333,8 @@ def main(argv=None, environ=None, out=None, now=None):
             with open(doc, "w", encoding="utf-8", newline="") as fh:
                 fh.write(written)
     report = build_report(evidence, changed, bool(getattr(args, "apply", False)), args.all, args.top, problems)
-    if saves_sentence:
-        report.lines.insert(2, saves_sentence)
+    for n, sentence in enumerate(saves_sentences):
+        report.lines.insert(2 + n, sentence)
     data = {"doc": config["doc"], "seen_files": [str(p) for p in seen], "verdicts_file": str(verdicts),
             "decisions_file": str(decisions), "rows": [_row_data(r, evidence) for r in evidence.rows],
             "order_problems": [_order_data(o) for o in evidence.order], "unchecked_order": evidence.unchecked_order,

@@ -145,12 +145,62 @@ class Judging(unittest.TestCase):
         self.assertIn("Test row 513.", text)
         self.assertIn("Could not run", text)
         data = checks.data([result])
-        self.assertEqual((data["faults"], data["looks"]), (0, 1))
+        self.assertEqual((data["faults"], data["looks"], data["waiting"]), (0, 1, 1))
 
     def test_when_narrows_what_a_rule_applies_to(self):
         check = rule(read={"x": "x", "kind": "k"}, when="kind == 'Truck'", fault="x > 1")
         rows = [checks.Row("a", "a", {"x": "5", "kind": "Car"}), checks.Row("b", "b", {"x": "5", "kind": "Truck"})]
         self.assertEqual([f.row.id for f in checks.judge(check, rows).findings], ["b"])
+
+
+class FigureNotes(unittest.TestCase):
+    """A rule's note (1.129.0): figures read from each thing it applies to, as seen-in-play notes for a test list."""
+
+    NOTE = {"key": "check.example.skill", "mod": "Example Widgets", "figures": {"level": "level", "double": "level * 2"},
+            "variant": "{kind}"}
+
+    def test_a_note_is_checked_when_read(self):
+        check = rule(fault=None, read={"level": "l", "kind": "k"}, note=self.NOTE)
+        self.assertIsNone(check.fault)
+        self.assertEqual(sorted(check.note["figures"]), ["double", "level"])
+        for broken, words in (({}, "needs \"fault\""),
+                              ({"note": {"key": "k", "mod": "m"}}, "figures"),
+                              ({"note": {"key": "k", "figures": {"a": "x"}}}, "mod"),
+                              ({"note": dict(self.NOTE, colour="red")}, "not colour"),
+                              ({"note": {"key": "k", "mod": "m", "figures": {"a": "nothing_read"}}}, "nothing_read"),
+                              ({"note": {"key": "k.{gone}", "mod": "m", "figures": {"a": "x"}}}, "gone"),
+                              ({"note": {"key": "k", "mod": "m", "figures": {"a": "x"}}, "source": "live",
+                                "select": {"type": "T"}}, "saves only")):
+            with self.assertRaises(checks.CheckError, msg=broken) as raised:
+                rule(**dict({"fault": None}, **broken))
+            self.assertIn(words, str(raised.exception))
+
+    def test_each_thing_it_applies_to_gives_a_note_with_its_figures(self):
+        check = rule(fault="level > 9", read={"level": "l", "kind": "k"}, when="kind != 'Rock'", note=self.NOTE, row="12")
+        rows = [checks.Row("Human200", "Human200, map 0", {"level": "8", "kind": "Shooting"}, "Human"),
+                checks.Row("Human201", "Human201, map 0", {"level": "12", "kind": "Shooting"}, "Human"),
+                checks.Row("Rock1", "Rock1", {"level": "1", "kind": "Rock"}, "Granite")]
+        result = checks.judge(check, rows)
+        self.assertEqual([n.row.id for n in result.noted], ["Human200", "Human201"])
+        self.assertEqual([f.row.id for f in result.findings], ["Human201"])     # a fault is still a fault beside its note
+        notes = checks.notes_of(result, "2026-11-26T00:00:00Z", "1.1.0", extra={"save": "PG1.rws"})
+        self.assertEqual(notes[0], {"format": 1, "time": "2026-11-26T00:00:00Z", "key": "check.example.skill",
+                                    "mod": "Example Widgets", "version": "1.1.0", "on": "Human200", "kind": "Human",
+                                    "source": "check", "check": "a", "detail": "Human: level 8, double 16",
+                                    "variant": "Shooting", "values": {"level": 8, "double": 16}, "save": "PG1.rws"})
+        text = render_markdown(checks.report("Save checks", [result]))
+        self.assertIn("1 checks noted the figures of 2 things", text)
+        self.assertIn("Figures noted for the test list", text)
+        data = checks.data([result])
+        self.assertEqual((data["faults"], data["waiting"]), (1, 1))
+        self.assertEqual(data["checks"][0]["noted"][1]["figures"], {"level": 12, "double": 24})
+
+    def test_only_numbers_are_figures(self):
+        check = rule(fault=None, read={"x": "x"}, note={"key": "k", "mod": "m", "figures": {"n": "x", "flag": "x == 'on'",
+                                                                                          "none": "x / 0"}})
+        noted = checks.judge(check, [checks.Row("a", "a", {"x": "on"})]).noted[0]
+        self.assertEqual(noted.figures, {"flag": 1})
+        self.assertEqual(noted.detail, "flag 1")
 
 
 class Paths(unittest.TestCase):
