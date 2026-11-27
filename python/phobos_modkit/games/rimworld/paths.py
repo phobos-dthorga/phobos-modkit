@@ -76,9 +76,10 @@ PATCHED_DEFS = ("rimworldPatchedDefsPath", "RIMWORLD_PATCHED_DEFS")
 PATCHED_DEFS_DEFAULT = ("PhobosPatchedDefs", "PatchedDefs.xml")
 
 
-def patched_defs_path(explicit=None, environ=None, settings_file=None):
-    """The patched-Defs file: the one named, or where D'thorga Framework writes it. It may not exist."""
-    default = Path(config_path(None, environ, settings_file)).parent.joinpath(*PATCHED_DEFS_DEFAULT)
+def patched_defs_path(explicit=None, environ=None, settings_file=None, config=None):
+    """The patched-Defs file: the one named, or where D'thorga Framework writes it, beside `config` (the Config folder in use)
+    when given (1.140.0: a report given another Config folder looked beside the usual one). It may not exist."""
+    default = Path(config or config_path(None, environ, settings_file)).parent.joinpath(*PATCHED_DEFS_DEFAULT)
     return resolve(*PATCHED_DEFS, default, explicit, environ, settings_file)
 
 

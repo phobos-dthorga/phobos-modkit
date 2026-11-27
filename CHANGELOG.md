@@ -4,6 +4,20 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.140.0] - 2026-11-27
+
+### Added
+
+- **rimworld-defs' look-ups of one definition carry the surface `definitions`** (the owner's choice of 27 Nov 2026, "Look up a
+  Def page"): `who`, `show` and `patched`, so D'thorga Companion's Look up page finds them by what they do, and another game's
+  look-up can serve the same page. How: [rimworld-defs](docs/rimworld-defs.md#defs-with-every-patch-applied-patched).
+
+### Fixed
+
+- **rimworld-defs patched finds the patched-Defs file where D'thorga Framework writes it** (found the same day building the page).
+  It found nothing unless a setting named the file, though the update check found the same file by itself; and the default
+  for both ignored a Config folder given with `--config`, so a test given a stand-in game read the owner's real file.
+
 ## [1.139.0] - 2026-11-27
 
 ### Added

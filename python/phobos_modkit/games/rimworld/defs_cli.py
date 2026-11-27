@@ -128,10 +128,12 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     try:
         index, built = defs.ensure(install, cache, args.rebuild or args.report == "index")
         if args.report == "patched":
-            dump = paths.resolve(*PATCHED_DEFS, None, args.dump, environ, settings_file)
-            if dump is None:
-                raise defs.DefsError("Name the patched-Defs file with --dump (or RIMWORLD_PATCHED_DEFS); a mod has to "
-                                     "write one from a running game first.")
+            # 1.140.0: where D'thorga Framework writes it unless something names another, as the update check finds it; this
+            # report used to find nothing unless a setting named the file.
+            dump = paths.patched_defs_path(args.dump, environ, settings_file, install.config)
+            if not Path(dump).is_file():
+                raise defs.DefsError(f"No patched-Defs file at {dump}: a mod has to write one from a running game first, or "
+                                     "name another with --dump (or RIMWORLD_PATCHED_DEFS).")
             try:
                 args.patched_index, _ = patched_defs.ensure(dump, cache)
             except patched_defs.PatchedError as problem:
@@ -154,7 +156,7 @@ def main(argv=None, settings_file=None, environ=None, out=None):
         provenance = "Index of the active mods, reused: the mod list, the Workshop, the game and local mods are unchanged."
     report.lines.insert(0, provenance)
     if args.report in ("who", "show"):
-        pointer = _patched_pointer(args.name, paths.resolve(*PATCHED_DEFS, None, args.dump, environ, settings_file))
+        pointer = _patched_pointer(args.name, paths.patched_defs_path(args.dump, environ, settings_file, install.config))
         if pointer:
             report.lines.insert(1, pointer)
     if args.json:
@@ -170,4 +172,8 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
     "mods": {"question": "Which mods are active?"},
     "list": {"question": "Which Defs does my game have?"},
     "patches": {"question": "Which patches change my game's Defs?"},
+    # 1.140.0: a program's look-up of one definition finds these by what they do (D'thorga Companion's Look up page).
+    "who": {"surface": "definitions"},
+    "show": {"surface": "definitions"},
+    "patched": {"surface": "definitions"},
 }}

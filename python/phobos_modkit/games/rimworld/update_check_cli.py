@@ -580,7 +580,7 @@ def build_report(args, parts, config, environ, settings_file, now, progress, run
         progress("Checking our XML patches", step, total)
         install = defs.Install(game, workshop, mods_config)
         index, _ = defs.ensure(install, derived.folder(defs.CACHE_FOLDER, args.cache, environ, settings_file))
-        dump = paths.patched_defs_path(None, environ, settings_file)
+        dump = paths.patched_defs_path(None, environ, settings_file, mods_config)
         patched_index = None
         if dump and Path(dump).is_file():
             patched_index, _ = patched_defs.ensure(dump, derived.folder(defs.CACHE_FOLDER, args.cache, environ, settings_file))

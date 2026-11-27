@@ -114,8 +114,12 @@ inheritance (ParentName) is not applied.
 
 `patched NAME --dump FILE` indexes that file in the cache (again whenever it changes) and shows the Def's XML, then a
 unified diff from the definition the game keeps as written (`-` lines) to the patched one (`+` lines). The file may be
-named by `--dump`, `RIMWORLD_PATCHED_DEFS` or `rimworldPatchedDefsPath` in the settings file. It holds other authors'
-Defs: keep it on the computer that wrote it.
+named by `--dump`, `RIMWORLD_PATCHED_DEFS` or `rimworldPatchedDefsPath` in the settings file; **with none named it is looked
+for where D'thorga Framework writes it, beside the Config folder in use** (1.140.0: before, `patched` found nothing unless a
+setting named it, and the default ignored `--config`). It holds other authors' Defs: keep it on the computer that wrote it.
+
+`who`, `show` and `patched` carry the manifest surface `definitions` (1.140.0), so a program looking one definition up (D'thorga
+Companion's Look up page) finds them by what they do.
 
 The report says when the file may no longer match the game: a different count of active mods or game version, a mod list
 or Workshop manifest saved after it, or XML changed after it in the game's Mods folder (those named). These compare file

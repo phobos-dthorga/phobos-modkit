@@ -364,6 +364,15 @@ PATCHED_DUMP = """<?xml version="1.0" encoding="utf-8"?>
 class PatchedDefs(Install):
     run_main = Command.run_main
 
+    def test_the_file_is_found_where_the_framework_writes_it_with_nothing_named(self):
+        # 1.140.0: beside the Config folder, as the update check finds it; this report found nothing unless a setting named it.
+        code, text = self.run_main("patched", "Steel")
+        self.assertEqual(code, EXIT_USAGE)
+        write(Path(self.install.config).parent / "PhobosPatchedDefs" / "PatchedDefs.xml", PATCHED_DUMP)
+        code, text = self.run_main("patched", "Steel")
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("<label>shiny steel</label>", text)
+
     def test_a_def_as_patched_and_what_changed(self):
         dump = self.root / "PatchedDefs.xml"
         write(dump, PATCHED_DUMP)
