@@ -6,7 +6,8 @@ with Microsoft's dotnet-stack: a main thread whose stack never moves is stuck, a
 the mod each type belongs to; `heap-compare` sets two heaps side by side, the way to see memory that keeps growing.
 
 Snapshots are kept in the kit's cache (`rimworld-stacks/`, `rimworld-heaps/`), outside every repository. The .gcdump file stays
-beside its report, for PerfView or Visual Studio, which can show what holds what.
+beside its report, for PerfView or Visual Studio, which can show what holds what: packed with zstd once read (1.149.0; the owner's
+choice by card, 28 Nov 2026, "Compress them too"), and given back plain by `rimworld-perf unpack`.
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ import time
 from ... import __version__
 from ... import cache as derived
 from ... import dotnet_diagnostics as dd
+from ... import packed
 from ...dotnet_snapshots import Heap, Owners, collapse, heap_owners, parse_heapstat, parse_stacks, shared_outer
 from ...report import Bullets, Report, Table
 from ...sampling import CPU, GAME, MOD, NATIVE, RUNTIME, UNKNOWN, Owner
@@ -26,6 +28,7 @@ from . import perf
 
 STACKS_FOLDER, HEAPS_FOLDER = "rimworld-stacks", "rimworld-heaps"
 META, HEAP_DATA, HEAP_TEXT, HEAP_FILE = "meta.json", "heap.json", "heapstat.txt", "heap.gcdump"
+PACKED_FILES = (HEAP_FILE, HEAP_TEXT)    # large, and read again only by people: packed with zstd (1.149.0)
 COUNTERS_FILE = "counters.json"
 WHOLE_SHARE = 0.9                   # a snapshot listing less than 90 % of the runtime's own count holds only part of the heap
 # dotnet-gcdump listed exactly 10,000,003 objects of a heap of several GB (19 November 2026): it stops near 10 million.
@@ -267,10 +270,17 @@ def take_heap(pid, folder, tool, run, now=None, label="", counters_tool=None, cl
     (Path(folder) / HEAP_TEXT).write_text(text, encoding="utf-8")
     heap = parse_heapstat(text)
     (Path(folder) / HEAP_DATA).write_text(heap.to_json(), encoding="utf-8")
+    pack_heap(folder)
     _write_meta(folder, {"kit_version": __version__, "taken_at": (now or datetime.now()).strftime("%Y-%m-%d %H:%M:%S"),
                          "label": label or "", "pid": pid, "warnings": warnings, "tools_version": dd.TOOLS_VERSION,
                          "seconds": round(seconds, 1), "runtime": runtime, "runtime_failed": failed})
     return heap, warnings
+
+
+def pack_heap(folder):
+    """Packs a heap's large files once its table is written: the .gcdump for PerfView and dotnet-gcdump's text. The table read by
+    every report (heap.json) stays plain. Returns the files packed."""
+    return [packed.pack(Path(folder) / name) for name in PACKED_FILES if (Path(folder) / name).is_file()]
 
 
 def partial_note(meta, heap):
@@ -353,6 +363,9 @@ def heap_report(folder, meta, heap, owner_map, notes, top=15):
         report.section("Each mod's largest type", Table(["Mod", "All its types", "Largest type", "Its bytes"], rows, len(mods)))
     if (Path(folder) / HEAP_FILE).is_file():
         report.lines.append(f"The heap file is kept for PerfView or Visual Studio: {Path(folder) / HEAP_FILE}")
+    elif packed.packed_of(Path(folder) / HEAP_FILE).is_file():
+        report.lines.append(f"The heap file is kept packed: `rimworld-perf unpack {Path(folder).name}` writes it out plain for "
+                            "PerfView or Visual Studio.")
     report.section("What a heap snapshot cannot say", Bullets(SNAPSHOT_LIMITS if snapshot else HEAP_LIMITS))
     return report
 

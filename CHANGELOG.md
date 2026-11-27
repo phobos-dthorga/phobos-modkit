@@ -13,6 +13,10 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
   155 MB, kept once about 10.5 MB. `restore` writes a copy out to an empty folder, `pack --apply` turns the old folder copies into
   store copies (each checked before its folder goes) and `tidy --apply` lets go of kept files no copy names. How:
   [records](docs/records.md). The game-free helper is `packed`.
+- **rimworld-perf keeps its recordings and heap dumps packed** (the owner's choice by card, 28 Nov 2026: "Compress them too"). A
+  trace is packed once indexed (11 times smaller), a heap's `.gcdump` once read (about 1.7 times); `unpack` writes one out plain for
+  PerfView, and `pack --apply` packs those kept before. A next game's recorder needs only to call `packed.pack` on its own files.
+  How: [rimworld-perf](docs/rimworld-perf.md).
 
 ### Changed
 

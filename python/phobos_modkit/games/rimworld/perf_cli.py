@@ -6,6 +6,8 @@
     rimworld-perf mod "Combat Extended"      one mod in a recording: its busiest methods and where its time went
     rimworld-perf compare                    the last two recordings, as shares of the main thread and of ticking
     rimworld-perf list                       every recording and snapshot kept
+    rimworld-perf pack                       pack the large files of recordings and heaps kept before 1.149.0 (--apply)
+    rimworld-perf unpack 20261117-1900       write a recording's trace or a heap's .gcdump out plain, for PerfView
     rimworld-perf index FILE.speedscope.json [--counters FILE.json]   a trace recorded by hand
     rimworld-perf stack --label "frozen"     a frozen or stuck game: every thread's stack, 3 times, 2 s apart
     rimworld-perf stack-report               the newest stack snapshots again
@@ -26,7 +28,9 @@
 Recording attaches Microsoft's dotnet-trace and dotnet-counters to the game through its .NET diagnostics pipe; stack uses
 dotnet-stack and heap dotnet-gcdump the same way, and watch dotnet-counters with Windows' own figures. Nothing is installed in the
 game and nothing of it is changed, but heap forces a full garbage collection, which pauses the game until it is done. The first use of each tool installs it (a pinned version) into the
-kit's build folder, which needs the .NET SDK. Everything is kept in the kit's cache, outside every repository.
+kit's build folder, which needs the .NET SDK. Everything is kept in the kit's cache, outside every repository. A recording's
+trace and a heap's .gcdump cannot be made again but are seldom opened, so they are kept packed with zstd once read (1.149.0; the
+owner's choice by card, 28 Nov 2026): a trace came out 11 times smaller. unpack gives one back plain, for PerfView or Visual Studio.
 
 look takes a Windows snapshot of the game instead (a pause of about half a second) and reads it with the kit's heap reader: every
 object, with no limit on how many, but garbage not yet collected included. It reads the game's own memory-reading library from its
@@ -49,6 +53,7 @@ import time
 from ... import __version__
 from ... import cache as derived
 from ... import dotnet_diagnostics as dd
+from ... import packed
 from ...dotnet_snapshots import SnapshotError
 from ... import process_memory as pm
 from ...manifest import READS, RUNS, WRITES
@@ -67,7 +72,7 @@ from . import perf_watch as pw
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 REPORTS = ("report", "record", "index", "mod", "compare", "list", "stack", "stack-report", "heap", "heap-report", "heap-compare",
            "watch", "watch-report", "watch-status", "watch-stop", "watch-mark", "look", "look-kind", "look-why", "look-serve",
-           "look-check", "look-thaw")
+           "look-check", "look-thaw", "pack", "unpack")
 FREEZE_HELP = ("freeze the game and read it in place instead of a snapshot, when Windows has no room to copy it (error 1450); it "
                f"stands still while it is read, {hreader.FREEZE_SECONDS} s at most")
 MEMORY_SURFACE = "memory-watch"     # D'thorga Companion's Memory page finds the watch's commands by this, never by the game's name
@@ -121,6 +126,10 @@ def _parser():
     k.add_argument("first", nargs="?", help="the earlier recording; the second newest when both are left out")
     k.add_argument("second", nargs="?", help="the later recording; the newest when both are left out")
     sub.add_parser("list", parents=[common], help="every recording and snapshot kept")
+    pk = sub.add_parser("pack", parents=[common], help="pack the large files of recordings and heaps kept plain (before 1.149.0)")
+    pk.add_argument("--apply", action="store_true", help="pack them; without this, only say which and how large")
+    up = sub.add_parser("unpack", parents=[common], help="write a recording's trace or a heap's .gcdump out plain, for PerfView")
+    up.add_argument("name", help="a recording's or a heap's ID (its start is enough) or label")
     s = sub.add_parser("stack", parents=[common], help="a frozen or stuck game: every thread's stack, a few times")
     s.add_argument("--times", type=int, default=snap.DEFAULT_TIMES, help=f"how many snapshots (default {snap.DEFAULT_TIMES})")
     s.add_argument("--every", type=float, default=snap.DEFAULT_EVERY, help=f"seconds between them (default {snap.DEFAULT_EVERY:g})")
@@ -440,6 +449,71 @@ def compare_report(before, after, names, top):
     return report
 
 
+def _plain_files(args, environ, settings_file):
+    """[(kind, folder, file)] of every large file kept plain: each recording's trace and each heap's own files."""
+    found = [("recording", folder, folder / dd.TRACE_FILE) for folder in recordings(recordings_root(args, environ, settings_file))]
+    _, heaps = snap.roots(args.cache, environ, settings_file)
+    found += [("heap", folder, folder / name) for folder in snap.kept(heaps) for name in snap.PACKED_FILES]
+    return [(kind, folder, path) for kind, folder, path in found if path.is_file()]
+
+
+def pack_report(args, environ, settings_file):
+    plain = _plain_files(args, environ, settings_file)
+    before = sum(path.stat().st_size for _, _, path in plain)
+    rows, after, failed = [], 0, []
+    for kind, folder, path in plain:
+        size_before = path.stat().st_size
+        if args.apply:
+            try:
+                target = packed.pack(path)
+            except (OSError, packed.PackError) as error:
+                failed.append(f"{folder.name}/{path.name}: {error}")
+                continue
+            after += target.stat().st_size
+            rows.append((kind, folder.name, path.name, size(size_before), size(target.stat().st_size)))
+        else:
+            rows.append((kind, folder.name, path.name, size(size_before), ""))
+    if not plain:
+        report = Report("rimworld-perf: nothing left to pack", ["Every recording's trace and every heap's own files are packed."])
+    elif args.apply:
+        report = Report(f"rimworld-perf: packed {len(rows)} files, {size(before)} down to {size(after)}",
+                        ["Each was read back and checked before its plain file was removed. `rimworld-perf unpack NAME` gives "
+                         "one back plain."])
+    else:
+        report = Report(f"rimworld-perf: {len(plain)} files kept plain, {size(before)}",
+                        ["`rimworld-perf pack --apply` packs them with zstd, checking each before its plain file goes."])
+    if rows:
+        report.section("Files", Table(["Kind", "Kept as", "File", "Plain", "Packed"], rows))
+    for line in failed:
+        report.lines.append(f"Not packed, left as it was: {line}")
+    return report, {"files": len(plain), "plainBytes": before, "packed": len(rows) if args.apply else 0, "failed": failed}
+
+
+def unpack_report(args, environ, settings_file):
+    root = recordings_root(args, environ, settings_file)
+    _, heaps = snap.roots(args.cache, environ, settings_file)
+    try:
+        folder, names = find(root, args.name), (dd.TRACE_FILE,)
+    except PerfError:
+        try:
+            folder, names = snap.find(heaps, args.name, "heaps"), (snap.HEAP_FILE,)
+        except snap.SnapshotsError:
+            raise PerfError(f'"{args.name}" names no single recording or heap. `rimworld-perf list` shows them.') from None
+    written = []
+    for name in names:
+        plain = folder / name
+        if plain.is_file():
+            written.append(plain)
+        elif packed.packed_of(plain).is_file():
+            written.append(packed.unpack(packed.packed_of(plain)))
+    if not written:
+        raise PerfError(f"{folder.name} keeps no {' or '.join(names)}, plain or packed.")
+    report = Report(f"rimworld-perf: {folder.name} written out plain",
+                    ["Open it in PerfView or Visual Studio. The packed copy stays; delete the plain one when done with it."])
+    report.section("Files", Table(["File", "Size"], [(str(p), size(p.stat().st_size)) for p in written]))
+    return report, {"files": [str(p) for p in written]}
+
+
 def list_report(root):
     found = recordings(root)
     report = Report("rimworld-perf: recordings", [f"{len(found)} recordings in {root}."])
@@ -477,6 +551,8 @@ def _record(args, root, environ, settings_file, run, popen, now):
     notes = notes + build_index(folder, speedscope, counters_file, meta, args, environ, settings_file)
     if not args.keep_speedscope:
         derived.remove(speedscope)
+    if (folder / dd.TRACE_FILE).is_file():
+        packed.pack(folder / dd.TRACE_FILE)
     if installed:
         notes.insert(0, f"Installed dotnet-trace and dotnet-counters {dd.TOOLS_VERSION} into {dd.tools_folder(environ)} first.")
     return folder, notes
@@ -744,6 +820,10 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
             watches = pw.summary_rows(pw.root(args.cache, environ, settings_file))
             if watches:
                 report.section("Memory watches, newest first", Table(["Watch", "Started", "Samples", "Label"], watches))
+        elif args.report == "pack":
+            report, data = pack_report(args, environ, settings_file)
+        elif args.report == "unpack":
+            report, data = unpack_report(args, environ, settings_file)
         elif args.report in ("stack", "stack-report", "heap", "heap-report", "heap-compare"):
             report = _snapshots(args, environ, settings_file, run, now or datetime.now(), sleep)
         elif args.report == "look-serve":
@@ -814,6 +894,11 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
     "record": {"effect": RUNS, "question": "What is my running game doing right now?",
                "note": "Attaches Microsoft's dotnet-trace and dotnet-counters to the running game; it changes nothing in it."},
     "index": {"question": "What does a trace I recorded by hand say?"},
+    "pack": {"effect": WRITES, "note": "With --apply, packs each recording's trace and each heap's own files with zstd in the "
+                                       "kit's cache, removing a plain file only once its packed one reads back the same; without, "
+                                       "only says."},
+    "unpack": {"effect": WRITES, "note": "Writes one recording's trace or one heap's .gcdump out plain beside its packed copy, in "
+                                         "the kit's cache; never writes over a file."},
     "mod": {"question": "What does one mod cost while the game runs?"},
     "compare": {"question": "Did a change make the game faster?"},
     "stack": {"effect": RUNS, "question": "My game froze: where is it stuck, and whose code is it?",

@@ -14,6 +14,10 @@ figures beside them. It records the game from outside with Microsoft's own .NET 
 - **The first recording installs `dotnet-trace` and `dotnet-counters`** (version 10.0.750501, Microsoft) into the kit's build
   folder with `dotnet tool install`, which needs the .NET SDK 10 or newer and fetches them from NuGet once.
 - **A recording measures; it is not an in-game test.** It says where time went, never whether a feature works.
+- **The large files are kept packed** (1.149.0; the owner's choice by card, 28 Nov 2026, "Compress them too"): a recording's
+  `trace.nettrace` once indexed, a heap's `.gcdump` and its text once read, each checked before its plain file goes. A trace came
+  out 11 times smaller, a `.gcdump` about 1.7 times. **To open one in PerfView or Visual Studio, run `unpack` first**; `pack --apply`
+  packs those kept before 1.149.0.
 
 ## Examples
 
@@ -62,6 +66,8 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `mod` | One mod in a recording. | reads only |
 | `compare` | Two recordings, as shares of the main thread and of ticking. | reads only |
 | `list` | Every recording and snapshot kept. | reads only |
+| `pack` | Pack the large files of recordings and heaps kept plain (before 1.149.0). With `--apply`, packs each recording's trace and each heap's own files with zstd in the kit's cache, removing a plain file only once its packed one reads back the same; without, only says. | writes |
+| `unpack` | Write a recording's trace or a heap's .gcdump out plain, for PerfView. Writes one recording's trace or one heap's .gcdump out plain beside its packed copy, in the kit's cache; never writes over a file. | writes |
 | `stack` | A frozen or stuck game: every thread's stack, a few times. Attaches Microsoft's dotnet-stack to the running game a few times; it changes nothing in it. | runs other programs |
 | `stack-report` | Stack snapshots taken earlier. | reads only |
 | `heap` | What holds the game's memory, by type and by mod (pauses the game). Attaches Microsoft's dotnet-gcdump to the running game, which forces a full garbage collection: the game pauses until it is done. | runs other programs |
@@ -99,6 +105,8 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `RECORDING` | `mod` | (optional) a recording's ID or label; the newest when left out |  |
 | `FIRST` | `compare` | (optional) the earlier recording; the second newest when both are left out |  |
 | `SECOND` | `compare` | (optional) the later recording; the newest when both are left out |  |
+| `--apply` | `pack` | pack them; without this, only say which and how large |  |
+| `NAME` | `unpack` | a recording's or a heap's ID (its start is enough) or label |  |
 | `--times N` | `stack` | how many snapshots (default 3) | `3` |
 | `--every N` | `stack` | seconds between them (default 2) | `2.0` |
 | `--label VALUE` | `stack` | a few words to find the snapshots by, such as what the game was doing |  |
@@ -180,7 +188,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
   report: one row per type, with its count and the average size of one object, read here as totals. Each type belongs to its
   module's owner, as frames do. A .NET collection whose generic arguments name a mod's type (`List<Example.Dose>`) counts for that
   mod, "through" that type. **Memory counts under the type that is it**: the arrays and strings a mod's objects hold count as
-  .NET's. What holds what is in the `.gcdump` file kept beside the report, for PerfView or Visual Studio.
+  .NET's. What holds what is in the `.gcdump` file kept beside the report, packed, for PerfView or Visual Studio (`unpack` first).
 - **On a large heap the snapshot holds only part of it.** On the owner's game (19 November 2026) dotnet-gcdump listed exactly
   10,000,003 objects and 667 MB, while the runtime's own counters had put the heap at 6 to 11.5 GB in earlier recordings, of it
   4 to 6 GB live objects and the rest gaps between them: it stops near ten million objects (Microsoft documents no such limit;
@@ -278,7 +286,7 @@ at most, and is always let go; see [the heap reader](heap-reader.md#read-this-fi
 | `dotnet-counters collect --format json` | The runtime's counters once a second: time paused for garbage collection, collections by generation, memory allocated, JIT compiling, lock waits, processor and memory use |
 
 The converted trace is indexed into SQLite (`index.sqlite`) with the owners of every module worked out against the mod list as
-it is then, and the counters' averages and worst seconds. The raw `trace.nettrace` stays beside it for PerfView or Visual Studio;
+it is then, and the counters' averages and worst seconds. The raw `trace.nettrace` stays beside it for PerfView or Visual Studio, packed as `trace.nettrace.zst` (`unpack` gives it back);
 the speedscope file is deleted unless `--keep-speedscope` is given, because it is large. Recordings live in the kit's cache
 (`rimworld-perf/<date>-<time>-<label>/`), outside every repository; `cleanup` lists them once they are a fortnight old, saying they
 cannot be made again.

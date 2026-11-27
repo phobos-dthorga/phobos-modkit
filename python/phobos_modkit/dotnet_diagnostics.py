@@ -22,6 +22,7 @@ from . import native
 
 TOOLS_VERSION = "10.0.750501"      # Microsoft's release of 2026; the version the tool was built and checked against
 TRACE, COUNTERS = "dotnet-trace", "dotnet-counters"
+TRACE_FILE = "trace.nettrace"     # dotnet-trace's own recording, kept packed once indexed (1.149.0)
 STACK, GCDUMP, DUMP = "dotnet-stack", "dotnet-gcdump", "dotnet-dump"
 RECORDING = (TRACE, COUNTERS)
 TOOLS_ENV = "PHOBOS_DOTNET_TOOLS"   # a folder holding both programs, instead of the kit's own copy
@@ -240,7 +241,7 @@ def record(pid, seconds, folder, trace_tool, counters_tool, popen=subprocess.Pop
     """
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
-    trace_file, counters_file = folder / "trace.nettrace", folder / "counters.json"
+    trace_file, counters_file = folder / TRACE_FILE, folder / "counters.json"
     counters_log, trace_log = folder / "counters.log", folder / "trace.log"
     duration = duration_text(seconds)
     notes = []

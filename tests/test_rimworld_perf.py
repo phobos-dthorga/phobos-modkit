@@ -15,8 +15,10 @@ from unittest import mock
 
 from support import FIXTURES
 from phobos_modkit import dotnet_diagnostics as dd
+from phobos_modkit import packed
 from phobos_modkit import sampling
 from phobos_modkit.games.rimworld import perf, perf_cli
+from phobos_modkit.games.rimworld import perf_snapshots as snap
 from phobos_modkit.sampling import ENGINE, GAME, LIBRARY, MOD, RUNTIME, UNKNOWN, Owner
 
 TRACE = FIXTURES / "rimworld" / "perf" / "main-loop.speedscope.json"
@@ -213,6 +215,8 @@ class CommandTests(unittest.TestCase):
         folder = self.tmp / "cache" / perf_cli.CACHE_FOLDER / "20261117-180000-many-wounded"
         self.assertTrue((folder / perf_cli.INDEX_NAME).is_file())
         self.assertFalse((folder / ("trace" + dd.SPEEDSCOPE_SUFFIX)).exists())
+        self.assertFalse((folder / dd.TRACE_FILE).exists())                     # packed once indexed (1.149.0)
+        self.assertEqual(packed.read_bytes(folder / dd.TRACE_FILE), b"nettrace")
         code, again = self.run_cli("report", "many wounded", *self.common)
         self.assertEqual(perf_cli.EXIT_OK, code, again)
         self.assertIn("| Example.Dosing.DoseService.MakeJob | Example Medical | 40 | 57.1% |", again)
@@ -236,6 +240,35 @@ class CommandTests(unittest.TestCase):
         code, text = self.run_cli("list", *self.common)
         self.assertIn("20261117-190000-after", text)
         self.assertLess(text.index("20261117-190000-after"), text.index("20261117-180000-before"))
+
+    def test_pack_and_unpack_what_was_kept_plain(self):
+        # The owner's choice by card (28 Nov 2026): recordings and heaps alike, "Compress them too".
+        self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--label", "old", *self.common)[0])
+        recording = self.tmp / "cache" / perf_cli.CACHE_FOLDER / "20261117-180000-old"
+        (recording / dd.TRACE_FILE).write_bytes(b"trace " * 1000)
+        heap = self.tmp / "cache" / snap.HEAPS_FOLDER / "20261117-170000-day-40"
+        heap.mkdir(parents=True)
+        (heap / snap.META).write_text('{"label": "day 40"}', encoding="utf-8")
+        (heap / snap.HEAP_FILE).write_bytes(b"gcdump " * 1000)
+        (heap / snap.HEAP_DATA).write_text("{}", encoding="utf-8")
+        code, text = self.run_cli("pack", *self.common)
+        self.assertEqual(perf_cli.EXIT_OK, code, text)
+        self.assertIn("2 files kept plain", text)
+        self.assertTrue((recording / dd.TRACE_FILE).is_file())
+        code, text = self.run_cli("pack", "--apply", *self.common)
+        self.assertEqual(perf_cli.EXIT_OK, code, text)
+        self.assertFalse((recording / dd.TRACE_FILE).exists())
+        self.assertFalse((heap / snap.HEAP_FILE).exists())
+        self.assertTrue((heap / snap.HEAP_DATA).is_file())                       # read by every report: stays plain
+        self.assertIn("nothing left to pack", self.run_cli("pack", *self.common)[1])
+        code, text = self.run_cli("unpack", "day 40", *self.common)
+        self.assertEqual(perf_cli.EXIT_OK, code, text)
+        self.assertEqual((heap / snap.HEAP_FILE).read_bytes(), b"gcdump " * 1000)
+        self.assertTrue(packed.packed_of(heap / snap.HEAP_FILE).is_file())
+        code, text = self.run_cli("unpack", "20261117-1800", *self.common)
+        self.assertEqual(perf_cli.EXIT_OK, code, text)
+        self.assertEqual((recording / dd.TRACE_FILE).read_bytes(), b"trace " * 1000)
+        self.assertEqual(perf_cli.EXIT_FAILED, self.run_cli("unpack", "nothing like it", *self.common)[0])
 
     def test_an_unknown_recording(self):
         code, text = self.run_cli("report", "nothing", *self.common)

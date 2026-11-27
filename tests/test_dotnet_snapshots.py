@@ -14,6 +14,7 @@ from unittest import mock
 
 import support  # noqa: F401  (the package on the import path)
 from phobos_modkit import dotnet_diagnostics as dd
+from phobos_modkit import packed
 from phobos_modkit.dotnet_snapshots import (Owners, SnapshotError, collapse, heap_owners, parse_heapstat, parse_stacks,
                                             shared_outer)
 from phobos_modkit.games.rimworld import perf, perf_cli
@@ -215,7 +216,9 @@ class CommandTests(unittest.TestCase):
             self.assertIn("| Example Medical | mod |", text)
             self.assertIn("System.Collections.Generic.List<Example.Dosing.Dose> | Example Medical (through Example.Dosing.Dose)", text)
             folder = self.tmp / "cache" / snap.HEAPS_FOLDER / "20261118-210000-day-40"
-            self.assertTrue((folder / snap.HEAP_FILE).is_file())
+            self.assertFalse((folder / snap.HEAP_FILE).exists())                # packed once read (1.149.0)
+            self.assertTrue(packed.packed_of(folder / snap.HEAP_FILE).is_file())
+            self.assertIn(f"rimworld-perf unpack {folder.name}", text)
             code, text = self.run_cli("heap", *self.common, run=FakeTools([]), now=datetime(2026, 11, 18, 22, 0, 0))
         self.assertEqual(perf_cli.EXIT_OK, code, text)
         code, text = self.run_cli("heap-compare", *self.common, run=FakeTools([]))
