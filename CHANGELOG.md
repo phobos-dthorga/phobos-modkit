@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.149.1] - 2026-11-28
+
+### Fixed
+
+- **installs forgets the peeks of backups that are gone** when it lists a mod's backups: a backup removed as a repeat or by hand
+  had left its copied-out files in the kit's cache, and 184 of the owner's 208 peeks were of backups long gone. Only that mod's,
+  and none when the backups folder cannot be read. How: [installs](docs/installs.md).
+
 ## [1.149.0] - 2026-11-28
 
 ### Added

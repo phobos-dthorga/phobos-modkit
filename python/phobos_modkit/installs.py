@@ -453,6 +453,26 @@ def _forget_peek(where, name):
         shutil.rmtree(folder, ignore_errors=True)
 
 
+def forget_gone_peeks(where, mod, present):
+    """Removes the peeks of a mod's backups that are no longer there (removed as repeats, or pruned by hand), given the names of those
+    still there; returns how many (1.149.1: 184 of the owner's 208 peeks were of backups long gone). Only this mod's, so a peek of
+    another repository's mod is left alone, and none at all when the backups folder cannot be read."""
+    if not Path(where.backups).is_dir():
+        return 0
+    root = _peek_folder(where, "")
+    try:
+        children = list(root.iterdir())
+    except OSError:
+        return 0
+    gone = 0
+    for child in children:
+        named = BACKUP_NAME.match(child.name)
+        if child.is_dir() and named and named.group("mod") == mod and child.name not in present:
+            shutil.rmtree(child, ignore_errors=True)
+            gone += 1
+    return gone
+
+
 # ---------------------------------------------------------------- duplicate backups
 
 DIGEST_CACHE = "installs"
@@ -784,7 +804,9 @@ def survey(where, mods=None, measure=True, run=subprocess.run, progress=None):
         files = checks.compare_files(installed.folder, repository.folder, install_only) if installed is not None else None
         # A zipped backup's changed pictures and sounds are copied out beside its name and version, so they can be compared.
         changed_paths = [p["path"] for p in (files or {}).get("paths", [])]
-        backups = [read_backup(where, name, measure, changed_paths) for name in backups_of(where.backups, mod)]
+        present = backups_of(where.backups, mod)
+        forget_gone_peeks(where, mod, set(present))
+        backups = [read_backup(where, name, measure, changed_paths) for name in present]
         changed = uncommitted(where.root, [f"{where.config['mods']}/{mod}", *where.config.get("sharedSources", [])])
         commit, exact = installed_commit(where, installed)
         since = commits_since(where.root, commit, f"{where.config['mods']}/{mod}")

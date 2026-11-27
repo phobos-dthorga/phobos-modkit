@@ -108,6 +108,22 @@ class PackingTests(unittest.TestCase):
             self.assertFalse((peek / "Assemblies" / "Thing.dll").exists())
             self.assertFalse((peek / "Defs" / "Things.xml").exists())
 
+    def test_the_peeks_of_backups_gone_are_forgotten_but_no_other_mods(self):
+        # 1.149.1: 184 of the owner's 208 peeks were of backups removed long before.
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Fixture(tmp)
+            installs.pack(f.where)
+            gone = installs._peek_folder(f.where, "Thing-20261001-000000")
+            other = installs._peek_folder(f.where, "OtherMod-20261001-000000")
+            for folder in (gone, other):
+                folder.mkdir(parents=True)
+                (folder / "CHANGELOG.md").write_text("old", encoding="utf-8")
+            code, _ = f.run("status")
+            self.assertEqual(code, 0)
+            self.assertFalse(gone.exists())
+            self.assertTrue(other.is_dir())
+            self.assertTrue(installs._peek_folder(f.where, "Thing-20261101-120000").is_dir())
+
     def test_a_peek_lets_go_of_files_no_longer_wanted(self):
         with tempfile.TemporaryDirectory() as tmp:
             folder = write_mod(Path(tmp) / "Thing", "0.1.0", "# Thing changelog\n")

@@ -148,7 +148,8 @@ is read without unpacking the rest; LZMA saved only 7% more.
   `status` finds between the install and the repository, are copied into the kit's cache (`installs/backup-peeks/<backup>`),
   which is the folder `status` names for it, so a program can show a changed picture from it. A backup never changes, so they are
   copied once. **Other changed files are not copied out** (1.149.0): nothing compares an assembly or XML side by side, and 200
-  peeks had held 150 MB of them; a peek lets go of any file it no longer wants the next time it is read.
+  peeks had held 150 MB of them; a peek lets go of any file it no longer wants the next time it is read. **The peeks of a mod's
+  backups that are gone are removed** whenever its backups are listed (1.149.1), unless the backups folder cannot be read.
 - **Going back to a zipped backup** unpacks it beside the game's mods folder, then swaps as before; the zip is kept. A zip naming
   a path outside its folder is refused.
 - `content_digests` gives the full and lean digests in one reading. Their formula is unchanged, so digests kept for folders still hold.
