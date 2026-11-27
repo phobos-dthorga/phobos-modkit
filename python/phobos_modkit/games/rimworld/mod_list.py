@@ -22,7 +22,7 @@ import sys
 from xml.etree import ElementTree
 
 from ...game_files import libraries, parse_vdf, steam_root
-from ...mod_list import Mod, ModList, Need, TieIn
+from ...mod_list import Mod, ModList, Need, TieIn, find_program
 from ...installs import game_running
 from ...steam.client import library_path as steam_library_path
 from ...mod_lists import FILE, MANAGER, SAVE, SavedList
@@ -35,6 +35,9 @@ from .mods import _about_root, _child, _text
 from .paths import LOG_NAME, PREVIOUS_LOG_NAME, config_path, game_path, logs_path, saves_path, workshop_path
 
 APP_ID = 294100
+# The game's own program, by sys.platform (1.150.0): RimWorld.exe from 1.7 (its CoreCLR build, seen on the owner's install,
+# 28 Nov 2026), RimWorldWin64.exe and RimWorldWin.exe before. The macOS app is started through `open`, so it is left out until seen.
+PROGRAMS = {"win32": ("RimWorld.exe", "RimWorldWin64.exe", "RimWorldWin.exe"), "linux": ("RimWorldLinux", "RimWorldLinux.x86_64")}
 MANAGERS = ("RimSort.exe", "RimPy.exe")
 WORKSHOP_NUMBER = re.compile(r"(?:id=|CommunityFilePage/|filedetails/\?id=)(\d{6,})|^(\d{6,})$")
 CLUE_SUFFIXES = frozenset({".xml", ".txt", ".dll", ".json"})
@@ -434,6 +437,10 @@ class RimWorld:
             self._version, _, self._ids = read_mods_config(self.config)
 
     # -------------------------------------------------- what the core asks
+
+    def program(self):
+        """The game's own program in its folder, to start it with arguments (1.150.0), or None when it is not found."""
+        return find_program(self.game_folder, PROGRAMS)
 
     def notes(self):
         found = []

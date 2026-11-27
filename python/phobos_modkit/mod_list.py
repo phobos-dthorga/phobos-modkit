@@ -29,6 +29,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 
 from .paths import companion_data, resolve
 
@@ -135,6 +136,63 @@ def now_stamp(now=None):
 
 def digest_text(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+# ---------------------------------------------------------------- how the game is started (1.150.0)
+
+LAUNCH_FORMAT = 1
+MAX_ARGUMENTS = 1000              # characters in a game's arguments line (agent default; Windows allows a command line of 32,767)
+
+
+def launch_file(game, environ=None, settings=None):
+    """Where a game's arguments line is kept: beside the mod list's memory, so a records copy holds it."""
+    return folder(game, environ, settings) / "launch.json"
+
+
+def sane_arguments(text):
+    """An arguments line as it is kept: trimmed. Raises FixError for one holding a line break or another control character, or
+    longer than MAX_ARGUMENTS."""
+    text = (text or "").strip()
+    if len(text) > MAX_ARGUMENTS:
+        raise FixError(f"the arguments line is {len(text)} characters; at most {MAX_ARGUMENTS} are kept")
+    if any(ord(c) < 32 or ord(c) == 127 for c in text):
+        raise FixError("the arguments line holds a line break or another control character; keep it to one line")
+    return text
+
+
+def load_arguments(path):
+    """The kept arguments line, or "" when none is kept or the file cannot be read."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(data, dict) or data.get("format") != LAUNCH_FORMAT or not isinstance(data.get("arguments"), str):
+        return ""
+    try:
+        return sane_arguments(data["arguments"])
+    except FixError:
+        return ""
+
+
+def save_arguments(path, text):
+    """Keeps an arguments line (an empty one keeps none), written whole and moved into place; returns the line kept."""
+    text = sane_arguments(text)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(path).with_suffix(".tmp")
+    temporary.write_text(json.dumps({"format": LAUNCH_FORMAT, "arguments": text}, indent=1) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
+    return text
+
+
+def find_program(folder, names_by_platform, platform=None):
+    """The first of a game's program names (by `sys.platform`) that is a file in its folder, or None."""
+    if folder is None:
+        return None
+    for name in names_by_platform.get(platform or sys.platform, ()):
+        path = Path(folder) / name
+        if path.is_file():
+            return path
+    return None
 
 
 # ---------------------------------------------------------------- the memory of every mod a check has seen

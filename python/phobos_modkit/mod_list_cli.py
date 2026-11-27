@@ -10,7 +10,8 @@
     mod-list rules --name GAME --drop N [--apply]                      take your rule N away
     mod-list rules --name GAME --import-manager [--apply]              bring your rules over from the mod manager (RimSort) (1.144.0)
     mod-list databases --name GAME [--fetch [--stale] [--only NAME]]   the community lists the sorter reads; fetch them (1.144.0)
-    mod-list start --name GAME [--apply]                               start the game through Steam, as a mod manager's Run game (1.146.0)
+    mod-list start --name GAME [--arguments=TEXT] [--apply]            start the game's own program with its arguments line (1.150.0)
+    mod-list launch --name GAME [--set=TEXT | --clear] [--apply]       the arguments line the game is started with; keep a new one
     mod-list updates --name GAME [--item N ... --apply]                Workshop items Steam has not brought up to date; fetch again (1.147.0)
     mod-list lists --name GAME                                         every saved list: by name, at game starts, saves, RimSort
     mod-list since --name GAME [--list KEY]                            what the first game run after your last change showed (1.85.0)
@@ -37,6 +38,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 
@@ -127,9 +129,19 @@ def _parser():
     _common(updates, lists=False)
     updates.add_argument("--item", action="append", metavar="N", help="a Workshop number to ask Steam for again (again for several)")
     updates.add_argument("--apply", action="store_true", help="ask Steam to download them now; without it, only say what it would do")
-    start = sub.add_parser("start", help="start the game through Steam, refused while it runs; only with --apply")
+    start = sub.add_parser("start", help="start the game's own program with its arguments line, refused while it runs; only with "
+                                         "--apply")
     _common(start, lists=False)
-    start.add_argument("--apply", action="store_true", help="ask Steam to start it; without it, only say what it would do")
+    start.add_argument("--arguments", metavar="TEXT", help="these arguments this once, instead of the line kept (write "
+                                                            "--arguments=-flag when they start with a dash)")
+    start.add_argument("--apply", action="store_true", help="start it; without it, only say what it would do")
+    launch = sub.add_parser("launch", help="the arguments line the game is started with, and its program; keep a new line with "
+                                           "--set or --clear and --apply")
+    _common(launch, lists=False)
+    change = launch.add_mutually_exclusive_group()
+    change.add_argument("--set", metavar="TEXT", help="a new arguments line (write --set=-flag when it starts with a dash)")
+    change.add_argument("--clear", action="store_true", help="keep no arguments")
+    launch.add_argument("--apply", action="store_true", help="keep it; without it, only say what would be kept")
     since = sub.add_parser("since", help="what the first game run after the last change made here showed; only reads")
     _common(since)
     lists = sub.add_parser("lists", help="every saved list: by name, kept at game starts, each save's, and RimSort's history")
@@ -620,33 +632,73 @@ def updates_report(adapter, args, environ=None, running=game_running, library=No
     return report, data
 
 
-def open_address(address):
-    """Hands an address to the system's own opener (steam:// goes to the Steam client), as a link pressed in a browser would."""
+# The Steam client's own program, to say when it is not running: a game started without it may load no Workshop mods.
+STEAM_PROCESSES = ("steam.exe", "steam", "steam_osx")
+
+
+def launch_program(program, arguments, folder):
+    """Starts a game's own program with an arguments line, on its own, so it outlives this process and whatever ran it. On Windows
+    the line is passed as written, as Steam passes a game's Launch Options; elsewhere it is split as a shell would."""
+    quiet = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "close_fds": True}
     if sys.platform == "win32":
-        os.startfile(address)   # noqa: S606  (the owner's press; the address is the kit's own, steam://rungameid/<app id>)
+        line = subprocess.list2cmdline([str(program)]) + (f" {arguments}" if arguments else "")
+        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        try:   # out of the caller's job, when the job allows it, so closing the caller cannot close the game
+            subprocess.Popen(line, cwd=str(folder), creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, **quiet)
+        except OSError:
+            subprocess.Popen(line, cwd=str(folder), creationflags=flags, **quiet)
         return
-    subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", address],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.Popen([str(program), *shlex.split(arguments)], cwd=str(folder), start_new_session=True, **quiet)
 
 
-def start_report(adapter, args, running=game_running, opener=None):
-    """The game started through the Steam client (1.146.0; the owner's choice of 28 Nov 2026, "Save and start the game", as RimSort's
-    Run game, so RimSort can retire): `steam://rungameid/<app id>`, so Steam starts it as from the library, with its own launch
-    options. Refused while the game already runs."""
-    app_id = getattr(adapter, "app_id", None)
-    if not app_id:
-        raise core.FixError(f"{adapter.name} has no Steam app ID, so Steam cannot be asked to start it.")
+def _program(adapter):
+    program = adapter.program() if hasattr(adapter, "program") else None
+    if program is None:
+        raise core.FixError(f"{adapter.name}'s own program was not found in its folder, so it cannot be started from here. Check "
+                            "the game's folder in Settings.")
+    return Path(program)
+
+
+def start_report(adapter, args, running=game_running, launcher=None, environ=None):
+    """The game started by its own program, with the arguments line kept for it (1.150.0; the owner's choice by card of 28 Nov 2026,
+    "Always the game's program", as RimSort's Run game, so RimSort can retire). It was Steam's Play before (1.146.0), which takes
+    no arguments of ours. Refused while the game already runs; says so when Steam is not running."""
+    program = _program(adapter)
     found = running(list(getattr(adapter, "processes", ())))
     if found:
         raise core.FixError(f"{adapter.name} is running already ({', '.join(sorted(found))}).")
-    address = f"steam://rungameid/{app_id}"
-    data = {"address": address, "applied": bool(args.apply), "started": False}
+    kept = core.launch_file(adapter.game, environ, args.settings)
+    arguments = core.sane_arguments(args.arguments) if args.arguments is not None else core.load_arguments(kept)
+    steam_up = bool(running(list(STEAM_PROCESSES)))
+    data = {"program": str(program), "arguments": arguments, "applied": bool(args.apply), "started": False,
+            "steamRunning": steam_up}
     if args.apply:
-        (opener or open_address)(address)
+        (launcher or launch_program)(program, arguments, program.parent)
         data["started"] = True
-    report = Report(f"Mod list: {'asked Steam to start' if args.apply else 'would ask Steam to start'} {adapter.name}")
-    report.lines.append(f"Steam is handed {address}, as pressing Play in its library."
+    report = Report(f"Mod list: {'started' if args.apply else 'would start'} {adapter.name}")
+    report.lines.append(f"Runs {program.name}" + (f" with: {arguments}" if arguments else ", with no arguments") + "."
                         + ("" if args.apply else " **Add --apply to start it.**"))
+    if not steam_up:
+        report.lines.append("**Steam is not running**: the game may start without its Workshop mods. Start Steam first.")
+    return report, data
+
+
+def launch_report(adapter, args, environ=None):
+    """The arguments line a game is started with, and the program; with --set or --clear and --apply, a new line kept."""
+    kept = core.launch_file(adapter.game, environ, args.settings)
+    now = core.load_arguments(kept)
+    changing = args.set is not None or args.clear
+    wanted = ("" if args.clear else core.sane_arguments(args.set)) if changing else now
+    if changing and args.apply:
+        core.save_arguments(kept, wanted)
+    program = adapter.program() if hasattr(adapter, "program") else None
+    data = {"arguments": wanted if changing and args.apply else now, "wanted": wanted, "changed": changing and wanted != now,
+            "applied": bool(changing and args.apply), "program": str(program) if program else None, "file": str(kept)}
+    shown = data["arguments"]
+    report = Report(f"Mod list: {adapter.name} starts " + (f"with: {shown}" if shown else "with no arguments"))
+    if changing and not args.apply:
+        report.lines.append(("Would keep: " + wanted if wanted else "Would keep no arguments") + ". **Add --apply to keep it.**")
+    report.lines.append(f"Its program: {program}" if program else "Its program was not found in the game's folder.")
     return report, data
 
 
@@ -893,7 +945,7 @@ def undo(adapter, args, environ=None, running=game_running, now=None):
                     "keys": [adapter.key(i) for i in ids]}
 
 
-def main(argv=None, environ=None, out=None, post=None, running=None, now=None, steam=None, stdin=None, get=None, opener=None):
+def main(argv=None, environ=None, out=None, post=None, running=None, now=None, steam=None, stdin=None, get=None, launcher=None):
     out = out or sys.stdout
     environ = os.environ if environ is None else environ
     try:
@@ -945,7 +997,9 @@ def main(argv=None, environ=None, out=None, post=None, running=None, now=None, s
         elif args.report == "updates":
             report, data = updates_report(adapter, args, environ, running or game_running, steam)
         elif args.report == "start":
-            report, data = start_report(adapter, args, running or game_running, opener)
+            report, data = start_report(adapter, args, running or game_running, launcher, environ)
+        elif args.report == "launch":
+            report, data = launch_report(adapter, args, environ)
         elif args.report == "databases":
             report, data = databases_report(adapter, args, environ, get, now, Progress(environ))
         elif args.report == "lists":
@@ -997,7 +1051,11 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS, "surface": "mod-li
                                     "note": "reads Steam's own record of the game's Workshop items; --apply asks the running Steam "
                                             "client, as the game, to download the named items now"},
                         "start": {"effect": RUNS, "when": "--apply", "question": None,
-                                  "note": "hands steam://rungameid/<app id> to the system's opener, so the Steam client starts the game"},
+                                  "note": "starts the game's own program from its folder with the arguments line kept for it, "
+                                          "detached; refused while the game runs"},
+                        "launch": {"effect": WRITES, "when": "--apply", "question": "Which arguments is my game started with?",
+                                   "note": "with --set or --clear and --apply, writes the game's arguments line beside the mod "
+                                           "list's memory (launch.json); nothing else"},
                         "databases": {"effect": ONLINE, "when": "--fetch",
                                       "question": "How old are the community lists my mods are sorted and checked with?",
                                       "note": "with --fetch, reads public files from raw.githubusercontent.com, keyless, into the "

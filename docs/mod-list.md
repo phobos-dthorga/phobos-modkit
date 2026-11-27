@@ -34,7 +34,8 @@ Workshop). The Companion's Mod list page shows it.
 | `mod-list rules --name GAME [--mod ID --after OTHER \| --before OTHER \| --top \| --bottom \| --drop N] [--apply]` | Your own rules, your RimSort rules (read only), and every rule set the sorter reads; adds or takes away one of yours | writes with `--apply` |
 | `mod-list rules --name GAME --import-manager [--apply]` | Brings your rules over from the game's mod manager (RimSort), each one not kept already, with its note; once brought, RimSort's copy is no longer read until it changes there (1.144.0) | writes with `--apply` |
 | `mod-list databases --name GAME [--fetch [--stale] [--only NAME]]` | The community lists the sorter and the check read, the kit's copy or the mod manager's, whichever is newer, and how old; `--fetch` fetches them from GitHub (1.144.0) | reads online with `--fetch` |
-| `mod-list start --name GAME [--apply]` | Starts the game through the Steam client (`steam://rungameid/<app id>`), as pressing Play in its library or a mod manager's Run game; refused while the game runs (1.146.0) | runs a program with `--apply` |
+| `mod-list start --name GAME [--arguments=TEXT] [--apply]` | Starts the game's own program from its folder (RimWorld 1.7's `RimWorld.exe`) with the arguments line kept for it, as a mod manager's Run game, detached so it outlives what started it; refused while the game runs, and says when Steam is not running, as the game may then load no Workshop mods (1.150.0; through Steam's Play before, from 1.146.0) | runs a program with `--apply` |
+| `mod-list launch --name GAME [--set=TEXT \| --clear] [--apply]` | The arguments line the game is started with, such as `-harmony-detours`; keeps a new one with `--apply`, beside the mod list's memory (`mod-list/<game>/launch.json`). One line, at most 1,000 characters, no line breaks; passed as written on Windows, as Steam passes Launch Options. **Write `--set=-flag`**, with the equals sign, when it starts with a dash (1.150.0) | writes with `--apply` |
 | `mod-list updates --name GAME [--item N ... --apply]` | The Workshop items Steam has not brought up to date (a newer version waits, part downloaded, or none on disk), from Steam's own record of them (`appworkshop_<app id>.acf`); with `--item` and `--apply`, the running Steam client is asked, as the game, to download them now, refused while the game runs (1.147.0) | writes with `--apply` |
 | `mod-list since --name GAME [--list KEY]` | What the first game run after the last change made here showed: new errors, clean, or why it cannot tell | reads |
 | `mod-list lists --name GAME` | Every saved list: by name, kept at game starts, each save's, RimSort's history | reads |
@@ -67,7 +68,8 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `rules` | Your own load-order rules, and every rule set the sorter reads. | writes, with `--apply` |
 | `databases` | The community lists the sorter and the check read: where from and how old. With `--fetch`, reads public files from raw.githubusercontent.com, keyless, into the kit's cache. | reads public pages online, with `--fetch` |
 | `updates` | Workshop items Steam has not brought up to date; with `--item` and `--apply`, fetch them again. Reads Steam's own record of the game's Workshop items; `--apply` asks the running Steam client, as the game, to download the named items now. | writes, with `--apply` |
-| `start` | Start the game through Steam, refused while it runs; only with `--apply`. Hands steam://rungameid/\<app id> to the system's opener, so the Steam client starts the game. | runs other programs, with `--apply` |
+| `start` | Start the game's own program with its arguments line, refused while it runs; only with `--apply`. Starts the game's own program from its folder with the arguments line kept for it, detached; refused while the game runs. | runs other programs, with `--apply` |
+| `launch` | The arguments line the game is started with, and its program; keep a new line with `--set` or `--clear` and `--apply`. With `--set` or `--clear` and `--apply`, writes the game's arguments line beside the mod list's memory (launch.json); nothing else. | writes, with `--apply` |
 | `since` | What the first game run after the last change made here showed; only reads. | reads only |
 | `lists` | Every saved list: by name, kept at game starts, each save's, and RimSort's history. | reads only |
 | `compare` | What loading a list would change; only reads. | reads only |
@@ -114,7 +116,11 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--only NAME` | `databases` | with `--fetch`, only this list (again for several). Repeatable. |  |
 | `--item N` | `updates` | a Workshop number to ask Steam for again (again for several). Repeatable. |  |
 | `--apply` | `updates` | ask Steam to download them now; without it, only say what it would do |  |
-| `--apply` | `start` | ask Steam to start it; without it, only say what it would do |  |
+| `--arguments TEXT` | `start` | these arguments this once, instead of the line kept (write `--arguments`=-flag when they start with a dash) |  |
+| `--apply` | `start` | start it; without it, only say what it would do |  |
+| `--set TEXT` | `launch` | a new arguments line (write `--set`=-flag when it starts with a dash) |  |
+| `--clear` | `launch` | keep no arguments |  |
+| `--apply` | `launch` | keep it; without it, only say what would be kept |  |
 | `--from SOURCE:REF` | `compare`, `load` | a list as `lists` names it: saved:NAME, kept:TIME, save:FILE, manager:FILE |  |
 | `--last-clean` | `compare`, `load` | the newest list kept at a game start that then ran clean (1.85.0) |  |
 | `--file PATH` | `compare`, `load` | a list file (the game's .rml, a save, an exported RimSort list) |  |
@@ -134,6 +140,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 - [Common options](common-options.md) explains `--settings`, `--top`, `--json` and `--no-redact`, which many commands share.
 - Only one of `--remove`, `--remove-extra`, `--enable`, `--move` at a time (`fix`).
 - Only one of `--after`, `--before`, `--top`, `--bottom`, `--drop`, `--import-manager` at a time (`rules`).
+- Only one of `--set`, `--clear` at a time (`launch`).
 - Only one of `--from`, `--last-clean`, `--file` at a time (`compare`, `load`).
 <!-- end generated -->
 

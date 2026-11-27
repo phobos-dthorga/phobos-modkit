@@ -23,12 +23,14 @@ import re
 
 from ...game_files import libraries, parse_vdf, steam_root
 from ...game_folders import FOLDERS
-from ...mod_list import Mod, ModList, Need
+from ...mod_list import Mod, ModList, Need, find_program
 from ...steam.client import library_path as steam_library_path
 from ...paths import resolve
 
 APP_ID = 108600
 PROCESSES = ("ProjectZomboid64.exe", "ProjectZomboid32.exe", "ProjectZomboid.exe")   # usual names, unconfirmed here
+# Its own program in its install folder, by sys.platform (1.150.0): the usual names, unconfirmed here.
+PROGRAMS = {"win32": ("ProjectZomboid64.exe", "ProjectZomboid32.exe"), "linux": ("projectzomboid.sh",)}
 MANAGERS = ()
 DATA = next((key, env) for key, env, *_ in FOLDERS if key == "zomboidDataPath")
 DATA_DEFAULT = next(default for key, _, _, _, default in FOLDERS if key == "zomboidDataPath")
@@ -129,6 +131,10 @@ class Zomboid:
         self.steam = Path(steam) if steam else Path(steam_root(self.environ))
         self.library = self._library()
         self.workshop = self.library / "steamapps" / "workshop" / "content" / str(APP_ID) if self.library else None
+
+    def program(self):
+        """The game's own program in its install folder, to start it with arguments (1.150.0), or None when it is not found."""
+        return find_program(self.library / "steamapps" / "common" / "ProjectZomboid" if self.library else None, PROGRAMS)
 
     def _library(self):
         for library in libraries(self.steam):

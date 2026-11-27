@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.150.0] - 2026-11-28
+
+### Added
+
+- **mod-list starts the game with its own program and an arguments line kept per game** (the owner's choices by card, 28 Nov 2026:
+  "Always the game's program", one line per game, so RimSort's Run game and its arguments can retire). `start` runs RimWorld 1.7's
+  `RimWorld.exe` (or a game's own program, named by its adapter) detached, with the line `launch --set=TEXT --apply` keeps, such as
+  `-harmony-detours`; it says when Steam is not running. It used Steam's Play before, which took no arguments of ours. A next game
+  needs only its adapter's `program()`. How: [mod-list](docs/mod-list.md).
+
 ## [1.149.1] - 2026-11-28
 
 ### Fixed
