@@ -111,10 +111,7 @@ def remove(path):
         function(failed)
 
     if path.is_dir() and not path.is_symlink():
-        if sys.version_info >= (3, 12):
-            shutil.rmtree(path, onexc=writable_then_retry)
-        else:
-            shutil.rmtree(path, onerror=writable_then_retry)
+        shutil.rmtree(path, onexc=writable_then_retry)
     else:
         derived.remove(path)
 

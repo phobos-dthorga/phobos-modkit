@@ -117,7 +117,9 @@ Core (no game in it) and game adapters (`games/<game>/`) live here; project poli
 
 ## Languages
 
-- **Python** (`python/phobos_modkit/`): standard library only, Python 3.10 or newer, `unittest`. The default.
+- **Python** (`python/phobos_modkit/`): standard library only, **Python 3.14 or newer** (the owner's choice by card, 28 Nov 2026:
+  "Raise the floor to 3.14", so zstd compression is always there; it had been 3.10), `unittest`. The default. A file `bundle`
+  makes keeps its own older promise (`--python`, 3.10 by default) for modders, so the modules it carries keep to it.
 - **Rust** (`crates/`): for large inputs where speed changes how the tool is used. Pinned toolchain, edition
   2024, as Phobos Scope does.
 - **C#** (`dotnet/`): for .NET assembly metadata, the heap reader and the names reader. .NET 10, no assembly loading, no package
@@ -147,7 +149,7 @@ Core (no game in it) and game adapters (`games/<game>/`) live here; project poli
   ```
 
   Run the Python tests on the oldest supported Python too when syntax or the standard library is involved, for
-  example `uv run --no-project --python 3.10 python -m unittest discover -s tests`.
+  example `uv run --no-project --python 3.14 python -m unittest discover -s tests`.
 
 ## Consumers
 

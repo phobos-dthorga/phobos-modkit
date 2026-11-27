@@ -20,8 +20,8 @@
       "steps": [
         {"name": "python tests", "parser": "unittest", "env": {"PHOBOS_REQUIRE_NATIVE": "1"},
          "run": ["{python}", "-W", "error", "-m", "unittest", "discover", "-s", "tests"]},
-        {"name": "python 3.10 tests", "parser": "unittest", "requires": "uv", "env": {"PHOBOS_REQUIRE_NATIVE": "1"},
-         "run": ["uv", "run", "--no-project", "--python", "3.10", "python", "-W", "error", "-m", "unittest", "discover", "-s", "tests"]},
+        {"name": "python 3.14 tests", "parser": "unittest", "requires": "uv", "env": {"PHOBOS_REQUIRE_NATIVE": "1"},
+         "run": ["uv", "run", "--no-project", "--python", "3.14", "python", "-W", "error", "-m", "unittest", "discover", "-s", "tests"]},
         {"name": "command docs", "cwd": "python",
          "run": ["{python}", "-m", "phobos_modkit", "command-docs", "--root", "{root}"]}
       ]

@@ -15,7 +15,7 @@ D'thorga Companion.
 
 - **Run a command from `python/`**: `cd python && python -m phobos_modkit <command>`; `python -m phobos_modkit manifest` lists
   every command with what it reads and changes. Each command's page, in the index below, ends with every report and option it takes.
-- **What it needs.** The Python package is standard library only, Python 3.10 or newer. Three parts build on first use, outside
+- **What it needs.** The Python package is standard library only, Python 3.14 or newer. Three parts build on first use, outside
   the repository, so a cloud-synced clone never uploads them:
   - **the save indexer** (Rust, from [rustup](https://rustup.rs)), for `rimworld-save`: add `--build-indexer` to its first command;
   - **the C# readers** (the .NET SDK 10 or newer): the assembly metadata reader behind the Harmony patch reader and the other

@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.149.0] - 2026-11-28
+
+### Changed
+
+- **The kit needs Python 3.14 or newer** (the owner's choice by card, 28 Nov 2026: "Raise the floor to 3.14"; it was 3.10), so
+  zstd compression, built into Python from 3.14, is always there for the kit's kept copies. An older Python is refused in words;
+  D'thorga Companion's installer already ships 3.14. A file `bundle` makes still promises 3.10 to modders.
+
 ## [1.148.0] - 2026-11-28
 
 ### Added

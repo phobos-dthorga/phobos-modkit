@@ -7,7 +7,15 @@ import sys
 from .commands import COMMANDS
 
 
+# The oldest Python the kit runs on (the owner's choice of 28 Nov 2026: 3.14, for its built-in zstd compression).
+OLDEST_PYTHON = (3, 14)
+
+
 def main(argv=None):
+    if sys.version_info < OLDEST_PYTHON:
+        print(f"Phobos ModKit needs Python {'.'.join(map(str, OLDEST_PYTHON))} or newer; this is Python "
+              f"{sys.version_info.major}.{sys.version_info.minor}. Install a newer Python from python.org.", file=sys.stderr)
+        return 2
     argv = sys.argv[1:] if argv is None else argv
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):

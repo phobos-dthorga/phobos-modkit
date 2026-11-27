@@ -209,7 +209,7 @@ Every machine path comes from `paths.resolve(key, env_var, default, explicit, en
 - **Fixtures are hand-written** from format knowledge (`fixtures/`, described in `fixtures/README.md`). Network, clock and
   child processes are passed in, so tests never reach Steam.
 - **The gate**: `cd python && python -m phobos_modkit gate --root ..` runs `config/gate.json`: `cargo fmt`, `clippy`, `test`,
-  `build --release`; the Python tests on the current Python with `PHOBOS_REQUIRE_NATIVE=1` and on 3.10 through `uv`; and the
+  `build --release`; the Python tests on the current Python with `PHOBOS_REQUIRE_NATIVE=1` and on 3.14, the oldest supported, through `uv`; and the
   `command-docs` check. It prints only what failed, and records the files a passing run saw.
 - **The commit guard**: `.githooks/pre-commit` runs `gate --verify-staged`, refusing a commit whose staged files no passing run
   saw exactly. `git config core.hooksPath .githooks` after cloning.
@@ -265,7 +265,7 @@ Agreed with the owner on 7 November 2026, after two tools had shown what repeats
 
 | Language | Used for | Why |
 | --- | --- | --- |
-| Python, standard library, 3.10 or newer | The default: every command, every report. Modules a bundled tool carries keep to 3.9 (`bundle --python 3.9`), among them a small assembly metadata reader (`dotnet_metadata.py`) | Small inputs; every Phobos repository already runs Python; nothing to install. A modder given one file has Python but maybe not .NET |
+| Python, standard library, 3.14 or newer | The default: every command, every report. Modules a bundled tool carries keep to 3.9 (`bundle --python 3.9`), among them a small assembly metadata reader (`dotnet_metadata.py`) | Small inputs; every Phobos repository already runs Python; nothing to install. A modder given one file has Python but maybe not .NET |
 | Rust | The XML indexer behind the save index | A save of about 300 MB took 7.6 s a pass in Python; index once, query many needs a fast reader; one self-contained program |
 | C# | The assembly metadata reader and the heap reader | .NET's `System.Reflection.Metadata` reads assemblies without loading them, which keeps the rule against running other authors' code; ClrMD reads a .NET heap from outside |
 
