@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.133.1] - 2026-11-27
+
+### Fixed
+
+- **The update check reads what an earlier patch adds** (the owner's screenshot of 27 Nov 2026). phobos-rimworld's C-17 airdrop
+  patch read as `node-missing` because the patched-Defs file predates it, though the same file's Conditional adds the missing
+  `modExtensions` first. The `xml` part now reads each earlier Add, Insert or AddModExtension on the Def (a `nomatch` Add
+  included, one for an inactive mod not) and counts the row `found`, with `addedBy` naming that patch. How:
+  [rimworld-update-check](docs/rimworld-update-check.md#reading-the-answers).
+
 ## [1.133.0] - 2026-11-27
 
 ### Added

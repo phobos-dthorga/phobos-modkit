@@ -52,6 +52,8 @@ SIMPLE_XPATH = re.compile(r"""^/?Defs/(?P<type>[\w.*]+)\[defName\s*=\s*(?P<q>["'
                           r"""(?P<rest>(?:/[\w.]+(?:\[[\w.]+\s*=\s*(["'])[^"']*\5\])?)*)/?$""")
 # Operations whose xpath is a question, not a target: finding nothing is an answer, not a fault.
 QUESTIONS = ("PatchOperationConditional", "PatchOperationTest", "PatchOperationFindMod")
+# Operations whose value can make a node an xpath later names.
+ADDS = ("PatchOperationAdd", "PatchOperationInsert", "PatchOperationAddModExtension")
 
 
 class UpdateCheckError(RuntimeError):
@@ -236,6 +238,58 @@ def patch_added_defs(conn, parsed):
     return found
 
 
+def _steps(rest):
+    return [step for step in (rest or "").strip("/").split("/") if step]
+
+
+def _patch_root(path, cache):
+    key = ("patch", path)
+    if key not in cache:
+        try:
+            cache[key] = ET.parse(path).getroot()
+        except (OSError, ET.ParseError):
+            cache[key] = None
+    return cache[key]
+
+
+def _added_by(earlier, name, rest, parsed):
+    """The file of the first earlier patch whose value plainly adds the node `rest` to the Def `name`, or None.
+    `earlier` is (operation, xpath, load folder, file, mod folder) for each earlier patch naming the Def, in load order. An Add
+    puts its value under its target, an Insert beside it (so under its parent), and an AddModExtension under the Def's
+    modExtensions, making that node when it is missing. A Conditional's nomatch Add counts: it adds the node only when it is not
+    there already, so the node is there either way."""
+    want = _steps(rest)
+    for operation, xpath, load_folder, file, mod_folder in earlier:
+        kind = (operation or "").split(".")[-1]
+        if kind not in ADDS:
+            continue
+        simple = SIMPLE_XPATH.match(xpath)
+        if not simple or simple.group("name") != name:
+            continue
+        have = _steps(simple.group("rest"))
+        if kind == "PatchOperationInsert":
+            if not have:
+                continue
+            have = have[:-1]
+        if len(want) <= len(have) or want[:len(have)] != have:
+            continue
+        root = _patch_root(Path(mod_folder) / load_folder / file if load_folder else Path(mod_folder) / file, parsed)
+        if root is None:
+            continue
+        for element in root.iter():
+            if (element.get("Class") or "").split(".")[-1] != kind or (element.findtext("xpath") or "").strip() != xpath:
+                continue
+            for value in element.findall("value"):
+                holder = ET.Element("holder")
+                if kind == "PatchOperationAddModExtension":
+                    ET.SubElement(holder, "modExtensions").extend(list(value))
+                else:
+                    holder.extend(list(value))
+                if holder.find("./" + "/".join(want[len(have):])) is not None:
+                    return f"{load_folder}/{file}".lstrip("/")
+    return None
+
+
 def _patched_has(patched, name, def_type, rest):
     """Whether the patched-Defs file (every patch applied) holds the node: True, False, or None when it lacks the Def."""
     found = patched.execute("SELECT def_type, xml FROM pdef WHERE def_name = ? COLLATE NOCASE", (name,)).fetchall()
@@ -249,8 +303,8 @@ def _patched_has(patched, name, def_type, rest):
 def xml_rows(conn, ours, patched=None):
     """{checked, skipped: {why: count}, rows: [{mod, file, operation, xpath, def, status, detail, definedBy}]} for our patches.
     Status: missing (no active mod defines the Def), node-missing (the Def, but not the node), patched (not in the Def as
-    written, but there once every patch has run, by the patched-Defs file `patched`), found, made (the game makes the Def in
-    code, so only its name is checked)."""
+    written, but there once every patch has run, by the patched-Defs file `patched`), found (with `addedBy` when an earlier
+    patch's value adds the node), made (the game makes the Def in code, so only its name is checked)."""
     active_names = {r[0] for r in conn.execute("SELECT name FROM mod WHERE installed = 1") if r[0]}
     active_ids = {r[0].lower() for r in conn.execute("SELECT package_id FROM mod WHERE installed = 1") if r[0]}
     patches = conn.execute("SELECT p.id, p.mod_position, p.operation, p.xpath, p.def_type, p.find_mods, p.may_require, "
@@ -262,6 +316,11 @@ def xml_rows(conn, ours, patched=None):
     patterns = [p.lower() for p in ours]
     skipped, rows, checked, parsed = defaultdict(int), [], 0, {}
     added_by_patch = patch_added_defs(conn, {})
+
+    def inactive(find_mods, may_require):
+        return bool((find_mods and any(name.strip() not in active_names for name in find_mods.split(", ")))
+                    or (may_require and any(i.strip().lower() not in active_ids for i in may_require.split(","))))
+
     for pid, position, operation, xpath, def_type, find_mods, may_require, load_folder, file, mod_name, package_id in patches:
         if not package_id or not any(fnmatch.fnmatchcase(package_id.lower(), p) for p in patterns):
             continue
@@ -269,10 +328,7 @@ def xml_rows(conn, ours, patched=None):
         if (operation or "").endswith(QUESTIONS):
             skipped["a question (Conditional, Test, FindMod): finding nothing is an answer"] += 1
             continue
-        if find_mods and any(name.strip() not in active_names for name in find_mods.split(", ")):
-            skipped["for a mod that is not active"] += 1
-            continue
-        if may_require and any(i.strip().lower() not in active_ids for i in may_require.split(",")):
+        if inactive(find_mods, may_require):
             skipped["for a mod that is not active"] += 1
             continue
         names = targets.get(pid, [])
@@ -316,9 +372,18 @@ def xml_rows(conn, ours, patched=None):
                 rows.append({**row, "status": "patched", "detail": "not in the Def as written, but there once every patch has "
                                                                    "run (the patched-Defs file)"})
                 continue
-            earlier = conn.execute("SELECT COUNT(*) FROM patch p JOIN patch_target t ON t.patch_id = p.id WHERE t.def_name = ? "
-                                   "AND (p.mod_position < ? OR (p.mod_position = ? AND p.id < ?))",
-                                   (name, position, position, pid)).fetchone()[0]
+            earlier_rows = conn.execute("SELECT p.operation, p.xpath, p.load_folder, p.file, m.folder, p.find_mods, "
+                                        "p.may_require FROM patch p JOIN patch_target t ON t.patch_id = p.id JOIN mod m ON "
+                                        "m.position = p.mod_position WHERE t.def_name = ? AND (p.mod_position < ? OR "
+                                        "(p.mod_position = ? AND p.id < ?)) ORDER BY p.mod_position, p.id",
+                                        (name, position, position, pid)).fetchall()
+            earlier = len(earlier_rows)
+            adder = _added_by([r[:5] for r in earlier_rows if r[4] and not inactive(r[5], r[6])], name,
+                              simple.group("rest"), parsed)
+            if adder:
+                rows.append({**row, "status": "found", "addedBy": adder,
+                             "detail": f"not in the Def as written; an earlier patch adds it ({adder})"})
+                continue
             rows.append({**row, "status": "node-missing", "earlierPatches": earlier,
                          "detail": f"the Def exists but not {simple.group('rest').strip('/')} in it as written"
                                    + (f"; {earlier} earlier {'patch names' if earlier == 1 else 'patches name'} this Def and may add it"
@@ -414,6 +479,10 @@ def xml_section(report, data, result, top):
     lead = (f"{result['checked']} Def names checked in our patches; {len(problems)} find nothing as the mods write them."
             if problems else f"{result['checked']} Def names checked in our patches; every one found.")
     patched = sum(1 for r in rows if r["status"] == "patched")
+    added = sum(1 for r in rows if r.get("addedBy"))
+    if added:
+        lead += (f" {added} of them {'is' if added == 1 else 'are'} not in the Def as written, but an earlier patch's value adds"
+                 f" {'it' if added == 1 else 'them'}.")
     if result.get("patchedDefs"):
         lead += (f" The patched-Defs file (written {result['patchedDefs']} UTC) confirms {patched} more once every patch has run"
                  " (the game writes the file again only when asked, so it may be older than the updates).")
@@ -485,8 +554,9 @@ def build_report(args, parts, config, environ, settings_file, now, progress, run
             written = datetime.fromtimestamp(Path(dump).stat().st_mtime, timezone.utc).strftime("%Y-%m-%d %H:%M")
             result["patchedDefs"] = written
         xml_section(report, data, result, args.top)
-        report.lines.append("XML patches are checked against the Defs as written, before any patch: a node an earlier patch "
-                            "adds reads as missing, so read the row before acting on it.")
+        report.lines.append("XML patches are checked against the Defs as written, then against what earlier patches add: a "
+                            "node an earlier patch adds only by a path past the simple form still reads as missing, so read the "
+                            "row before acting on it.")
     report.lines.append("A pass says names and nodes still exist, not that anything works in play; it is not a test in game.")
     return report, data
 

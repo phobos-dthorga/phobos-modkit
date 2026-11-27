@@ -79,8 +79,10 @@ change (a fix can be a new constructor).
   means the patch stays; `no-update` and `one-build` mean there is nothing new to compare.
 - **XML patches** are checked against the Defs as written, before any patch, as the game applies them. A Def a patch adds whole
   (an Add at `Defs`) counts as defined. A node not there as written is looked for in the patched-Defs file (every patch applied),
-  when one exists: found there is `patched`, a pass. `node-missing` names how many earlier patches name the Def; the file is only
-  as fresh as the last time the game was asked to write it. Conditional, Test and FindMod xpaths are questions, so they are not
+  when one exists: found there is `patched`, a pass; the file is only as fresh as the last time the game was asked to write it.
+  Failing that, each earlier Add, Insert or AddModExtension on the same Def (a Conditional's `nomatch` Add included) is read: when
+  its value makes the node, the row is `found` with `addedBy` naming that patch's file. `node-missing` names how many earlier
+  patches name the Def. Conditional, Test and FindMod xpaths are questions, so they are not
   checked; nor are patches inside a FindMod or MayRequire whose mod is not active.
 
 ### JSON

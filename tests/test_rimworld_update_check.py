@@ -118,7 +118,7 @@ DEFS_XML = """<Defs>
 </Defs>"""
 OUR_PATCHES = """<Patch>
   <Operation Class="PatchOperationAdd"><xpath>Defs/ThingDef[defName="Harrier_Jet"]/comps</xpath><value><li/></value></Operation>
-  <Operation Class="PatchOperationAdd"><xpath>Defs/RecipeDef[defName="MakeRocket"]/recipeUsers</xpath><value><li>X</li></value></Operation>
+  <Operation Class="PatchOperationAdd"><xpath>Defs/RecipeDef[defName="MakeRocket"]/products</xpath><value><li>X</li></value></Operation>
   <Operation Class="PatchOperationReplace"><xpath>Defs/ThingDef[defName="Gone_Thing"]/label</xpath><value><label>x</label></value></Operation>
   <Operation Class="PatchOperationAdd"><xpath>Defs</xpath><value><ThingDef><defName>OurBombCase</defName></ThingDef></value></Operation>
   <Operation Class="PatchOperationAdd"><xpath>Defs/ThingDef[defName="OurBombCase"]/recipeUsers</xpath><value><li>X</li></value></Operation>
@@ -132,7 +132,10 @@ THEIR_PATCHES = """<Patch>
 </Patch>"""
 
 
-class XmlTests(unittest.TestCase):
+class XmlFixture(unittest.TestCase):
+    """Their mod's Defs and patches, and ours, indexed as defs.build indexes them."""
+    defs_xml, our_patches = DEFS_XML, OUR_PATCHES
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -141,16 +144,17 @@ class XmlTests(unittest.TestCase):
         (theirs / "Defs").mkdir(parents=True)
         (theirs / "Patches").mkdir()
         (ours / "Patches").mkdir(parents=True)
-        (theirs / "Defs" / "Things.xml").write_text(DEFS_XML, encoding="utf-8")
         (theirs / "Patches" / "Theirs.xml").write_text(THEIR_PATCHES, encoding="utf-8")
-        (ours / "Patches" / "Ours.xml").write_text(OUR_PATCHES, encoding="utf-8")
+        (theirs / "Defs" / "Things.xml").write_text(self.defs_xml, encoding="utf-8")
+        (ours / "Patches" / "Ours.xml").write_text(self.our_patches, encoding="utf-8")
         self.conn = sqlite3.connect(":memory:")
         self.addCleanup(self.conn.close)
         self.conn.executescript(defs.TABLES)
         self.conn.execute("INSERT INTO mod (position, listed_id, package_id, name, folder, installed) VALUES "
                           "(0, 'them.mod', 'Them.Mod', 'Their Mod', ?, 1), (1, 'phobosdthorga.patches', "
                           "'PhobosDthorga.Patches', 'D''thorga Patches', ?, 1)", (str(theirs), str(ours)))
-        for index, (kind, name) in enumerate([("ThingDef", "Harrier_Jet"), ("RecipeDef", "MakeRocket")]):
+        for index, element in enumerate(ET.fromstring(self.defs_xml)):
+            kind, name = element.tag, element.findtext("defName")
             self.conn.execute("INSERT INTO def (mod_position, def_type, def_name, abstract, loads, registers, load_folder, file, "
                               "element_index) VALUES (0, ?, ?, 0, 1, 0, '', 'Defs/Things.xml', ?)", (kind, name, index))
         for position, folder, file in ((0, theirs, "Patches/Theirs.xml"), (1, ours, "Patches/Ours.xml")):
@@ -166,13 +170,15 @@ class XmlTests(unittest.TestCase):
     def statuses(self, result):
         return {r["def"]: r["status"] for r in result["rows"]}
 
+
+class XmlTests(XmlFixture):
     def test_each_kind_of_answer(self):
         result = uc.xml_rows(self.conn, ["PhobosDthorga.*"])
         self.assertEqual({"Harrier_Jet": "found", "MakeRocket": "node-missing", "Gone_Thing": "missing", "OurBombCase": "found"},
                          self.statuses(result))
         self.assertEqual(4, result["checked"])     # Harrier_Jet, MakeRocket, Gone_Thing, OurBombCase
         rocket = next(r for r in result["rows"] if r["def"] == "MakeRocket")
-        self.assertEqual(1, rocket["earlierPatches"])
+        self.assertEqual(1, rocket["earlierPatches"])     # theirs adds recipeUsers, not the products ours names
         self.assertIn("1 earlier patch names this Def", rocket["detail"])
         self.assertEqual(1, result["skipped"]["a question (Conditional, Test, FindMod): finding nothing is an answer"])
         self.assertEqual(1, result["skipped"]["for a mod that is not active"])
@@ -186,9 +192,56 @@ class XmlTests(unittest.TestCase):
         with closing(patched):
             patched.executescript(patched_defs.SCHEMA)
             patched.execute("INSERT INTO pdef (def_type, def_name, abstract, xml) VALUES ('RecipeDef', 'MakeRocket', 0, "
-                            "'<RecipeDef><defName>MakeRocket</defName><recipeUsers /></RecipeDef>')")
+                            "'<RecipeDef><defName>MakeRocket</defName><products /></RecipeDef>')")
             result = uc.xml_rows(self.conn, ["PhobosDthorga.*"], patched)
         self.assertEqual("patched", self.statuses(result)["MakeRocket"])
+
+    def test_an_earlier_patch_that_adds_the_node_is_read(self):
+        # Their patch adds <recipeUsers/> to MakeRocket; ours then adds to it.
+        self.conn.execute("UPDATE patch SET xpath = 'Defs/RecipeDef[defName=\"MakeRocket\"]/recipeUsers' "
+                          "WHERE xpath LIKE '%MakeRocket%/products'")
+        rocket = next(r for r in uc.xml_rows(self.conn, ["PhobosDthorga.*"])["rows"] if r["def"] == "MakeRocket")
+        self.assertEqual(("found", "Patches/Theirs.xml"), (rocket["status"], rocket["addedBy"]))
+
+
+ADDING_DEFS = """<Defs>
+  <ThingDef><defName>Cargo_Plane</defName></ThingDef>
+  <ThingDef><defName>Gun_Truck</defName></ThingDef>
+  <ThingDef><defName>Tank_Thing</defName><label>tank</label></ThingDef>
+  <ThingDef><defName>Quiet_Thing</defName></ThingDef>
+  <ThingDef><defName>Wrong_Thing</defName></ThingDef>
+</Defs>"""
+ADDING_PATCHES = """<Patch>
+  <Operation Class="PatchOperationConditional"><xpath>Defs/ThingDef[defName="Cargo_Plane"]/modExtensions</xpath>
+    <nomatch Class="PatchOperationAdd"><xpath>Defs/ThingDef[defName="Cargo_Plane"]</xpath><value><modExtensions /></value></nomatch>
+  </Operation>
+  <Operation Class="PatchOperationAdd"><xpath>Defs/ThingDef[defName="Cargo_Plane"]/modExtensions</xpath><value><li/></value></Operation>
+  <Operation Class="PatchOperationAddModExtension"><xpath>Defs/ThingDef[defName="Gun_Truck"]</xpath><value><li/></value></Operation>
+  <Operation Class="PatchOperationAdd"><xpath>Defs/ThingDef[defName="Gun_Truck"]/modExtensions</xpath><value><li/></value></Operation>
+  <Operation Class="PatchOperationInsert"><xpath>Defs/ThingDef[defName="Tank_Thing"]/label</xpath><value><statBases /></value></Operation>
+  <Operation Class="PatchOperationAdd"><xpath>Defs/ThingDef[defName="Tank_Thing"]/statBases</xpath><value><Mass>1</Mass></value></Operation>
+  <Operation Class="PatchOperationFindMod"><mods><li>Not Here</li></mods>
+    <match Class="PatchOperationAdd"><xpath>Defs/ThingDef[defName="Quiet_Thing"]</xpath><value><comps /></value></match>
+  </Operation>
+  <Operation Class="PatchOperationAdd"><xpath>Defs/ThingDef[defName="Quiet_Thing"]/comps</xpath><value><li/></value></Operation>
+  <Operation Class="PatchOperationAdd"><xpath>Defs/ThingDef[defName="Wrong_Thing"]</xpath><value><tools /></value></Operation>
+  <Operation Class="PatchOperationAdd"><xpath>Defs/ThingDef[defName="Wrong_Thing"]/comps</xpath><value><li/></value></Operation>
+</Patch>"""
+
+
+class AddingPatchTests(XmlFixture):
+    """An earlier patch's value makes the node: a Conditional's nomatch Add (the C-17 airdrop), an AddModExtension, an Insert
+    beside a sibling. An Add for a mod that is not active, or one adding some other node, does not count."""
+    defs_xml, our_patches = ADDING_DEFS, ADDING_PATCHES
+
+    def test_each_kind_of_answer(self):
+        # The rows for our Adds into the node; the earlier patches' own rows (at the Def, or beside label) are found as written.
+        rows = {r["def"]: r for r in uc.xml_rows(self.conn, ["PhobosDthorga.*"])["rows"]
+                if r["xpath"].rsplit("/", 1)[-1] in ("modExtensions", "statBases", "comps")}
+        self.assertEqual({"Cargo_Plane": "found", "Gun_Truck": "found", "Tank_Thing": "found", "Quiet_Thing": "node-missing",
+                          "Wrong_Thing": "node-missing"}, {name: r["status"] for name, r in rows.items()})
+        self.assertEqual("Patches/Ours.xml", rows["Cargo_Plane"]["addedBy"])
+        self.assertNotIn("addedBy", rows["Quiet_Thing"])
 
 
 class CommandTests(unittest.TestCase):
