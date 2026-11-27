@@ -4,6 +4,17 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.147.3] - 2026-11-28
+
+### Fixed
+
+- **The update reports read their decompiled code much faster, with the same answers** (the owner's speed round for D'thorga
+  Companion, 28 Nov 2026). `rimworld-patches targets --updates`, which the Companion's page numbers run, took over five minutes on
+  phobos-rimworld. The C# reader copies plain text a run at a time instead of a character at a time (13 to 15 times faster, equal
+  on 32,000 files); the wildcards that choose what to compare are looked up at each dot of a name, not tried one by one (92 million
+  tries before); and **decompiles used in the last 7 days are kept** as well as the 12 newest, so a report needing more is not made
+  to decompile them all again after another compare trims the store. Every code index is rebuilt once, as after any new version.
+
 ## [1.147.2] - 2026-11-28
 
 ### Fixed

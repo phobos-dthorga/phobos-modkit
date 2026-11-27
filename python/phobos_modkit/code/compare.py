@@ -20,6 +20,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import time
 
 from .. import __version__, paths
 from .. import cache as derived
@@ -32,6 +33,9 @@ DECOMPILER = ("ilspycmdPath", "PHOBOS_MODKIT_ILSPYCMD")
 DECOMPILE_FORMAT = "1"
 DECOMPILE_SECONDS = 1800
 DECOMPILES_KEPT = 12
+# A decompile used within this many days is kept as well (1.147.3): the update reports read one per side of every update, often
+# more than DECOMPILES_KEPT, and each other compare cut them back, so the next report decompiled them all again.
+DECOMPILES_RECENT_DAYS = 7
 COMPLETE_MARKER = "phobos-modkit-source.json"
 EXIT_OK, EXIT_FAILED = 0, 1
 CONTAINER_KINDS = ("class", "struct", "interface", "record")      # a member's changes are reported on the member
@@ -103,15 +107,18 @@ def decompile(dll, cache, find_tool, references=(), rebuild=False, run=subproces
     return target, True
 
 
-def evict(cache, keep=DECOMPILES_KEPT):
-    """Delete all but the most recently used decompiles: one game assembly is tens of megabytes of source."""
+def evict(cache, keep=DECOMPILES_KEPT, recent_days=DECOMPILES_RECENT_DAYS, now=None):
+    """Delete the decompiles neither among the `keep` most recently used nor used within `recent_days`: one game assembly is
+    tens of megabytes of source."""
     cache = Path(cache)
     if not cache.is_dir():
         return
     finished = [p for p in cache.iterdir() if (p / COMPLETE_MARKER).is_file()]
     finished.sort(key=lambda p: ((p / COMPLETE_MARKER).stat().st_mtime_ns, p.name), reverse=True)
+    since = (time.time() if now is None else now) - recent_days * 86400
     for folder in finished[keep:]:
-        shutil.rmtree(folder)
+        if (folder / COMPLETE_MARKER).stat().st_mtime < since:
+            shutil.rmtree(folder)
 
 
 def _side(spec, known, decompiled, find_tool, references, rebuild):
@@ -301,9 +308,42 @@ def _difference(source_a, source_b, a, b):
     return Change(a, b, signature, body, added, removed)
 
 
+_WILDCARDS = frozenset("*?[")
+
+
 def _wanted(patterns):
-    lowered = [p.lower() for p in patterns]
-    return lambda item: not lowered or any(fnmatch.fnmatchcase(item.full.lower(), p) for p in lowered)
+    """Whether a declaration's full name matches any of the wildcards, case aside, exactly as fnmatch would (1.147.3: a wildcard
+    at a time took most of a minute over a game's 300,000 declarations). The two shapes the update reports ask, "*.Name" (ends with
+    ".Name") and "*.Name.*" (holds ".Name."), and plain names are looked up at each dot of the name; any other is one expression."""
+    lowered = list(dict.fromkeys(p.lower() for p in patterns))
+    if not lowered:
+        return lambda item: True
+    exact, ends, holds, other = set(), set(), set(), []
+    for pattern in lowered:
+        if not _WILDCARDS & set(pattern):
+            exact.add(pattern)
+        elif pattern.startswith("*.") and not _WILDCARDS & set(pattern[2:]):
+            ends.add(pattern[1:])
+        elif (len(pattern) > 4 and pattern.startswith("*.") and pattern.endswith(".*")
+              and not _WILDCARDS & set(pattern[2:-2])):
+            holds.add(pattern[1:-1])
+        else:
+            other.append(pattern)
+    joined = re.compile("|".join(f"(?:{fnmatch.translate(p)})" for p in other)) if other else None
+
+    def wanted(item):
+        name = item.full.lower()
+        if name in exact:
+            return True
+        if ends or holds:
+            dots = [place for place, char in enumerate(name) if char == "."]
+            for at, start in enumerate(dots):
+                if name[start:] in ends:
+                    return True
+                if holds and any(name[start:stop + 1] in holds for stop in dots[at + 1:]):
+                    return True
+        return joined is not None and joined.match(name) is not None
+    return wanted
 
 
 def _named(name):

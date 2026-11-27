@@ -25,6 +25,8 @@ EVENT = re.compile(r"\bevent\b")
 CALLABLE = re.compile(r"(?P<name>~?@?\w+)\s*(?:<[^()]*>)?\s*\(")
 IDENTIFIER = re.compile(r"@?\w+")
 TOKENS = re.compile(r"[{};]")
+# Characters none of which can open a comment ("/"), a string ('"', or "$" and "@" before one) or a character literal ("'").
+_PLAIN = re.compile(r"[^/\"'$@]+")
 MODIFIER_WORDS = frozenset({"public", "private", "protected", "internal", "static", "abstract", "sealed", "partial",
                             "readonly", "unsafe", "virtual", "override", "extern", "async", "const", "volatile",
                             "required", "file", "ref", "implicit", "explicit", "delegate", "event", "out", "in",
@@ -171,6 +173,13 @@ def _without_comments(text, literal):
     """text with comments turned to spaces and each string or character literal passed through literal."""
     out, i, n = [], 0, len(text)
     while i < n:
+        # A run of characters that can begin no comment and no literal is copied whole (1.147.3): a character at a time, this
+        # loop was most of the time an update report took to index a game's decompiled source.
+        plain = _PLAIN.match(text, i)
+        if plain:
+            out.append(plain.group())
+            i = plain.end()
+            continue
         c = text[i]
         if c == "/" and i + 1 < n and text[i + 1] == "/":
             j = text.find("\n", i)

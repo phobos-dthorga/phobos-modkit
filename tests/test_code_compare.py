@@ -270,6 +270,26 @@ class Decompile(unittest.TestCase):
         kept = sorted((p / compare.COMPLETE_MARKER).stat().st_mtime for p in self.cache.iterdir())
         self.assertEqual(kept, [1002, 1003])
 
+    def test_evict_keeps_every_decompile_used_lately_too(self):
+        """1.147.3: one update report reads more decompiles than the newest few, so those used within days stay."""
+        day = 86400
+        for number, age in enumerate((1, 3, 6, 9)):
+            self.dll.write_bytes(bytes([number]))
+            folder, _ = compare.decompile(self.dll, self.cache, self.tool, run=self.fake)
+            os.utime(folder / compare.COMPLETE_MARKER, (100 * day - age * day, 100 * day - age * day))
+        compare.evict(self.cache, keep=1, recent_days=7, now=100 * day)
+        ages = sorted(round((100 * day - (p / compare.COMPLETE_MARKER).stat().st_mtime) / day) for p in self.cache.iterdir())
+        self.assertEqual(ages, [1, 3, 6])
+
+    def test_wildcards_choose_as_fnmatch_does_case_aside(self):
+        class Item:
+            def __init__(self, full):
+                self.full = full
+        wanted = compare._wanted(["*.Pawn", "Verse.Thing.*", "*.Tick?"])
+        chosen = [n for n in ("RimWorld.Pawn", "verse.thing.Destroy", "A.TickRare", "A.Ticks", "Pawn.x") if wanted(Item(n))]
+        self.assertEqual(chosen, ["RimWorld.Pawn", "verse.thing.Destroy", "A.Ticks"])
+        self.assertTrue(compare._wanted([])(Item("anything")))
+
     def test_a_named_decompiler_must_exist(self):
         with self.assertRaisesRegex(index.CodeError, "No decompiler at"):
             compare._find_decompiler(str(self.root / "absent.exe"), {}, None)
