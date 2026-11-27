@@ -246,8 +246,12 @@ def convert(nettrace, tool, run=subprocess.run):
     return speedscope
 
 
-def record(pid, seconds, folder, trace_tool, counters_tool, popen=subprocess.Popen):
-    """Record a program for `seconds`: a sampled trace (converted to speedscope) and its counters, side by side.
+TRACE_PROFILES = "dotnet-common,dotnet-sampled-thread-time"   # dotnet-trace 10's own default profiles, named so providers can add
+
+
+def record(pid, seconds, folder, trace_tool, counters_tool, popen=subprocess.Popen, providers=None):
+    """Record a program for `seconds`: a sampled trace (converted to speedscope) and its counters, side by side. `providers` is
+    dotnet-trace's --providers text, added to its default profiles (and taking precedence over them for a provider both name).
 
     Returns (speedscope file, counters file or None, notes). Raises DiagnosticsError when the trace could not be made.
     """
@@ -261,8 +265,9 @@ def record(pid, seconds, folder, trace_tool, counters_tool, popen=subprocess.Pop
         counting = popen([str(counters_tool), "collect", "-p", str(pid), "--format", "json", "-o", str(counters_file),
                           "--refresh-interval", "1", "--duration", duration],
                          stdin=subprocess.DEVNULL, stdout=counters_out, stderr=subprocess.STDOUT)
+        extra = ["--profile", TRACE_PROFILES, "--providers", providers] if providers else []
         tracing = popen([str(trace_tool), "collect", "-p", str(pid), "--format", "Speedscope", "-o", str(trace_file),
-                         "--duration", duration], stdin=subprocess.DEVNULL, stdout=trace_out, stderr=subprocess.STDOUT)
+                         "--duration", duration, *extra], stdin=subprocess.DEVNULL, stdout=trace_out, stderr=subprocess.STDOUT)
         limit = seconds + STOP_GRACE_SECONDS
         try:
             trace_code = tracing.wait(timeout=limit)

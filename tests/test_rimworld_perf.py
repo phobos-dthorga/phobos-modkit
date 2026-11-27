@@ -16,6 +16,7 @@ import unittest
 from unittest import mock
 
 from support import FIXTURES
+from test_nettrace import made_up_trace
 from phobos_modkit import dotnet_diagnostics as dd
 from phobos_modkit import packed
 from phobos_modkit import sampling
@@ -245,11 +246,14 @@ class DiagnosticsTests(unittest.TestCase):
 class FakeProcess:
     """Stands in for dotnet-trace or dotnet-counters: writes what the real tool would, from the fixtures."""
 
+    commands = []
+
     def __init__(self, command, **_):
+        FakeProcess.commands.append(command)
         out = Path(command[command.index("-o") + 1])
         if "Speedscope" in command:
             shutil.copyfile(TRACE, out.with_name("trace" + dd.SPEEDSCOPE_SUFFIX))
-            out.write_bytes(b"nettrace")
+            out.write_bytes(made_up_trace())
         else:
             shutil.copyfile(COUNTERS, out)
 
@@ -295,7 +299,16 @@ class CommandTests(unittest.TestCase):
         self.assertTrue((folder / perf_cli.INDEX_NAME).is_file())
         self.assertFalse((folder / ("trace" + dd.SPEEDSCOPE_SUFFIX)).exists())
         self.assertFalse((folder / dd.TRACE_FILE).exists())                     # packed once indexed (1.149.0)
-        self.assertEqual(packed.read_bytes(folder / dd.TRACE_FILE), b"nettrace")
+        self.assertEqual(packed.read_bytes(folder / dd.TRACE_FILE), made_up_trace())
+        trace_command = next(c for c in FakeProcess.commands if "Speedscope" in c)
+        self.assertEqual(["--profile", "dotnet-common,dotnet-sampled-thread-time", "--providers",
+                          "Microsoft-Windows-DotNETRuntime:0x100003C01D:4"], trace_command[-4:])
+        # The runtime's own events: one lock wait on the main thread, held by thread 200; two allocations.
+        self.assertIn("**1 waits on locks, 5 ms in all; the main thread waited 1 times, 5 ms (4.5% of it)**", text)
+        self.assertIn("| Verse.PawnCapacityUtility.CalculateCapacityLevel | RimWorld | 1 | 5 | 5.0 | thread 200 (100% of its waits) | "
+                      "Example Medical 5 ms |", text)
+        self.assertIn("| System.String | 0.2 | 66.7% | Waylith.Rendering.Submit |", text)
+        self.assertIn("| Other Mod | 0.1 | 33.3% |", text)
         code, again = self.run_cli("report", "many wounded", *self.common)
         self.assertEqual(perf_cli.EXIT_OK, code, again)
         self.assertIn("| Example.Dosing.DoseService.MakeJob | Example Medical | 40 | 57.1% |", again)

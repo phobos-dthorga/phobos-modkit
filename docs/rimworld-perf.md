@@ -24,6 +24,7 @@ figures beside them. It records the game from outside with Microsoft's own .NET 
 ```text
 python -m phobos_modkit rimworld-perf record                       30 seconds of the running game, then its report
 python -m phobos_modkit rimworld-perf record --seconds 60 --label "many wounded"
+python -m phobos_modkit rimworld-perf record --alloc --label "stutter"   also sample allocations: who allocates what
 python -m phobos_modkit rimworld-perf report                       the newest recording again (or name one by ID or label)
 python -m phobos_modkit rimworld-perf mod "Combat Extended"        one mod: its busiest methods and where its time went
 python -m phobos_modkit rimworld-perf callers GenTypes.IsSealedWithCache   what calls one method, and the mods above it
@@ -102,6 +103,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--label VALUE` | `record` | a few words to find the recording by, such as what was happening |  |
 | `--pid N` | `record`, `stack`, `heap`, `watch`, `look`, `look-kind`, `look-why`, `look-check`, `look-thaw`, `look-serve` | the game's process ID, when more than one RimWorld runs |  |
 | `--keep-speedscope` | `record` | keep the converted trace beside the index (large) |  |
+| `--alloc` | `record` | also sample allocations (about every 100 KB): who allocates what; the runtime writes more events |  |
 | `FILE` | `index` | a .speedscope.json file from dotnet-trace |  |
 | `--counters VALUE` | `index` | dotnet-counters' JSON file from the same time |  |
 | `--label VALUE` | `index` | a few words to find the recording by |  |
@@ -212,6 +214,19 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
   **back-to-back calls with no sample between them look like one stretch**: a long `Pawn.TickInterval` can be many pawns in a row.
   The owner's recording of 18 November 2026 had job searches of 154 to 174 ms, one with The Dead Man's Switch - Legion causing 63% of
   it.
+- **Lock waits** (1.151.0): `record` asks the runtime for its lock-contention events too (dotnet-trace's default profiles,
+  `dotnet-common` and `dotnet-sampled-thread-time`, with the runtime's provider given as `0x100003C01D`: their keywords and
+  contention's `0x4000`). Every wait is reported, not sampled: where the main thread waited (the first game, engine or mod method
+  above the wait, the code that took the lock), how often and how long, the mods that led there, and **which thread held the
+  lock**, with what it was running then from its timeline. The runtime names the holder from .NET 8 on (ContentionStart version
+  2). Read from the `.nettrace` dotnet-trace keeps (`nettrace`, `dotnet_events`; their stacks named from the trace's own method
+  events, as dotnet-trace's export names them). **Recordings from before 1.151.0 have no lock waits**: the report says so when the
+  runtime's lock counter shows any. Checked on a small lock-taking program of our own (28 November 2026), where it named the
+  waiting method and the thread holding the lock in every one of 1,404 waits; **not yet seen on the game**.
+- **Allocations** (`record --alloc`, 1.151.0): the runtime's allocation samples (GCAllocationTick, about every 100 KB, which needs
+  its provider at Verbose: more events, so it is asked for only with `--alloc`), by the innermost mod on the stack, by type with the
+  method mostly allocating it, and by the first game, engine or mod method above the allocation. Each sample stands for the bytes
+  since the last one, put down to the allocation that crossed the line, so large objects stand out more than they should.
 - **The timeline** is kept in the index from 1.151.0 (index format 2): each thread's stack from one sample to the next. Recordings
   indexed before then still read, without the tables over time, and the report says so. **`reindex`** rebuilds them from their kept
   trace (`trace.nettrace.zst`) with dotnet-trace's own converter, which reads the file only (about 10 s for a minute of the owner's

@@ -205,6 +205,72 @@ def index_speedscope(path, index, meta=None):
     return len(threads)
 
 
+EVENT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS wait (thread INTEGER, os_thread INTEGER, start_ms REAL, ms REAL, lock_id INTEGER, object_id INTEGER,
+                                 owner_thread INTEGER, node INTEGER);
+CREATE TABLE IF NOT EXISTS alloc (thread INTEGER, os_thread INTEGER, at_ms REAL, type TEXT, bytes INTEGER, node INTEGER);
+"""
+
+
+def _frame_key(name):
+    """A frame's name with its module's suffix dropped, so the runtime's events and dotnet-trace's export name a method alike
+    (System.Private.CoreLib.il!X and System.Private.CoreLib!X)."""
+    module, sep, rest = name.partition("!")
+    return _MODULE_SUFFIX.sub("", module) + sep + rest
+
+
+def os_thread_of(name):
+    """The operating system's thread ID in a timeline's name, 'Thread (23372)', or None."""
+    found = _THREAD_ID.search(name or "")
+    return int(found.group(1)) if found else None
+
+
+def index_events(trace_file, index):
+    """Adds the runtime's lock waits and sampled allocations from a .nettrace file (dotnet_events) to an index. Their stacks join
+    the samples' stack tree, so the tables name them as they name samples. Returns (waits, allocations) counted."""
+    from . import dotnet_events, nettrace
+    waits, allocations, _ = dotnet_events.read(nettrace.Trace.open(trace_file))
+    with closing(sqlite3.connect(index)) as conn:
+        conn.executescript(EVENT_SCHEMA)
+        frames = {_frame_key(name): frame for frame, name in conn.execute("SELECT id, name FROM frame")}
+        next_frame = max(frames.values(), default=-1) + 1
+        nodes = {(parent, frame): node for node, parent, frame in conn.execute("SELECT id, parent, frame FROM node")}
+        next_node = max(nodes.values(), default=-1) + 1
+        threads = {os_thread_of(name): thread for thread, name in conn.execute("SELECT id, name FROM thread")}
+        new_frames, new_nodes = [], []
+
+        def node_of(stack):
+            nonlocal next_frame, next_node
+            node = -1
+            for name in reversed(stack):
+                key = _frame_key(name)
+                frame = frames.get(key)
+                if frame is None:
+                    frame = frames[key] = next_frame
+                    next_frame += 1
+                    module, method, patched = split_frame(name)
+                    new_frames.append((frame, name, module, method, int(patched)))
+                child = nodes.get((node, frame))
+                if child is None:
+                    child = nodes[(node, frame)] = next_node
+                    next_node += 1
+                    new_nodes.append((child, node, frame))
+                node = child
+            return node
+
+        conn.execute("DELETE FROM wait")
+        conn.execute("DELETE FROM alloc")
+        conn.executemany("INSERT INTO wait VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [
+            (threads.get(w.thread, -1), w.thread, w.start_ms, w.ms, w.lock_id, w.object_id, w.owner_thread, node_of(w.stack))
+            for w in waits])
+        conn.executemany("INSERT INTO alloc VALUES (?, ?, ?, ?, ?, ?)", [
+            (threads.get(a.thread, -1), a.thread, a.at_ms, a.type, a.bytes, node_of(a.stack)) for a in allocations])
+        conn.executemany("INSERT INTO frame VALUES (?, ?, ?, ?, ?)", new_frames)
+        conn.executemany("INSERT INTO node VALUES (?, ?, ?)", new_nodes)
+        conn.commit()
+    return len(waits), len(allocations)
+
+
 def modules(index):
     """Every module named in the index, sorted."""
     with closing(derived.open_read_only(index)) as conn:
@@ -316,8 +382,12 @@ class Recording:
             self.meta = dict(conn.execute("SELECT key, value FROM meta"))
             if self.meta.get("index_format") not in READABLE_FORMATS:
                 raise SamplingError(f"{self.index} was built by another version of this tool; record again.")
-            self.has_timeline = bool(conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'span'").fetchone())
+            tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            self.has_timeline = "span" in tables
+            self.waits = conn.execute("SELECT thread, os_thread, start_ms, ms, lock_id, object_id, owner_thread, node FROM wait "
+                                      "ORDER BY start_ms").fetchall() if "wait" in tables else []
+            self.allocations = conn.execute("SELECT thread, os_thread, at_ms, type, bytes, node FROM alloc ORDER BY at_ms"
+                                            ).fetchall() if "alloc" in tables else []
             # Split again from the name, so a recording indexed by an older version reads names this one knows (Harmony 3's).
             self.frames = {r[0]: (r[1], *split_frame(r[1])) for r in conn.execute("SELECT id, name FROM frame")}
             self.parent, self.frame_of = {}, {}
@@ -346,6 +416,29 @@ class Recording:
         name = self.threads[thread][0]
         found = _THREAD_ID.search(name)
         return f"thread {found.group(1)}" if found else name
+
+    def thread_of_os(self, os_thread):
+        """The index's thread for the operating system's thread ID, or None."""
+        if not hasattr(self, "_by_os"):
+            self._by_os = {os_thread_of(name): t for t, (name, *_rest) in self.threads.items()}
+        return self._by_os.get(os_thread)
+
+    def node_at(self, thread, at_ms):
+        """The stack's node a thread was sampled in at a moment, from its timeline; None without one."""
+        spans = self.spans(thread)
+        lo, hi = 0, len(spans)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if spans[mid][1] <= at_ms:
+                lo = mid + 1
+            else:
+                hi = mid
+        return spans[lo][2] if lo < len(spans) and spans[lo][0] <= at_ms else None
+
+    def owned_at(self, node):
+        """(method, Owner) of the first game, engine or mod frame on a stack, passing over .NET and libraries; ('', None) if none."""
+        found = self._first_owned(self.nodes_up(node)) if node is not None and node >= 0 else None
+        return self.method_at(found) if found is not None else ("", None)
 
     def thread_role(self, thread, roles):
         """The name in roles [(name, [patterns])] whose methods hold the most of a thread's sampled time, at least ROLE_SHARE of it;

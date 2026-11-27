@@ -62,9 +62,12 @@ from ... import process_memory as pm
 from ...manifest import READS, RUNS, WRITES
 from ...progress import Progress
 from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
-from ...sampling import (CPU, ENGINE, GAME, MOD, NATIVE, NO_MOD, UNKNOWN, Recording, SamplingError, Share, index_speedscope, method_matcher, modules,
+from ...sampling import (CPU, ENGINE, GAME, MOD, NATIVE, NO_MOD, UNKNOWN, Recording, SamplingError, Share, index_events,
+                         index_speedscope, method_matcher, modules,
                          read_counters, write_counters, write_owners)
+from ... import dotnet_events
 from ... import heap_reader as hreader
+from ...nettrace import NettraceError
 from ... import checks as check_engine
 from ... import checks_live
 from . import installs
@@ -119,6 +122,8 @@ def _parser():
     c.add_argument("--label", help="a few words to find the recording by, such as what was happening")
     c.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
     c.add_argument("--keep-speedscope", action="store_true", help="keep the converted trace beside the index (large)")
+    c.add_argument("--alloc", action="store_true",
+                   help="also sample allocations (about every 100 KB): who allocates what; the runtime writes more events")
     i = sub.add_parser("index", parents=[common], help="index a speedscope file recorded by hand with dotnet-trace")
     i.add_argument("file", help="a .speedscope.json file from dotnet-trace")
     i.add_argument("--counters", help="dotnet-counters' JSON file from the same time")
@@ -274,11 +279,25 @@ def _owners(names, args, environ, settings_file):
     return perf.module_owners(names, args.game, args.workshop, args.config, environ, settings_file)
 
 
-def build_index(folder, speedscope, counters_file, meta, args, environ, settings_file):
-    """Index a trace into folder, record who owns each module against today's mod list, and add the counters. Returns notes."""
+def add_events(index, trace_file):
+    """The runtime's lock waits and allocations from a recording's .nettrace into its index; a note when they cannot be read."""
+    if trace_file is None or not Path(trace_file).is_file():
+        return []
+    try:
+        index_events(trace_file, index)
+    except (NettraceError, OSError, ValueError) as error:
+        return [f"The runtime's own events (lock waits, allocations) could not be read from the trace: {error}"]
+    return []
+
+
+def build_index(folder, speedscope, counters_file, meta, args, environ, settings_file, trace_file=None):
+    """Index a trace into folder, add the runtime's events, record who owns each module against today's mod list, and add the
+    counters. Returns notes."""
     index = Path(folder) / INDEX_NAME
     index_speedscope(speedscope, index, meta)
+    event_notes = add_events(index, trace_file)
     owners, notes = _owners(modules(index), args, environ, settings_file)
+    notes = event_notes + notes
     write_owners(index, owners)
     write_counters(index, read_counters(counters_file) if counters_file else {})
     with closing(sqlite3.connect(index)) as conn:
@@ -460,6 +479,7 @@ def reindex_one(folder, tool, run):
             conn.execute("INSERT INTO counter SELECT name, tags, mean, max, samples FROM old.counter")
             conn.commit()
             conn.execute("DETACH DATABASE old")
+        add_events(fresh, plain)
         derived.remove(index)
         fresh.replace(index)
     finally:
@@ -573,6 +593,112 @@ def _node_of(rec, thread, method, at_ms):
     return None
 
 
+WAIT_NOTE = ("Every wait the runtime reported, not a sample: **waited in** is the first game, engine or mod method above the "
+             "wait, the code that took the lock. **Held by** is the thread holding the lock as the wait began and, from its "
+             "timeline, the first game, engine or mod method it was running then.")
+NO_WAITS = ("Lock waits were not recorded: this recording is from before 1.151.0. `record` again to see which code waits on a "
+            "lock and which thread holds it.")
+ALLOCATION_NOTE = ("Sampled by the runtime about every 100 KB: each sample stands for the bytes allocated since the last one, put "
+                   "down to the type and the stack of the allocation that crossed the line, so large objects stand out more than "
+                   "they should. Estimates over many samples, not counts.")
+
+
+def _held_by(rec, wait, roles, role_cache):
+    owner_thread = rec.thread_of_os(wait[6]) if wait[6] else None
+    if owner_thread is None:
+        return "not said" if not wait[6] else f"thread {wait[6]}"
+    if owner_thread not in role_cache:
+        role_cache[owner_thread] = rec.thread_role(owner_thread, roles) or rec.thread_label(owner_thread)
+    method, _ = rec.owned_at(rec.node_at(owner_thread, wait[2]))
+    return role_cache[owner_thread] + (f", in {method}" if method else "")
+
+
+def wait_sections(rec, report, main, top, roles):
+    """Lock waits, from the runtime's own events (recorded from 1.151.0)."""
+    if not rec.waits:
+        if rec.meta.get("lock_events") == "yes":
+            report.section("Lock waits", "No thread waited on a lock while recording.")
+        elif rec.counter("dotnet.monitor.lock_contentions"):
+            report.lines.append(NO_WAITS)
+        return
+    total = sum(w[3] for w in rec.waits)
+    mine = [w for w in rec.waits if w[0] == main]
+    main_ms = sum(w[3] for w in mine)
+    blocks = [f"**{len(rec.waits):,} waits on locks, {ms(total)} ms in all; the main thread waited {len(mine):,} times, "
+              f"{ms(main_ms)} ms ({pct(main_ms, rec.duration_ms(main))} of it)**, the longest {max(w[3] for w in rec.waits):,.1f} ms.",
+              WAIT_NOTE]
+    rows_by = defaultdict(lambda: [0, 0.0, 0.0, defaultdict(int), defaultdict(float)])
+    role_cache = {}
+    for wait in mine:
+        method, owner = rec.owned_at(wait[7])
+        row = rows_by[(method, owner)]
+        row[0] += 1
+        row[1] += wait[3]
+        row[2] = max(row[2], wait[3])
+        row[3][_held_by(rec, wait, roles, role_cache)] += 1
+        mod = rec.label(wait[7]) if wait[7] >= 0 else NO_MOD
+        row[4][mod if mod.kind == MOD else NO_MOD] += wait[3]
+    rows = []
+    for (method, owner), (count, spent, longest, held, mods) in sorted(rows_by.items(), key=lambda kv: (-kv[1][1], kv[0][0])):
+        holder, times = max(held.items(), key=lambda kv: (kv[1], kv[0]))
+        ordered = sorted(mods.items(), key=lambda kv: (-kv[1], kv[0].name))[:MODS_SHOWN]
+        rows.append((method or "(no game or mod code on its stack)", owner.name if owner else "-", f"{count:,}", ms(spent),
+                     f"{longest:,.1f}", f"{holder} ({100 * times / count:.0f}% of its waits)",
+                     ", ".join(f"{_who(o)} {ms(v)} ms" for o, v in ordered)))
+    if rows:
+        blocks.append(Table(["The main thread waited in", "Owner", "Waits", "ms", "Longest (ms)", "Mostly held by",
+                             "Mods that lead to it"], rows[:top], len(rows)))
+    others = defaultdict(lambda: [0, 0.0])
+    for wait in rec.waits:
+        if wait[0] != main:
+            key = wait[0] if wait[0] >= 0 else None
+            others[key][0] += 1
+            others[key][1] += wait[3]
+    if others:
+        rows = [(rec.thread_label(t) if t is not None else "a thread not sampled",
+                 (rec.thread_role(t, roles) or "-") if t is not None else "-", f"{n:,}", ms(v))
+                for t, (n, v) in sorted(others.items(), key=lambda kv: (-kv[1][1], str(kv[0])))]
+        blocks.append(Table(["Other threads that waited", "What it is", "Waits", "ms"], rows[:top], len(rows)))
+    report.section("Lock waits", *blocks)
+
+
+def _mb(value):
+    return f"{value / 1e6:,.1f}"
+
+
+def allocation_sections(rec, report, main, top):
+    """Allocations sampled by the runtime (record --alloc, 1.151.0)."""
+    if not rec.allocations:
+        if rec.meta.get("allocation_events") == "yes":
+            report.section("Allocations, sampled", "The runtime reported no allocation samples while recording.")
+        return
+    seconds = rec.duration_ms(main) / 1000 or 1.0
+    total = sum(a[4] for a in rec.allocations)
+    main_bytes = sum(a[4] for a in rec.allocations if a[0] == main)
+    blocks = [f"**About {_mb(total)} MB allocated, {_mb(total / seconds)} MB a second; the main thread "
+              f"{_mb(main_bytes / seconds)} MB a second**, from {len(rec.allocations):,} samples.", ALLOCATION_NOTE]
+    by_mod, by_type, by_method = defaultdict(float), defaultdict(lambda: [0.0, defaultdict(float)]), defaultdict(float)
+    for _, _, _, type_name, amount, node in rec.allocations:
+        mod = rec.label(node) if node >= 0 else NO_MOD
+        by_mod[mod if mod.kind == MOD else NO_MOD] += amount
+        method, owner = rec.owned_at(node)
+        by_type[type_name][0] += amount
+        by_type[type_name][1][method] += amount
+        by_method[(method, owner)] += amount
+    rows = [(_who(o), _mb(v), pct(v, total)) for o, v in sorted(by_mod.items(), key=lambda kv: (-kv[1], kv[0].name))]
+    blocks.append(Table(["Allocated by (the innermost mod on the stack)", "MB", "Share"], rows[:top], len(rows)))
+    rows = []
+    for type_name, (amount, methods) in sorted(by_type.items(), key=lambda kv: (-kv[1][0], kv[0])):
+        method = max(methods.items(), key=lambda kv: (kv[1], kv[0]))[0]
+        rows.append((type_name, _mb(amount), pct(amount, total), method or "-"))
+    blocks.append(Table(["Type", "MB", "Share", "Mostly allocated in"], rows[:top], len(rows)))
+    rows = [(method or "(no game or mod code on its stack)", owner.name if owner else "-", _mb(v), pct(v, total))
+            for (method, owner), v in sorted(by_method.items(), key=lambda kv: (-kv[1], kv[0][0]))]
+    blocks.append(Table(["Allocated in (the first game, engine or mod method above it)", "Owner", "MB", "Share"],
+                        rows[:top], len(rows)))
+    report.section("Allocations, sampled", *blocks)
+
+
 def summary_report(rec, folder, top):
     phases, ticking = perf.phases()
     main = rec.main_thread()
@@ -626,6 +752,8 @@ def summary_report(rec, folder, top):
         timeline_sections(rec, report, main, top)
     else:
         report.lines.append(NO_TIMELINE.format(name=folder.name))
+    wait_sections(rec, report, main, top, roles)
+    allocation_sections(rec, report, main, top)
     counters = _counter_rows(rec)
     report.section("Garbage collection and the runtime", Table(["Measure", "Average", "Worst"], counters) if counters
                    else "No counters were recorded.")
@@ -811,10 +939,12 @@ def _record(args, root, environ, settings_file, run, popen, now):
     pid = _pid(args, run, "RimWorld is not running. Start it, load the save, unpause at the speed that feels slow, then record.")
     trace_tool, counters_tool, installed = dd.ensure_tools(environ, run)
     folder = new_folder(root, args.label, now)
-    speedscope, counters_file, notes = dd.record(pid, args.seconds, folder, trace_tool, counters_tool, popen)
+    speedscope, counters_file, notes = dd.record(pid, args.seconds, folder, trace_tool, counters_tool, popen,
+                                                 providers=dotnet_events.runtime_provider(args.alloc))
     meta = {"kit_version": __version__, "recorded_at": now.strftime("%Y-%m-%d %H:%M:%S"), "seconds": args.seconds,
-            "label": args.label or "", "pid": pid, "game_name": perf.GAME_NAME, "tools_version": dd.TOOLS_VERSION}
-    notes = notes + build_index(folder, speedscope, counters_file, meta, args, environ, settings_file)
+            "label": args.label or "", "pid": pid, "game_name": perf.GAME_NAME, "tools_version": dd.TOOLS_VERSION,
+            "lock_events": "yes", "allocation_events": "yes" if args.alloc else ""}
+    notes = notes + build_index(folder, speedscope, counters_file, meta, args, environ, settings_file, folder / dd.TRACE_FILE)
     if not args.keep_speedscope:
         derived.remove(speedscope)
     if (folder / dd.TRACE_FILE).is_file():
