@@ -11,6 +11,7 @@
     mod-list rules --name GAME --import-manager [--apply]              bring your rules over from the mod manager (RimSort) (1.144.0)
     mod-list databases --name GAME [--fetch [--stale] [--only NAME]]   the community lists the sorter reads; fetch them (1.144.0)
     mod-list start --name GAME [--apply]                               start the game through Steam, as a mod manager's Run game (1.146.0)
+    mod-list updates --name GAME [--item N ... --apply]                Workshop items Steam has not brought up to date; fetch again (1.147.0)
     mod-list lists --name GAME                                         every saved list: by name, at game starts, saves, RimSort
     mod-list since --name GAME [--list KEY]                            what the first game run after your last change showed (1.85.0)
     mod-list compare --name GAME --list KEY --from SOURCE:REF          what loading a list would change (or --file PATH)
@@ -48,6 +49,7 @@ from . import mod_runs
 from .steam import client as steam_client
 from . import mod_databases
 from . import mod_sort
+from . import workshop_updates
 from .github import http_get as github_get
 from .games import MOD_LIST_GAMES, mod_list_adapter, mod_list_game
 from .installs import game_running
@@ -121,6 +123,10 @@ def _parser():
     databases.add_argument("--stale", action="store_true",
                            help=f"with --fetch, only the lists older than {mod_databases.FRESH_DAYS} days")
     databases.add_argument("--only", action="append", metavar="NAME", help="with --fetch, only this list (again for several)")
+    updates = sub.add_parser("updates", help="Workshop items Steam has not brought up to date; with --item and --apply, fetch them again")
+    _common(updates, lists=False)
+    updates.add_argument("--item", action="append", metavar="N", help="a Workshop number to ask Steam for again (again for several)")
+    updates.add_argument("--apply", action="store_true", help="ask Steam to download them now; without it, only say what it would do")
     start = sub.add_parser("start", help="start the game through Steam, refused while it runs; only with --apply")
     _common(start, lists=False)
     start.add_argument("--apply", action="store_true", help="ask Steam to start it; without it, only say what it would do")
@@ -577,6 +583,43 @@ def databases_report(adapter, args, environ=None, get=None, now=None, progress=N
     return report, data
 
 
+def updates_report(adapter, args, environ=None, running=game_running, library=None):
+    """Workshop items Steam has not brought up to date (1.147.0), from Steam's own record of them; with --item and --apply, Steam asked
+    to download them again now, through the running client as the game, refused while the game runs."""
+    record = adapter.workshop_record() if hasattr(adapter, "workshop_record") else None
+    here = _by_number(adapter)
+    items = workshop_updates.item_states(record or {})
+    for item in items:
+        mod = here.get(item["workshop_id"])
+        item.update(id=mod.id if mod else "", name=mod.name if mod else "", words=workshop_updates.STATE_WORDS[item["state"]])
+    needs_update, needs_download = workshop_updates.flags(record or {})
+    is_running = bool(running(list(getattr(adapter, "processes", ()))))
+    data = {"record": record is not None, "items": items, "needsUpdate": needs_update, "needsDownload": needs_download,
+            "gameRunning": is_running, "applied": False, "results": []}
+    asked = _items(args) if args.item else []
+    if asked and args.apply:
+        if is_running:
+            raise core.FixError(f"{adapter.name} is running, and Steam holds its Workshop updates while it runs: close it, "
+                                "then fetch again.")
+        with _session(adapter, environ, library) as session:
+            data["results"] = [{"workshop_id": item, "asked": session.download(item)} for item in asked]
+        data["applied"] = True
+        history.record(adapter.game, "mod-list-fetch-again", environ, args.settings, None, items=asked)
+    report = Report(f"Mod list: {len(items)} Workshop items Steam has not brought up to date"
+                    if record is not None else f"Mod list: Steam keeps no record of {adapter.name}'s Workshop items here")
+    if items:
+        report.section("Not up to date", Table(["Mod", "Workshop", "State"],
+                                               [[i["name"] or "?", i["workshop_id"], i["words"]] for i in items]))
+        if is_running:
+            report.lines.append(f"{adapter.name} is running: Steam usually fetches its Workshop updates once it closes.")
+    for result in data["results"]:
+        report.lines.append(f"{result['workshop_id']}: " + ("Steam was asked to download it now." if result["asked"]
+                                                           else "Steam did not take the request (is it still subscribed?)."))
+    if asked and not args.apply:
+        report.lines.append(f"Would ask Steam for {len(asked)} again. **Add --apply to ask.**")
+    return report, data
+
+
 def open_address(address):
     """Hands an address to the system's own opener (steam:// goes to the Steam client), as a link pressed in a browser would."""
     if sys.platform == "win32":
@@ -899,6 +942,8 @@ def main(argv=None, environ=None, out=None, post=None, running=None, now=None, s
             report, data = rules(adapter, args, environ, now)
         elif args.report == "since":
             report, data = since_report(adapter, args, environ)
+        elif args.report == "updates":
+            report, data = updates_report(adapter, args, environ, running or game_running, steam)
         elif args.report == "start":
             report, data = start_report(adapter, args, running or game_running, opener)
         elif args.report == "databases":
@@ -947,6 +992,10 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS, "surface": "mod-li
                         "rules": {"effect": WRITES, "when": "--apply", "question": "Which load-order rules does the sorter read?"},
                         "lists": {"question": "Which saved mod lists can I load?"},
                         "since": {"question": "Did my last change to the mod list break anything?"},
+                        "updates": {"effect": WRITES, "when": "--apply",
+                                    "question": "Which of my Workshop mods has Steam not brought up to date?",
+                                    "note": "reads Steam's own record of the game's Workshop items; --apply asks the running Steam "
+                                            "client, as the game, to download the named items now"},
                         "start": {"effect": RUNS, "when": "--apply", "question": None,
                                   "note": "hands steam://rungameid/<app id> to the system's opener, so the Steam client starts the game"},
                         "databases": {"effect": ONLINE, "when": "--fetch",

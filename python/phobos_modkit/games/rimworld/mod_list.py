@@ -502,19 +502,25 @@ class RimWorld:
         self._version, _, self._ids = read_mods_config(self.config)
         return [ModList("active", "Your active mods (ModsConfig.xml)", self.config, list(self._ids))]
 
-    def subscribed(self):
-        """The Workshop items Steam keeps for RimWorld on this PC (appworkshop_294100.acf), or None when it has no record."""
+    def workshop_record(self):
+        """Steam's record of RimWorld's Workshop items on this PC (appworkshop_294100.acf's AppWorkshop), or None without one."""
         candidates = [self.workshop.parent.parent / f"appworkshop_{APP_ID}.acf"]
         candidates += [library / "steamapps" / "workshop" / f"appworkshop_{APP_ID}.acf" for library in libraries(self.steam)]
         for record in candidates:
             if record.is_file():
-                data = parse_vdf(record.read_text(encoding="utf-8", errors="replace")).get("AppWorkshop", {})
-                found = set()
-                for part in ("WorkshopItemsInstalled", "WorkshopItemDetails"):
-                    if isinstance(data.get(part), dict):
-                        found.update(data[part].keys())
-                return found
+                return parse_vdf(record.read_text(encoding="utf-8", errors="replace")).get("AppWorkshop", {})
         return None
+
+    def subscribed(self):
+        """The Workshop items Steam keeps for RimWorld on this PC (appworkshop_294100.acf), or None when it has no record."""
+        data = self.workshop_record()
+        if data is None:
+            return None
+        found = set()
+        for part in ("WorkshopItemsInstalled", "WorkshopItemDetails"):
+            if isinstance(data.get(part), dict):
+                found.update(data[part].keys())
+        return found
 
     def assemblies_of(self, mods, active):
         """{mod key: [the .dll files the game loads from it]}: its Assemblies folders, in the folders LoadFolders.xml (or the game's

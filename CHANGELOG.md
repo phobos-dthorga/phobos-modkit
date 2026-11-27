@@ -4,6 +4,17 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.147.0] - 2026-11-28
+
+### Added
+
+- **mod-list updates: Workshop items Steam has not brought up to date** (the owner's choice of 28 Nov 2026, "Workshop updates
+  waiting", the last piece of retiring RimSort). Reads Steam's own record of a game's Workshop items (`appworkshop_<app id>.acf`):
+  each item where a newer version waits, part has downloaded, or none is on disk, named by its mod, and whether the game is running
+  (Steam usually holds its Workshop updates until it closes). With `--item` and `--apply`, the running Steam client is asked, as
+  the game, to download them now, refused while the game runs. Game-free (`workshop_updates.py`). On the owner's PC it found two
+  waiting while the game ran. How: [mod-list](docs/mod-list.md).
+
 ## [1.146.0] - 2026-11-28
 
 ### Added

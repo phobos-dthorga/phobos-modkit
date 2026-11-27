@@ -286,6 +286,10 @@ class Session:
             self.library.download(self.ugc, int(item))
         return subscribed
 
+    def download(self, item):
+        """Asks Steam to download a subscribed item now, at high priority (1.147.0); True when Steam took the request."""
+        return bool(self.library.download(self.ugc, int(item)))
+
     def unsubscribe(self, item):
         """Unsubscribes; True when Steam then says it is no longer subscribed."""
         self._wait(self.library.unsubscribe(self.ugc, int(item)))

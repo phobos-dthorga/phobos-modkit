@@ -35,6 +35,7 @@ Workshop). The Companion's Mod list page shows it.
 | `mod-list rules --name GAME --import-manager [--apply]` | Brings your rules over from the game's mod manager (RimSort), each one not kept already, with its note; once brought, RimSort's copy is no longer read until it changes there (1.144.0) | writes with `--apply` |
 | `mod-list databases --name GAME [--fetch [--stale] [--only NAME]]` | The community lists the sorter and the check read, the kit's copy or the mod manager's, whichever is newer, and how old; `--fetch` fetches them from GitHub (1.144.0) | reads online with `--fetch` |
 | `mod-list start --name GAME [--apply]` | Starts the game through the Steam client (`steam://rungameid/<app id>`), as pressing Play in its library or a mod manager's Run game; refused while the game runs (1.146.0) | runs a program with `--apply` |
+| `mod-list updates --name GAME [--item N ... --apply]` | The Workshop items Steam has not brought up to date (a newer version waits, part downloaded, or none on disk), from Steam's own record of them (`appworkshop_<app id>.acf`); with `--item` and `--apply`, the running Steam client is asked, as the game, to download them now, refused while the game runs (1.147.0) | writes with `--apply` |
 | `mod-list since --name GAME [--list KEY]` | What the first game run after the last change made here showed: new errors, clean, or why it cannot tell | reads |
 | `mod-list lists --name GAME` | Every saved list: by name, kept at game starts, each save's, RimSort's history | reads |
 | `mod-list compare --name GAME --list KEY (--from SOURCE:REF \| --file PATH)` | What loading a list would switch on, off and move, and which of its mods are not on this PC, with why | reads |
@@ -65,6 +66,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `sort` | The list sorted from every rule, each move explained; written only with `--apply`. | writes, with `--apply` |
 | `rules` | Your own load-order rules, and every rule set the sorter reads. | writes, with `--apply` |
 | `databases` | The community lists the sorter and the check read: where from and how old. With `--fetch`, reads public files from raw.githubusercontent.com, keyless, into the kit's cache. | reads public pages online, with `--fetch` |
+| `updates` | Workshop items Steam has not brought up to date; with `--item` and `--apply`, fetch them again. Reads Steam's own record of the game's Workshop items; `--apply` asks the running Steam client, as the game, to download the named items now. | writes, with `--apply` |
 | `start` | Start the game through Steam, refused while it runs; only with `--apply`. Hands steam://rungameid/\<app id> to the system's opener, so the Steam client starts the game. | runs other programs, with `--apply` |
 | `since` | What the first game run after the last change made here showed; only reads. | reads only |
 | `lists` | Every saved list: by name, kept at game starts, each save's, and RimSort's history. | reads only |
@@ -110,6 +112,8 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--fetch` | `databases` | fetch them from their public GitHub repositories into the kit's cache (keyless) |  |
 | `--stale` | `databases` | with `--fetch`, only the lists older than 7 days |  |
 | `--only NAME` | `databases` | with `--fetch`, only this list (again for several). Repeatable. |  |
+| `--item N` | `updates` | a Workshop number to ask Steam for again (again for several). Repeatable. |  |
+| `--apply` | `updates` | ask Steam to download them now; without it, only say what it would do |  |
 | `--apply` | `start` | ask Steam to start it; without it, only say what it would do |  |
 | `--from SOURCE:REF` | `compare`, `load` | a list as `lists` names it: saved:NAME, kept:TIME, save:FILE, manager:FILE |  |
 | `--last-clean` | `compare`, `load` | the newest list kept at a game start that then ran clean (1.85.0) |  |
