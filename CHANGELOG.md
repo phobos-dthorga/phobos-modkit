@@ -4,6 +4,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.147.2] - 2026-11-28
+
+### Fixed
+
+- **records leaves out D'thorga Companion's kept answers** (its `answers` folder, from Companion 0.116.0): each slow page's last
+  reading, kept so the page shows at once, is read afresh by the program itself, so copying it every six hours would only fill the
+  backup folder. How: [records](docs/records.md).
+
 ## [1.147.1] - 2026-11-28
 
 ### Fixed

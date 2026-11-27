@@ -38,8 +38,9 @@ from .testpass_cli import DECISIONS, VERDICTS
 
 EXIT_OK, EXIT_USAGE, EXIT_REFUSED = 0, 2, 3
 BACKUP = ("recordsBackupPath", "PHOBOS_RECORDS_BACKUP")
-# The window's browser cache (WebView2 on Windows): rebuilt by the window, and most of the folder's size.
-LEFT_OUT = frozenset({"EBWebView"})
+# The window's browser cache (WebView2 on Windows): rebuilt by the window, and most of the folder's size. And the Companion's
+# kept answers (0.116.0): the last reading of each slow page, shown while it reads again, so read afresh in seconds (1.147.2).
+LEFT_OUT = frozenset({"EBWebView", "answers"})
 PARTIAL = ".partial"
 MANIFEST_FILE = "backup.json"
 BACKUP_FORMAT = 1

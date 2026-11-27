@@ -12,7 +12,8 @@ The Companion's Settings page and Home use it, and the Companion also copies by 
   soonest next opportunity"). It asks `status --every-hours N` and, when `due`, runs `backup --automatic`. A missed copy is
   simply due at the next look, so a closed program or a sleeping PC catches up when it next can.
 - **Nothing is ever deleted.** Each copy is a new folder named for the local time; prune old ones by hand.
-- **The window's browser cache is left out** (`EBWebView`, WebView2's, most of the folder's size). Everything else in the
+- **The window's browser cache is left out** (`EBWebView`, WebView2's, most of the folder's size), **and so are the kept answers**
+  (`answers`, 1.147.2: each slow page's last reading, which the Companion reads again by itself). Everything else in the
   Companion's folder is copied, so a new kind of record is included without a change here.
 - **Saves are not records.** A game's saves are far larger and are a separate question (D'thorga Companion's `docs/later.md`).
 

@@ -25,6 +25,8 @@ class RecordsTests(unittest.TestCase):
         (self.data / "shortcuts.json").write_text("{}", encoding="utf-8")
         (self.data / "EBWebView" / "Cache").mkdir(parents=True)
         (self.data / "EBWebView" / "Cache" / "big").write_bytes(b"x" * 5000)
+        (self.data / "answers" / "test_lists").mkdir(parents=True)
+        (self.data / "answers" / "test_lists" / "rimworld.json").write_text("{}", encoding="utf-8")
         (self.data / "screen-notes" / "20261119-090000.partial").mkdir(parents=True)
         self.target = base / "nas" / "companion-records"
 
@@ -36,6 +38,7 @@ class RecordsTests(unittest.TestCase):
         self.assertIn("test-verdicts", names)
         self.assertIn("shortcuts.json", names)
         self.assertNotIn("EBWebView", names)
+        self.assertNotIn("answers", names)     # the Companion's kept answers (1.147.2)
 
     def test_a_record_kept_elsewhere_by_a_setting_is_copied_too(self):
         elsewhere = Path(self.temp.name) / "my-history"
