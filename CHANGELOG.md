@@ -27,6 +27,11 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 - **rimworld-perf names who patched each patched game method**: the mods seen running inside it in the recording (prefixes and
   postfixes among them), and the transpilers from rimworld-patches' list, whose work no sample can tell from the game's. How:
   [rimworld-perf](docs/rimworld-perf.md).
+- **rimworld-perf reads the game's own ticks and frames, and says what each recording was of**: D'thorga Framework's new meter
+  gives ticks and frames a second, the worst frame, the speed and the colony's size, and with it the main thread's milliseconds a
+  tick; each recording notes its game version, save and mods. compare warns when two recordings are not like for like and gives
+  each mod's cost in milliseconds a tick. A next game needs only its own meter's name in its adapter. How:
+  [rimworld-perf](docs/rimworld-perf.md).
 
 ## [1.150.0] - 2026-11-28
 

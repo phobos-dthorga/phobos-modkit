@@ -249,9 +249,11 @@ def convert(nettrace, tool, run=subprocess.run):
 TRACE_PROFILES = "dotnet-common,dotnet-sampled-thread-time"   # dotnet-trace 10's own default profiles, named so providers can add
 
 
-def record(pid, seconds, folder, trace_tool, counters_tool, popen=subprocess.Popen, providers=None):
+def record(pid, seconds, folder, trace_tool, counters_tool, popen=subprocess.Popen, providers=None, counters=None):
     """Record a program for `seconds`: a sampled trace (converted to speedscope) and its counters, side by side. `providers` is
     dotnet-trace's --providers text, added to its default profiles (and taking precedence over them for a provider both name).
+    `counters` names the counter sets to read (dotnet-counters' --counters); the runtime's own when left out. A program's own
+    meter named there is read beside them, such as a game's ticks.
 
     Returns (speedscope file, counters file or None, notes). Raises DiagnosticsError when the trace could not be made.
     """
@@ -262,8 +264,9 @@ def record(pid, seconds, folder, trace_tool, counters_tool, popen=subprocess.Pop
     duration = duration_text(seconds)
     notes = []
     with open(counters_log, "w", encoding="utf-8") as counters_out, open(trace_log, "w", encoding="utf-8") as trace_out:
+        sets = ["--counters", ",".join(counters)] if counters else []
         counting = popen([str(counters_tool), "collect", "-p", str(pid), "--format", "json", "-o", str(counters_file),
-                          "--refresh-interval", "1", "--duration", duration],
+                          "--refresh-interval", "1", "--duration", duration, *sets],
                          stdin=subprocess.DEVNULL, stdout=counters_out, stderr=subprocess.STDOUT)
         extra = ["--profile", TRACE_PROFILES, "--providers", providers] if providers else []
         tracing = popen([str(trace_tool), "collect", "-p", str(pid), "--format", "Speedscope", "-o", str(trace_file),

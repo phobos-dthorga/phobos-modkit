@@ -304,6 +304,8 @@ class CommandTests(unittest.TestCase):
         self.assertFalse((folder / ("trace" + dd.SPEEDSCOPE_SUFFIX)).exists())
         self.assertFalse((folder / dd.TRACE_FILE).exists())                     # packed once indexed (1.149.0)
         self.assertEqual(packed.read_bytes(folder / dd.TRACE_FILE), made_up_trace())
+        counters_command = next(c for c in FakeProcess.commands if "Speedscope" not in c)
+        self.assertEqual(["--counters", "System.Runtime,DThorga.RimWorld"], counters_command[-2:])
         trace_command = next(c for c in FakeProcess.commands if "Speedscope" in c)
         self.assertEqual(["--profile", "dotnet-common,dotnet-sampled-thread-time", "--providers",
                           "Microsoft-Windows-DotNETRuntime:0x100003C01D:4"], trace_command[-4:])
@@ -316,6 +318,42 @@ class CommandTests(unittest.TestCase):
         code, again = self.run_cli("report", "many wounded", *self.common)
         self.assertEqual(perf_cli.EXIT_OK, code, again)
         self.assertIn("| Example.Dosing.DoseService.MakeJob | Example Medical | 40 | 57.1% |", again)
+
+    def test_the_game_counts_itself(self):
+        self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--counters", str(COUNTERS), "--label", "one", *self.common)[0])
+        code, text = self.run_cli("report", *self.common)
+        self.assertIn("| Ticks a second | 570 | slowest second 540 |", text)
+        self.assertIn("| Frames a second | 55 | slowest second 50 |", text)
+        self.assertIn("| Each second's longest frame | 32.5 ms on average | longest 40.0 ms |", text)
+        self.assertIn("| Game speed | superfast | fastest superfast |", text)
+        self.assertIn("| The main thread's ticking, a tick | 1.12 ms | - |", text)      # 70 ms over 570 a second for 0.11 s
+        code, text = self.run_cli("index", str(TRACE), "--label", "no meter", *self.common, now=datetime(2026, 11, 17, 19, 0, 0))
+        self.assertIn("need D'thorga Framework 0.380.0 or newer running", text)
+
+    def test_compare_says_what_each_recording_was_of(self):
+        for label, hour, save in (("before", 18, "Colony1"), ("after", 19, "Colony2")):
+            self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--counters", str(COUNTERS), "--label", label,
+                                                             *self.common, now=datetime(2026, 11, 17, hour, 0, 0))[0])
+            folder = next((self.tmp / "cache" / perf_cli.CACHE_FOLDER).glob(f"*-{label}"))
+            with closing(sqlite3.connect(folder / perf_cli.INDEX_NAME)) as conn:
+                conn.executemany("INSERT INTO meta VALUES (?, ?)", [("save", save), ("mods_active", "300")])
+                conn.commit()
+        code, text = self.run_cli("compare", *self.common)
+        self.assertEqual(perf_cli.EXIT_OK, code, text)
+        self.assertIn("**Not like for like: save Colony1 against Colony2.**", text)
+        self.assertIn("| Game speed | superfast | superfast |", text)
+        self.assertIn("**The main thread's ticking took 1.12 ms a tick, then 1.12 ms** (+0.0%)", text)
+        self.assertIn("| Example Medical | mod | 0.638 | 0.638 | +0.000 |", text)        # 57.1% of 1.117 ms
+
+    def test_a_recording_notes_its_context(self):
+        config = self.tmp / "config"
+        config.mkdir()
+        (config / "ModsConfig.xml").write_text("<ModsConfigData><version>1.7.5011 rev24</version><activeMods><li>ludeon.rimworld</li>"
+                                               "<li>example.medical</li></activeMods></ModsConfigData>", encoding="utf-8")
+        found = perf.context(FIXTURES / "rimworld" / "player-1.7.log", config / "ModsConfig.xml", "2026-01-02 10:10:00")
+        self.assertEqual({"game_version": "1.7.9999.1", "save": "Colony1", "mods_loaded": "5", "mods_active": "2"}, found)
+        self.assertNotIn("save", perf.context(FIXTURES / "rimworld" / "player-1.7.log", None, "2026-01-02 10:00:00"))
+        self.assertEqual('Context: RimWorld 1.7.9999.1, save "Colony1" (loaded with 5 mods), 2 mods active.', perf_cli.context_text(found))
 
     def test_record_without_the_game(self):
         with mock.patch.object(dd, "find_processes", return_value=[]):

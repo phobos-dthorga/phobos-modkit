@@ -239,8 +239,19 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
   trace (`trace.nettrace.zst`) with dotnet-trace's own converter, which reads the file only (about 10 s for a minute of the owner's
   game), keeping who owned each module on the day it was recorded, its counters and its label; the index grows about three and a
   half times (1 MB to 3.5 MB for a minute).
+- **The game, as it counts itself** (1.151.0): D'thorga Framework 0.380.0 and newer publish a .NET meter, `DThorga.RimWorld`
+  (phobos-rimworld's `GameMeter`), which `record` asks dotnet-counters to read beside the runtime's own counters: ticks and frames a
+  second with their slowest second, each second's longest frame, the game speed, spawned pawns and maps. With the ticks, the report
+  gives **the main thread's ticking a tick**, in milliseconds: what the player feels, whatever the speed. Without the framework the
+  report says the figures were not recorded. The meter's names are its source's; **not yet seen in a real recording**.
+- **Context** (1.151.0): `record` notes the game's version and the save last loaded before it (from Player.log) and how many mods
+  ModsConfig.xml has active; the report says them in one line.
 - **Compare** uses shares of the main thread and of ticking, not milliseconds: a faster game ticks more often, so a mod's
-  milliseconds per second can rise when the game speeds up.
+  milliseconds per second can rise when the game speeds up. From 1.151.0 it opens with what each recording was of (the game's
+  version, the save, the mods, the speed, the pawns, ticks a second), and says **"not like for like"** in bold when the save, the
+  mods active or the speed differ, or the pawns by more than a fifth. With the game's own tick count on both sides it adds the main
+  thread's ticking a tick, and **each owner's cost in milliseconds a tick**, which unlike a share does not move when another mod
+  gets cheaper.
 
 ### Snapshots: a frozen game, and memory
 
@@ -364,7 +375,8 @@ cannot be made again.
 - **Each sample stops the runtime** (the trace held 38,698 suspensions in its 60 s), and a thread stops where the runtime may stop
   it, so samples land on such places and code with many of them, such as a lock's spin, can look hotter than it is. A lock's real
   waits are measured as events from 1.151.0, not sampled.
-- The trace counts no calls and no ticks, so it cannot give ticks per second.
+- The trace counts no calls and no ticks, so it cannot give ticks per second by itself: those come from D'thorga Framework's
+  meter, when it runs.
 - Overloads of one method are counted together (the report drops argument lists).
 - The phase patterns were read from the game's code. In the first recording of the game (RimWorld 1.7.5011, 349 mods, 17 November
   2026) they matched 99.2% of the main thread; the rest sat in the program's entry point. A second recording (18 November 2026)

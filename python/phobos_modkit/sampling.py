@@ -107,7 +107,7 @@ CREATE TABLE node (id INTEGER PRIMARY KEY, parent INTEGER, frame INTEGER);
 CREATE TABLE thread (id INTEGER PRIMARY KEY, name TEXT, start_ms REAL, end_ms REAL, cpu_ms REAL, native_ms REAL);
 CREATE TABLE sample (thread INTEGER, node INTEGER, kind TEXT, ms REAL);
 CREATE TABLE owner (module TEXT PRIMARY KEY, kind TEXT, name TEXT);
-CREATE TABLE counter (name TEXT, tags TEXT, mean REAL, max REAL, samples INTEGER);
+CREATE TABLE counter (name TEXT, tags TEXT, mean REAL, max REAL, samples INTEGER, min REAL);
 CREATE TABLE span (thread INTEGER, start_ms REAL, end_ms REAL, node INTEGER, kind TEXT);
 """
 
@@ -305,8 +305,8 @@ def read_counters(path):
 def write_counters(index, counters):
     with closing(sqlite3.connect(index)) as conn:
         conn.execute("DELETE FROM counter")
-        conn.executemany("INSERT INTO counter VALUES (?, ?, ?, ?, ?)", [
-            (name, tags, sum(v) / len(v), max(v), len(v)) for (name, tags), v in sorted(counters.items()) if v])
+        conn.executemany("INSERT INTO counter (name, tags, mean, max, samples, min) VALUES (?, ?, ?, ?, ?, ?)", [
+            (name, tags, sum(v) / len(v), max(v), len(v), min(v)) for (name, tags), v in sorted(counters.items()) if v])
         conn.commit()
 
 
@@ -397,6 +397,9 @@ class Recording:
             self.samples = conn.execute("SELECT thread, node, kind, ms FROM sample").fetchall()
             self.owners = {r[0]: Owner(r[1], r[2]) for r in conn.execute("SELECT module, kind, name FROM owner")}
             self.counters = {(r[0], r[1]): (r[2], r[3], r[4]) for r in conn.execute("SELECT name, tags, mean, max, samples FROM counter")}
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(counter)")}
+            self.counter_lows = ({(r[0], r[1]): r[2] for r in conn.execute("SELECT name, tags, min FROM counter")}
+                                 if "min" in columns else {})
         self._type_owner = None
         self._labels = {}
         self._outer = {}
@@ -825,6 +828,13 @@ class Recording:
     def counter(self, name, tags=""):
         """(mean, max, samples) of one counter, or None. Name without its unit, e.g. dotnet.gc.pause.time."""
         for (full, found_tags), value in self.counters.items():
+            if full.split(" (", 1)[0] == name and found_tags == tags:
+                return value
+        return None
+
+    def counter_low(self, name, tags=""):
+        """The lowest reading of one counter (1.151.0 on), or None."""
+        for (full, found_tags), value in self.counter_lows.items():
             if full.split(" (", 1)[0] == name and found_tags == tags:
                 return value
         return None

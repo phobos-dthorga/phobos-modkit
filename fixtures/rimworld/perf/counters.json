@@ -6,5 +6,17 @@
   {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "System.Runtime", "name": "dotnet.gc.pause.time (s / 1 sec)", "tags": "", "counterType": "Rate", "value": 0.04},
   {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "System.Runtime", "name": "dotnet.gc.collections ({collection} / 1 sec)", "tags": "gc.heap.generation=gen0", "counterType": "Rate", "value": 5},
   {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "System.Runtime", "name": "dotnet.gc.heap.total_allocated (By / 1 sec)", "tags": "", "counterType": "Rate", "value": 400000000},
-  {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "System.Runtime", "name": "dotnet.process.memory.working_set (By)", "tags": "", "counterType": "Metric", "value": 5200000000}
+  {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "System.Runtime", "name": "dotnet.process.memory.working_set (By)", "tags": "", "counterType": "Metric", "value": 5200000000},
+  {"timestamp": "2026-11-17T18:00:01+11:00", "provider": "DThorga.RimWorld", "name": "rimworld.ticks ({tick} / 1 sec)", "tags": "", "counterType": "Rate", "value": 600},
+  {"timestamp": "2026-11-17T18:00:01+11:00", "provider": "DThorga.RimWorld", "name": "rimworld.frames ({frame} / 1 sec)", "tags": "", "counterType": "Rate", "value": 60},
+  {"timestamp": "2026-11-17T18:00:01+11:00", "provider": "DThorga.RimWorld", "name": "rimworld.frame.worst (ms)", "tags": "", "counterType": "Metric", "value": 25.0},
+  {"timestamp": "2026-11-17T18:00:01+11:00", "provider": "DThorga.RimWorld", "name": "rimworld.speed ({speed})", "tags": "", "counterType": "Metric", "value": 3},
+  {"timestamp": "2026-11-17T18:00:01+11:00", "provider": "DThorga.RimWorld", "name": "rimworld.pawns ({pawn})", "tags": "", "counterType": "Metric", "value": 120},
+  {"timestamp": "2026-11-17T18:00:01+11:00", "provider": "DThorga.RimWorld", "name": "rimworld.maps ({map})", "tags": "", "counterType": "Metric", "value": 2},
+  {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "DThorga.RimWorld", "name": "rimworld.ticks ({tick} / 1 sec)", "tags": "", "counterType": "Rate", "value": 540},
+  {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "DThorga.RimWorld", "name": "rimworld.frames ({frame} / 1 sec)", "tags": "", "counterType": "Rate", "value": 50},
+  {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "DThorga.RimWorld", "name": "rimworld.frame.worst (ms)", "tags": "", "counterType": "Metric", "value": 40.0},
+  {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "DThorga.RimWorld", "name": "rimworld.speed ({speed})", "tags": "", "counterType": "Metric", "value": 3},
+  {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "DThorga.RimWorld", "name": "rimworld.pawns ({pawn})", "tags": "", "counterType": "Metric", "value": 120},
+  {"timestamp": "2026-11-17T18:00:02+11:00", "provider": "DThorga.RimWorld", "name": "rimworld.maps ({map})", "tags": "", "counterType": "Metric", "value": 2}
 ]}

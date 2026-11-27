@@ -25,6 +25,11 @@ LIBRARIES = {"0harmony": "Harmony", "harmony": "Harmony", "prepatcher": "Prepatc
 LIBRARY_PREFIXES = {"monomod": "Harmony"}
 ENGINE_NAME = "the engine and Ludeon's libraries"
 PHASES_FILE = Path(__file__).with_name("perf-phases.json")
+# D'thorga Framework 0.380.0's meter: the game's ticks, frames, worst frame, speed, pawns and maps (src/PhobosFramework/Debug/GameMeter.cs
+# in phobos-rimworld). dotnet-counters reads it beside the runtime's own counters when named.
+GAME_METER = "DThorga.RimWorld"
+COUNTER_SETS = ("System.Runtime", GAME_METER)
+SPEEDS = {0: "paused", 1: "normal", 2: "fast", 3: "superfast", 4: "ultrafast"}
 THREADS_FILE = Path(__file__).with_name("perf-threads.json")
 
 
@@ -38,6 +43,30 @@ def thread_roles():
     """[(name, [patterns])]: RimWorld's and its engine's threads from the data file, then .NET's own (sampling.DOTNET_THREADS)."""
     data = json.loads(THREADS_FILE.read_text(encoding="utf-8"))
     return [(name, list(patterns)) for name, patterns in data["threads"]] + DOTNET_THREADS
+
+
+def context(logs_file, mods_config, before=None):
+    """What a recording was of, for a fair comparison: {"game_version", "save", "mods_loaded"} from Player.log's header and the
+    last save loaded before `before` (a "YYYY-MM-DD HH:MM:SS" text), and {"mods_active"} from ModsConfig.xml. Best effort: what
+    cannot be read is left out."""
+    found = {}
+    try:
+        from . import log as rimworld_log
+        parsed = rimworld_log.parse(Path(logs_file).read_text(encoding="utf-8", errors="replace"))
+        if parsed.header.get("version"):
+            found["game_version"] = parsed.header["version"]
+        loads = [n for n in parsed.notices if n.kind == "save-loaded" and (before is None or (n.data.get("time") or "") <= before)]
+        if loads:
+            found["save"] = loads[-1].data.get("save") or ""
+            found["mods_loaded"] = str(loads[-1].data.get("mods") or "")
+    except (OSError, TypeError, ValueError):
+        pass
+    try:
+        _, _, ids = loading.read_mods_config(Path(mods_config))
+        found["mods_active"] = str(len(ids))
+    except Exception:  # noqa: BLE001 - a recording without its context beats none
+        pass
+    return found
 
 
 def install_assemblies(game):

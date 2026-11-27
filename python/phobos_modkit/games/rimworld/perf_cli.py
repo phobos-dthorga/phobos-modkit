@@ -473,10 +473,11 @@ def reindex_one(folder, tool, run):
         meta = {k: v for k, v in derived.read_meta(index).items() if k != "index_format"}
         meta.update(reindexed_by=__version__)
         threads = index_speedscope(speedscope, fresh, meta)
+        columns = ", ".join(c for c in ("name", "tags", "mean", "max", "samples", "min") if c in _counter_columns(index))
         with closing(sqlite3.connect(fresh)) as conn:
             conn.execute("ATTACH DATABASE ? AS old", (str(index),))
             conn.execute("INSERT INTO owner SELECT module, kind, name FROM old.owner")
-            conn.execute("INSERT INTO counter SELECT name, tags, mean, max, samples FROM old.counter")
+            conn.execute(f"INSERT INTO counter ({columns}) SELECT {columns} FROM old.counter")
             conn.commit()
             conn.execute("DETACH DATABASE old")
         add_events(fresh, plain)
@@ -489,6 +490,11 @@ def reindex_one(folder, tool, run):
         if unpacked:
             derived.remove(plain)
     return f"rebuilt: {threads} threads, with its timeline"
+
+
+def _counter_columns(index):
+    with closing(derived.open_read_only(index)) as conn:
+        return {r[1] for r in conn.execute("PRAGMA table_info(counter)")}
 
 
 def reindex_report(args, root, environ, run):
@@ -747,6 +753,63 @@ def _patched_rows(rec, samples, whole, top, patch_lookup):
     return rows, len(ordered)
 
 
+NO_GAME_COUNTERS = ("The game's own figures (ticks and frames a second) were not recorded: they need D'thorga Framework 0.380.0 or "
+                    "newer running, and rimworld-perf 1.151.0 or newer recording.")
+
+
+def ticks_per_second(rec):
+    found = rec.counter("rimworld.ticks")
+    return found[0] if found else None
+
+
+def ms_per_tick(rec, tick_ms, main):
+    """Main-thread milliseconds of ticking a tick, from the game's own tick count; None without it."""
+    rate = ticks_per_second(rec)
+    ticks = rate * rec.duration_ms(main) / 1000 if rate else 0
+    return tick_ms / ticks if ticks else None
+
+
+def context_text(meta):
+    parts = []
+    if meta.get("game_version"):
+        parts.append(f"RimWorld {meta['game_version']}")
+    if meta.get("save"):
+        parts.append(f'save "{meta["save"]}"' + (f" (loaded with {meta['mods_loaded']} mods)" if meta.get("mods_loaded") else ""))
+    if meta.get("mods_active"):
+        parts.append(f"{meta['mods_active']} mods active")
+    return "Context: " + ", ".join(parts) + "." if parts else ""
+
+
+def game_section(rec, report, main, tick_ms):
+    """The game's own figures from D'thorga Framework's meter, when it ran (1.151.0)."""
+    rate = rec.counter("rimworld.ticks")
+    if not rate:
+        report.lines.append(NO_GAME_COUNTERS)
+        return
+    rows = [("Ticks a second", f"{rate[0]:,.0f}", f"slowest second {rec.counter_low('rimworld.ticks') or 0:,.0f}")]
+    frames = rec.counter("rimworld.frames")
+    if frames:
+        rows.append(("Frames a second", f"{frames[0]:,.0f}", f"slowest second {rec.counter_low('rimworld.frames') or 0:,.0f}"))
+    worst = rec.counter("rimworld.frame.worst")
+    if worst:
+        rows.append(("Each second's longest frame", f"{worst[0]:,.1f} ms on average", f"longest {worst[1]:,.1f} ms"))
+    speed = rec.counter("rimworld.speed")
+    if speed:
+        rows.append(("Game speed", perf.SPEEDS.get(round(speed[0]), f"{speed[0]:.1f}"), f"fastest {perf.SPEEDS.get(round(speed[1]), '?')}"))
+    pawns = rec.counter("rimworld.pawns")
+    if pawns:
+        rows.append(("Spawned pawns", f"{pawns[0]:,.0f}", f"most {pawns[1]:,.0f}"))
+    maps = rec.counter("rimworld.maps")
+    if maps:
+        rows.append(("Maps", f"{maps[0]:,.0f}", f"most {maps[1]:,.0f}"))
+    per_tick = ms_per_tick(rec, tick_ms, main)
+    if per_tick is not None:
+        rows.append(("The main thread's ticking, a tick", f"{per_tick:,.2f} ms", "-"))
+    report.section("The game, as it counts itself", "From D'thorga Framework's own meter, read once a second beside the runtime's "
+                   "counters: what the player feels, and what makes two recordings fair to compare.",
+                   Table(["Measure", "Average", "Worst or most"], rows))
+
+
 def summary_report(rec, folder, top, patch_lookup=None):
     phases, ticking = perf.phases()
     main = rec.main_thread()
@@ -760,6 +823,9 @@ def summary_report(rec, folder, top, patch_lookup=None):
                         f"{len(rec.threads)} threads; the main thread is {rec.thread_label(main)}"
                         f"{' (' + role + ')' if (role := rec.thread_role(main, roles)) else ''}, the busiest running managed code.")
     report.lines.append(CAVEAT)
+    said = context_text(meta)
+    if said:
+        report.lines.append(said)
     by_phase = rec.by_phase(samples, phases)
     tick_share = by_phase.get(ticking)
     if tick_share is None or tick_share.total < PAUSED_SHARE * whole:
@@ -802,6 +868,7 @@ def summary_report(rec, folder, top, patch_lookup=None):
         timeline_sections(rec, report, main, top)
     else:
         report.lines.append(NO_TIMELINE.format(name=folder.name))
+    game_section(rec, report, main, tick_share.total if tick_share else 0.0)
     wait_sections(rec, report, main, top, roles)
     allocation_sections(rec, report, main, top)
     counters = _counter_rows(rec)
@@ -872,13 +939,45 @@ def _shares(rec):
     tick_total = sum(v for _, _, v in tick_samples)
     owners = {o: s.total / tick_total for o, s in rec.by_owner(tick_samples).items()} if tick_total else {}
     pause = rec.counter("dotnet.gc.pause.time")
-    return by_phase, owners, pause[0] if pause else None
+    return by_phase, owners, pause[0] if pause else None, ms_per_tick(rec, tick_total, main)
+
+
+LIKE_FOR_LIKE = 0.2                 # pawns or ticks a second differing by more than a fifth make two recordings unlike
+
+
+def _context_rows(before, after):
+    """Rows of what each recording was of, and the ways they differ enough to matter."""
+    def figure(rec, name):
+        found = rec.counter(name)
+        return found[0] if found else None
+    rows, unlike = [], []
+    for label, key in (("RimWorld", "game_version"), ("Save", "save"), ("Mods active", "mods_active")):
+        a, b = before.meta.get(key) or "-", after.meta.get(key) or "-"
+        rows.append((label, a, b))
+        if a != "-" and b != "-" and a != b:
+            unlike.append(f"{label.lower()} {a} against {b}")
+    for label, name in (("Game speed", "rimworld.speed"), ("Spawned pawns", "rimworld.pawns"), ("Ticks a second", "rimworld.ticks")):
+        a, b = figure(before, name), figure(after, name)
+        text = (lambda v: perf.SPEEDS.get(round(v), f"{v:.1f}")) if name == "rimworld.speed" else (lambda v: f"{v:,.0f}")
+        rows.append((label, text(a) if a is not None else "-", text(b) if b is not None else "-"))
+        if a is None or b is None:
+            continue
+        if name == "rimworld.speed" and round(a) != round(b):
+            unlike.append(f"game speed {text(a)} against {text(b)}")
+        elif name == "rimworld.pawns" and max(a, b) and abs(a - b) > LIKE_FOR_LIKE * max(a, b):
+            unlike.append(f"{a:,.0f} pawns against {b:,.0f}")
+    return rows, unlike
 
 
 def compare_report(before, after, names, top):
-    phases_before, owners_before, pause_before = _shares(before)
-    phases_after, owners_after, pause_after = _shares(after)
+    phases_before, owners_before, pause_before, tick_before = _shares(before)
+    phases_after, owners_after, pause_after, tick_after = _shares(after)
     report = Report(f"rimworld-perf: {names[0]} against {names[1]}", [SHARE_NOTE, CAVEAT])
+    rows, unlike = _context_rows(before, after)
+    if unlike:
+        report.lines.insert(0, "**Not like for like: " + "; ".join(unlike) + ".** Differences below may come from that, not from a "
+                               "change.")
+    report.section("What each recording was of", Table(["", "Before", "After"], rows))
     keys = sorted(set(phases_before) | set(phases_after), key=lambda k: k or "~")
     report.section("Parts of the main loop, as shares of the main thread", Table(["Part", "Before", "After", "Change (points)"], [
         (k or "other", f"{100 * phases_before.get(k, 0):.1f}%", f"{100 * phases_after.get(k, 0):.1f}%",
@@ -888,6 +987,17 @@ def compare_report(before, after, names, top):
     report.section("Who caused the ticking time, largest changes first", Table(["Caused by", "Kind", "Before", "After", "Change (points)"], [
         (o.name, o.kind, f"{100 * owners_before.get(o, 0):.1f}%", f"{100 * owners_after.get(o, 0):.1f}%",
          points(100 * (owners_after.get(o, 0) - owners_before.get(o, 0)))) for o in changes[:top]], len(changes)))
+    if tick_before is not None and tick_after is not None:
+        report.lines.append(f"**The main thread's ticking took {tick_before:,.2f} ms a tick, then {tick_after:,.2f} ms** "
+                            f"({points(100 * (tick_after - tick_before) / tick_before) if tick_before else '?'}%), from the game's "
+                            "own tick count.")
+        per_tick = sorted(owners, key=lambda o: (-abs(owners_after.get(o, 0) * tick_after - owners_before.get(o, 0) * tick_before), o.name))
+        report.section("Who caused the ticking time, in milliseconds a tick", "A mod's share of ticking times the main thread's "
+                       "ticking a tick: unlike shares, it does not move when another mod gets cheaper.",
+                       Table(["Caused by", "Kind", "Before (ms a tick)", "After (ms a tick)", "Change (ms)"], [
+                           (o.name, o.kind, f"{owners_before.get(o, 0) * tick_before:.3f}", f"{owners_after.get(o, 0) * tick_after:.3f}",
+                            f"{owners_after.get(o, 0) * tick_after - owners_before.get(o, 0) * tick_before:+.3f}") for o in per_tick[:top]],
+                             len(per_tick)))
     if pause_before is not None and pause_after is not None:
         report.lines.append(f"Time paused for garbage collection: {100 * pause_before:.1f}%, then {100 * pause_after:.1f}%.")
     return report
@@ -990,10 +1100,11 @@ def _record(args, root, environ, settings_file, run, popen, now):
     trace_tool, counters_tool, installed = dd.ensure_tools(environ, run)
     folder = new_folder(root, args.label, now)
     speedscope, counters_file, notes = dd.record(pid, args.seconds, folder, trace_tool, counters_tool, popen,
-                                                 providers=dotnet_events.runtime_provider(args.alloc))
+                                                 providers=dotnet_events.runtime_provider(args.alloc), counters=perf.COUNTER_SETS)
     meta = {"kit_version": __version__, "recorded_at": now.strftime("%Y-%m-%d %H:%M:%S"), "seconds": args.seconds,
             "label": args.label or "", "pid": pid, "game_name": perf.GAME_NAME, "tools_version": dd.TOOLS_VERSION,
-            "lock_events": "yes", "allocation_events": "yes" if args.alloc else ""}
+            "lock_events": "yes", "allocation_events": "yes" if args.alloc else "",
+            **_context(args, environ, settings_file, now)}
     notes = notes + build_index(folder, speedscope, counters_file, meta, args, environ, settings_file, folder / dd.TRACE_FILE)
     if not args.keep_speedscope:
         derived.remove(speedscope)
@@ -1002,6 +1113,20 @@ def _record(args, root, environ, settings_file, run, popen, now):
     if installed:
         notes.insert(0, f"Installed dotnet-trace and dotnet-counters {dd.TOOLS_VERSION} into {dd.tools_folder(environ)} first.")
     return folder, notes
+
+
+def _context(args, environ, settings_file, now):
+    """The recording's context (perf.context): the game's version, the save, the mods. Best effort."""
+    from . import paths
+    try:
+        logs = Path(paths.logs_path(None, environ, settings_file)) / paths.LOG_NAME
+    except Exception:  # noqa: BLE001
+        logs = None
+    try:
+        config = Path(paths.config_path(args.config, environ, settings_file)) / "ModsConfig.xml"
+    except Exception:  # noqa: BLE001
+        config = None
+    return perf.context(logs, config, now.strftime("%Y-%m-%d %H:%M:%S")) if logs or config else {}
 
 
 def _index(args, root, environ, settings_file, now):
