@@ -104,6 +104,7 @@ recorders are out of scope) are in `AGENTS.md`, "What belongs here".
 | `crashdump.py`, `windows_dumps.py`, `zeroed.py` | Windows crash dumps; Windows' dump setting; files a crash left full of zeros |
 | `mod_list.py`, `mod_lists.py`, `mod_runs.py`, `mod_sort.py`, `mod_settings.py`, `mod_databases.py`, `workshop_updates.py` | A game's active-mod list checked, kept, compared and sorted; a mod's settings read from its source, through the adapter; the community lists a mod manager downloads, fetched by the kit (1.144.0); `workshop_updates.py`, the Workshop items Steam has not brought up to date (1.147.0) |
 | `installs.py`, `install_checks.py`, `backup_archive.py` | A repository's installed mods, their records and zipped backups, and what moving between them changes |
+| `packed.py` | Files kept compressed with zstd, checked before anything is let go: one file packed in place, or a store keeping each file once (1.149.0) |
 | `changes.py`, `history.py`, `makeup.py`, `pins.py`, `repos.py` | The code behind a changelog entry; products over time; what a repository is made of; kit pins; each repository against its remote |
 | `testpass.py`, `testpass_code.py`, `artaudit.py` | The in-game test list with its evidence and verdicts; every shipped image with its record |
 | `checks.py`, `checks_live.py` | Rules written as data that say when a game's saved or running state is wrong: a small safe language, judging and the report; save adapters read the values, and live checks ask the heap reader for every check at once from one snapshot ([checks](checks.md)) |

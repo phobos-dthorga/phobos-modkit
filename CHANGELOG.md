@@ -6,6 +6,14 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [1.149.0] - 2026-11-28
 
+### Added
+
+- **records keeps each file once, compressed** (the owner's choices by card, 28 Nov 2026: "Store-once", and "Convert, checked
+  first" for the copies already made). Each copy is now one small list beside a shared `store/`; 24 copies as plain folders measured
+  155 MB, kept once about 10.5 MB. `restore` writes a copy out to an empty folder, `pack --apply` turns the old folder copies into
+  store copies (each checked before its folder goes) and `tidy --apply` lets go of kept files no copy names. How:
+  [records](docs/records.md). The game-free helper is `packed`.
+
 ### Changed
 
 - **The kit needs Python 3.14 or newer** (the owner's choice by card, 28 Nov 2026: "Raise the floor to 3.14"; it was 3.10), so
