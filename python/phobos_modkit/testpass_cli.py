@@ -23,7 +23,7 @@ import os
 from pathlib import Path
 import sys
 
-from . import checks as check_engine, checks_live, connections, testpass, testpass_code
+from . import cache as derived, checks as check_engine, checks_live, connections, testpass, testpass_code
 from .progress import Progress
 from .manifest import READS, WRITES
 from .paths import COMPANION_ID, companion_data, resolve  # noqa: F401  (COMPANION_ID: read by callers)
@@ -206,8 +206,11 @@ def saved_notes(config, environ, settings, skip=False, root=None):
         return [], [], [f"The game {game} has no reader for saved histories, so its saves were not read."]
     figures, problem = figure_checks(root, game) if root else ([], None)
     sentences = [problem] if problem else []
+    # The check file's digest lets the adapter keep each save's answer while nothing it came from changed (1.147.1).
+    check_file = Path(root) / check_engine.CHECK_FILE if root else None
+    checks_sha = derived.digest(check_file) if check_file and check_file.is_file() else ("" if not figures else None)
     try:
-        notes, read = adapter.for_test_pass(saved, environ, settings, Progress(environ), figures)
+        notes, read = adapter.for_test_pass(saved, environ, settings, Progress(environ), figures, checks_sha)
     except adapter.SavedError as error:
         raise testpass.TestPassError(f"{testpass.CONFIG}: {error}") from None
     except Exception as error:  # noqa: BLE001 - a save that cannot be read must not stop the report

@@ -144,6 +144,23 @@ class Evidence(unittest.TestCase):
         finally:
             repo.close()
 
+    def test_a_part_looks_only_at_its_keys_notes_and_judges_the_same(self):
+        """1.147.1: the index by key narrows the notes a part looks at; the answer, and its notes' order, are the same."""
+        notes = [testpass.Note("a.x", "2026-11-01T00:00:00Z", "M", "1.0.0", "one"),
+                 testpass.Note("b.y", "2026-11-02T00:00:00Z", "M", "1.0.0", "two"),
+                 testpass.Note("a.x", "2026-11-03T00:00:00Z", "M", "0.9.0", "three"),
+                 testpass.Note("c.z", "2026-11-04T00:00:00Z", "M", "1.0.0", "four", variant="hot"),
+                 testpass.Note("b.y", "2026-11-05T00:00:00Z", "M", "1.0.0", "five")]
+        by_key = testpass.index_by_key(notes)
+        self.assertEqual(by_key, {"a.x": [0, 2], "b.y": [1, 4], "c.z": [3]})
+        versions = {"M": (1, 0, 0)}
+        for items in ((testpass.Item("a.x"),), (testpass.Item("b.y"), testpass.Item("a.x")), (testpass.Item("c.z", "cold"),),
+                      (testpass.Item("c.z", "hot"),), (testpass.Item("none"),)):
+            part = testpass.Part("p", items)
+            self.assertEqual(testpass.check_part(part, notes, versions, by_key), testpass.check_part(part, notes, versions))
+        both = testpass.check_part(testpass.Part("p", (testpass.Item("b.y"), testpass.Item("a.x"))), notes, versions, by_key)
+        self.assertEqual([n.detail for n in both.good], ["one", "two", "five"])
+
 
 class Applying(unittest.TestCase):
     def test_a_verdict_replaces_the_awaiting_note_and_keeps_the_note(self):

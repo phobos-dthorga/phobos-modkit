@@ -571,7 +571,19 @@ def kinds_of(notes):
     return sorted({n.kind or n.detail.split(":")[0].strip() for n in notes if n.kind or n.detail.split(":")[0].strip()})
 
 
-def check_part(part, notes, versions):
+def index_by_key(notes):
+    """Each note's place in the list, under its key: a part can match only notes with one of its items' keys, so it looks at those
+    alone, in the list's order (1.147.1; every part scanning every note took most of a minute on a long-kept list)."""
+    found = {}
+    for place, note in enumerate(notes):
+        found.setdefault(note.key, []).append(place)
+    return found
+
+
+def check_part(part, notes, versions, by_key=None):
+    """How one part of a row stands. `by_key`, from `index_by_key(notes)`, narrows the notes first; the answer is the same."""
+    if by_key is not None:
+        notes = [notes[place] for place in sorted({place for item in part.items for place in by_key.get(item.key, ())})]
     matched = [n for n in notes if any(item.matches(n) for item in part.items)]
     stale = [n for n in matched if is_stale(n, versions)]
     fresh = [n for n in matched if not is_stale(n, versions)]
@@ -634,11 +646,12 @@ def gather(root, seen_paths, verdict_paths, config=None, given=(), decision_path
         verdicts[verdict.row] = verdict
     names = config.get("versionNames") or {}
     checks = {}
+    by_key = index_by_key(notes)
     for row in rows:
         parts = mapping.get(row.id)
         if parts:
             versions = row_versions(row, names)
-            checks[row.id] = RowCheck([check_part(p, notes, versions) for p in parts], versions)
+            checks[row.id] = RowCheck([check_part(p, notes, versions, by_key) for p in parts], versions)
     order, unchecked = check_order(rules, notes)
     unrowed = {str(k): str(v) for k, v in (config.get("unrowed") or {}).items()}
     mapped = {item.key for parts in mapping.values() for part in parts for item in part.items}

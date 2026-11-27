@@ -4,6 +4,17 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.147.1] - 2026-11-28
+
+### Fixed
+
+- **test-pass and the code map read much faster, with the same answers** (the owner's speed round for D'thorga Companion, 28 Nov
+  2026: "it's becoming quite a dire need"). On phobos-rimworld, `test-pass report` took about 44 s and `test-pass code` 38 s. Each
+  test row's part now looks only at notes with its own keys, not all 97,000 (that step went from about 33 s to 1.6 s). Each save's
+  notes and figures are kept beside its index while the save, the evidence map and the check file are unchanged, taking the report
+  to about 2 s once kept. A code-map rebuild no longer remakes its table of base types for every virtual method (38 s to 11 s).
+  Checked equal on the owner's repository: every part of every row, and each save's kept answer against a fresh read.
+
 ## [1.147.0] - 2026-11-28
 
 ### Added

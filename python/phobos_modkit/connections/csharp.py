@@ -132,6 +132,9 @@ def read(root, graph, environ=None):
 
 def read_built(graph, call_records, patch_records, places):
     ours = {t["name"] for record in call_records for t in record.get("types", [])}
+    # Read once for every virtual method (1.147.1): made afresh for each, they took ten seconds on a large repository.
+    bases = {t["name"]: t["base"] for record in call_records for t in record.get("types", [])}
+    declared = {(m["type"], m["name"]) for record in call_records for m in record.get("methods", [])}
 
     def member_node(type_name, il_name, assembly=None):
         name, kind = member_of(type_name, il_name)
@@ -181,7 +184,7 @@ def read_built(graph, call_records, patch_records, places):
                     graph.ensure(field_id, f"{_short(used['type'])}.{used['name']}", "field", LANGUAGE, assembly=used.get("assembly"))
                 graph.link(caller.id, field_id, "uses")
             if m.get("virtual"):
-                _link_override(graph, call_records, m, caller, ours, member_node)
+                _link_override(graph, bases, declared, m, caller, ours, member_node)
     for record in patch_records:
         for patch in record.get("patches", []):
             if not patch.get("targetType") or not patch.get("targetMember") or not patch.get("patchClass"):
@@ -196,10 +199,9 @@ def read_built(graph, call_records, patch_records, places):
             graph.link(patch_node.id, target.id, "patches")
 
 
-def _link_override(graph, call_records, method, caller, ours, member_node):
-    """A virtual method overrides its base type's method of the same name: exact within the repository, by name outside it."""
-    bases = {t["name"]: t["base"] for record in call_records for t in record.get("types", [])}
-    declared = {(m["type"], m["name"]) for record in call_records for m in record.get("methods", [])}
+def _link_override(graph, bases, declared, method, caller, ours, member_node):
+    """A virtual method overrides its base type's method of the same name: exact within the repository, by name outside it.
+    `bases` maps each of our types to its base; `declared` holds every (type, method) our code declares."""
     base = bases.get(method["type"])
     while base and base not in SKIPPED_BASES:
         if base in ours:

@@ -16,13 +16,22 @@ order rules sort by tick within one save's time. The mapping lives in the reposi
 **Figures from save checks** (1.129.0): a save check with a `note` (`checks.py`) gives one note per thing it applies to, in each save
 read, with the save's time and the version its ledger says was running when it was saved. Unlike a history's items, each save's
 figures are their own note: a figure is a state at a moment, so the same thing in two saves is two readings.
+
+**Each save's answer is kept** (1.147.1): what one save gave is kept beside its index in the kit's cache, with the save's size and
+time, the evidence map's saved section, the figure checks' file and the kit's version, and used again while all of them are as they
+were. Reading four saves took about ten seconds every time the test list was read, though a save changes only when the game saves.
 """
 from __future__ import annotations
 
 from contextlib import closing
 from datetime import datetime, timezone
+import hashlib
+import json
+import os
 import re
+import sqlite3
 
+from ... import __version__
 from ... import cache as derived
 from ...checks import notes_of
 from . import paths
@@ -33,6 +42,7 @@ from . import save_thing
 DEFAULT_SAVES = 4
 FORMAT = 1
 _TEMPLATE = re.compile(r"\{(\w+)\}")
+ANSWER_SUFFIX = ".notes.sqlite"     # one save's notes and figures, beside its index (1.147.1)
 
 
 class SavedError(ValueError):
@@ -179,25 +189,87 @@ def _read_one(conn, save, meta, sources, ledger_key, figure_checks):
     return found, figures_from_save(conn, save, meta, figure_checks, ledger_key), has_ledger
 
 
-def gather(saved, folder, cache, indexer=None, environ=None, progress=None, figure_checks=()):
+def answer_for(cache, save):
+    """Where one save's kept answer lives: beside its index, so the kit's cleanup judges it as it judges the index."""
+    return saves.index_for(cache, save).with_name(f"{save.stem}{ANSWER_SUFFIX}")
+
+
+def rules_digest(saved, checks_sha=""):
+    """A short hash of what decides a save's answer besides the save and the kit: the saved section and the figure checks' file."""
+    text = json.dumps(saved, sort_keys=True, default=str) + "\n" + (checks_sha or "")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def _answer_key(save, rules):
+    """The provenance a kept answer must carry to be used: the save as it is now (the index's own keys, so the cleanup's stale
+    check reads it unchanged), the rules and the kit."""
+    return {**saves.provenance(save), "source": save.name, "rules_sha": rules, "kit_version": __version__,
+            "notes_format": FORMAT}
+
+
+def _kept(cache, save, key):
+    """(found, figures, has_ledger) as kept for the save, or None when there is none or it no longer matches."""
+    path = answer_for(cache, save)
+    try:
+        if not derived.is_current(path, key):
+            return None
+        with closing(derived.open_read_only(path)) as conn:
+            (text,) = conn.execute("SELECT answer FROM answer").fetchone()
+        found, figures, has_ledger = json.loads(text)
+        return found, figures, bool(has_ledger)
+    except (OSError, sqlite3.Error, ValueError, TypeError):
+        return None
+
+
+def _keep(cache, save, key, answer):
+    """Keeps a save's answer, written whole beside its index and moved into place; a failure only means it is read again."""
+    path = answer_for(cache, save)
+    temporary = path.with_name(f"{path.name}.building")
+    try:
+        derived.remove(temporary)
+        with closing(sqlite3.connect(temporary)) as conn:
+            conn.execute("CREATE TABLE answer (answer TEXT)")
+            conn.execute("INSERT INTO answer VALUES (?)", (json.dumps(answer),))
+            derived.write_meta(conn, key)
+            conn.commit()
+        os.replace(temporary, path)
+    except (OSError, sqlite3.Error):
+        derived.remove(temporary)
+
+
+def _read_save(save, cache, indexer, environ, sources, ledger_key, figure_checks):
+    index, _ = saves.ensure(save, cache, indexer, environ)
+    with closing(saves.open_read_only(index)) as conn:
+        try:
+            return _read_one(conn, save, saves.read_meta(index), sources, ledger_key, figure_checks)
+        except save_thing.ThingError:
+            pass
+    index, _ = saves.ensure(save, cache, indexer, environ, True)     # saved again while it was being read: once more
+    with closing(saves.open_read_only(index)) as again:
+        return _read_one(again, save, saves.read_meta(index), sources, ledger_key, figure_checks)
+
+
+def gather(saved, folder, cache, indexer=None, environ=None, progress=None, figure_checks=(), checks_sha=None):
     """(notes, sources read): the notes from the newest saves the saved section names, each item once, from the oldest save
     holding it, and each save's figures from the figure checks (1.129.0). sources read is one row per save: (name, notes, whether
-    it held a ledger)."""
+    it held a ledger). `checks_sha`, the figure checks' file's digest, lets each save's answer be kept (1.147.1); without it, figure
+    checks are read afresh every time."""
     sources, ledger_key, count = check_config(saved)
     chosen = list(reversed(saves.saves_in(folder)[:count]))     # oldest first, so an item keeps its first save
+    rules = rules_digest(saved, checks_sha) if checks_sha is not None or not figure_checks else None
     seen, notes, read = set(), [], []
     for n, save in enumerate(chosen, 1):
         if progress:
             progress(f"Reading {save.name} for its saved histories", n, len(chosen))
-        index, _ = saves.ensure(save, cache, indexer, environ)
-        with closing(saves.open_read_only(index)) as conn:
-            try:
-                found, figures, has_ledger = _read_one(conn, save, saves.read_meta(index), sources, ledger_key, figure_checks)
-            except save_thing.ThingError:
-                index, _ = saves.ensure(save, cache, indexer, environ, True)     # saved again while it was being read: once more
-                with closing(saves.open_read_only(index)) as again:
-                    found, figures, has_ledger = _read_one(again, save, saves.read_meta(index), sources, ledger_key,
-                                                           figure_checks)
+        key = _answer_key(save, rules) if rules else None
+        kept = _kept(cache, save, key) if key else None
+        if kept:
+            found, figures, has_ledger = kept
+        else:
+            found, figures, has_ledger = _read_save(save, cache, indexer, environ, sources, ledger_key, figure_checks)
+            # Kept only when the save did not change while it was read.
+            if key and _answer_key(save, rules) == key:
+                _keep(cache, save, key, [found, figures, has_ledger])
         fresh = 0
         for note in found:
             identity = (note["on"], note["key"], note.get("variant", ""), note["tick"])
@@ -210,10 +282,10 @@ def gather(saved, folder, cache, indexer=None, environ=None, progress=None, figu
     return notes, read
 
 
-def for_test_pass(saved, environ=None, settings_file=None, progress=None, figure_checks=()):
+def for_test_pass(saved, environ=None, settings_file=None, progress=None, figure_checks=(), checks_sha=None):
     """What test-pass calls (testpass_cli): the notes from the player's own Saves folder and the kit's index cache, found as every
     save tool finds them, with the figure checks' notes (1.129.0). Raises SavedError for a section that cannot be used,
     saves.SaveError when there is no Saves folder."""
     folder = paths.saves_path(None, environ, settings_file)
     cache = derived.folder(saves.CACHE_FOLDER, None, environ, settings_file)
-    return gather(saved, folder, cache, None, environ, progress, figure_checks)
+    return gather(saved, folder, cache, None, environ, progress, figure_checks, checks_sha)

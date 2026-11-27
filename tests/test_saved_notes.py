@@ -95,6 +95,43 @@ class FromSaves(unittest.TestCase):
         self.assertEqual({n["version"] for n in notes}, {"0"})
         self.assertFalse(any(ledger for _, _, ledger in read))
 
+    def test_each_saves_answer_is_kept_and_used_again_until_something_changes(self):
+        """1.147.1: a save's answer is kept beside its index; the same save and rules give it back without reading the save."""
+        first = saved_notes.for_test_pass(SAVED, self.environ, checks_sha="")
+        cache = self.cache / "rimworld-saves"
+        kept = sorted(p.name for p in cache.glob(f"*{saved_notes.ANSWER_SUFFIX}"))
+        self.assertEqual(kept, ["Newer.notes.sqlite", "Older.notes.sqlite"])
+        original = saved_notes._read_save
+        try:
+            saved_notes._read_save = lambda *a, **k: self.fail("a kept answer was not used")
+            self.assertEqual(saved_notes.for_test_pass(SAVED, self.environ, checks_sha=""), first)
+        finally:
+            saved_notes._read_save = original
+        # Other rules, or a save saved again, read the save afresh.
+        read = []
+        saved_notes._read_save = lambda *a, **k: read.append(a[0].name) or original(*a, **k)
+        try:
+            saved_notes.for_test_pass(SAVED, self.environ, checks_sha="another check file")
+            self.assertEqual(read, ["Older.rws", "Newer.rws"])
+            read.clear()
+            os.utime(self.newer, (time.time() + 5, time.time() + 5))
+            saved_notes.for_test_pass(SAVED, self.environ, checks_sha="another check file")
+            self.assertEqual(read, ["Newer.rws"])
+        finally:
+            saved_notes._read_save = original
+
+    def test_figure_checks_with_no_digest_of_their_file_are_never_kept(self):
+        """Without the check file's digest a changed check could not be told from the kept answer, so nothing is kept."""
+        cache = self.cache / "rimworld-saves"
+        original = saved_notes._read_save
+        saved_notes._read_save = lambda *a, **k: ([], [], False)
+        try:
+            saved_notes.gather(SAVED, self.saves, cache, None, self.environ, None, figure_checks=["a stand-in check"],
+                               checks_sha=None)
+        finally:
+            saved_notes._read_save = original
+        self.assertEqual(list(cache.glob(f"*{saved_notes.ANSWER_SUFFIX}")), [])
+
     def test_test_pass_reads_them_judges_their_age_and_orders_them_by_tick(self):
         repo = Path(self.tmp.name) / "repo"
         (repo / "config").mkdir(parents=True)
