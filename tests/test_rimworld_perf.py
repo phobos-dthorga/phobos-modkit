@@ -142,6 +142,37 @@ class RecordingTests(unittest.TestCase):
         self.assertEqual(2, count)
         self.assertEqual({"gc.heap.generation=gen0"}, set(self.rec.counters_named("dotnet.gc.collections")))
 
+    def test_a_method_is_matched_by_its_end_or_by_wildcards(self):
+        match = sampling.method_matcher("PawnCapacityUtility.CalculateCapacityLevel")
+        self.assertTrue(match("Verse.PawnCapacityUtility.CalculateCapacityLevel"))
+        self.assertFalse(match("Verse.OtherPawnCapacityUtility.CalculateCapacityLevel"))
+        self.assertTrue(sampling.method_matcher("*capacity*")("Verse.PawnCapacityUtility.CalculateCapacityLevel"))
+        # Brackets in generic names are plain text, never a character class.
+        self.assertTrue(sampling.method_matcher("List`1[System.__Canon].Add")("System.Collections.Generic.List`1[System.__Canon].Add"))
+        self.assertFalse(sampling.method_matcher("Tick")("Verse.TickManager.DoSingleTick"))
+
+    def test_callers_of_a_patched_game_method(self):
+        found = self.rec.callers(self.samples, sampling.method_matcher("Pawn.Tick"))
+        self.assertEqual(70, round(found.total.total, 3))
+        self.assertEqual({"Verse.TickManager.DoSingleTick": 70}, {m: round(s.total, 3) for (m, _), s in found.direct.items()})
+        self.assertEqual({sampling.NO_MOD: 70}, {o: round(s.total, 3) for o, s in found.inner.items()})
+        self.assertEqual({"Verse.PawnCapacityUtility.CalculateCapacityLevel": 40, "System.Collections.Generic.List`1[System.__Canon].Add": 20,
+                          "Verse.Pawn.Tick": 10}, {m: round(s.total, 3) for (m, _), s in found.leaf.items()})
+
+    def test_callers_name_the_mods_above(self):
+        found = self.rec.callers(self.samples, sampling.method_matcher("CalculateCapacityLevel"))
+        self.assertEqual({"Example.Dosing.DoseService.MakeJob": 40}, {m: round(s.total, 3) for (m, _), s in found.owned.items()})
+        self.assertEqual({"Example Medical": 40}, {o.name: round(s.total, 3) for o, s in found.inner.items()})
+        self.assertEqual({"Example Medical": 40}, {o.name: round(s.total, 3) for o, s in found.outer.items()})
+
+    def test_hot_spots_put_game_time_back_together(self):
+        spots = {m: (round(s.total.total, 3), {o.name or "none": round(v.total, 3) for o, v in s.mods.items()})
+                 for (m, _), s in self.rec.hot_spots(self.samples).items()}
+        # A mod's own work (the postfix calling a .NET list) is not a hot spot: its busiest methods show it.
+        self.assertEqual({"Verse.PawnCapacityUtility.CalculateCapacityLevel": (40, {"Example Medical": 40}),
+                          "Verse.Pawn.Tick": (10, {"none": 10}), "Waylith.Rendering.Submit": (30, {"none": 30}),
+                          "Verse.Root_Play.Update": (10, {"none": 10})}, spots)
+
     def test_a_file_that_is_not_a_trace(self):
         bad = Path(self.tmp) / "bad.json"
         bad.write_text('{"profiles": []}', encoding="utf-8")
@@ -240,6 +271,24 @@ class CommandTests(unittest.TestCase):
         code, text = self.run_cli("list", *self.common)
         self.assertIn("20261117-190000-after", text)
         self.assertLess(text.index("20261117-190000-after"), text.index("20261117-180000-before"))
+
+    def test_callers_and_hot_spots(self):
+        self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--label", "one", *self.common)[0])
+        code, text = self.run_cli("callers", "CalculateCapacityLevel", *self.common)
+        self.assertEqual(perf_cli.EXIT_OK, code, text)
+        self.assertIn("**40 ms on the main thread (36.4% of it)**", text)
+        self.assertIn("| Example Medical | 40 | 100.0% |", text)
+        self.assertIn("| ticking (the simulation) | 40 | 100.0% |", text)
+        code, text = self.run_cli("callers", "Nothing.Like.It", *self.common)
+        self.assertEqual(perf_cli.EXIT_FAILED, code)
+        self.assertIn("add --all-threads", text)
+        code, text = self.run_cli("callers", "WaitHandle.WaitOne", "--all-threads", *self.common)
+        self.assertEqual(perf_cli.EXIT_OK, code, text)
+        self.assertIn("| thread 200 | 100 | 100.0% |", text)
+        code, text = self.run_cli("report", *self.common)
+        self.assertIn("| Verse.PawnCapacityUtility.CalculateCapacityLevel | RimWorld | 40 | 57.1% | "
+                      "Verse.PawnCapacityUtility.CalculateCapacityLevel (100.0%) | Example.Dosing.DoseService.MakeJob (100.0%) | "
+                      "Example Medical 40 ms |", text)
 
     def test_pack_and_unpack_what_was_kept_plain(self):
         # The owner's choice by card (28 Nov 2026): recordings and heaps alike, "Compress them too".

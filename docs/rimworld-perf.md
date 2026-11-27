@@ -26,6 +26,7 @@ python -m phobos_modkit rimworld-perf record                       30 seconds of
 python -m phobos_modkit rimworld-perf record --seconds 60 --label "many wounded"
 python -m phobos_modkit rimworld-perf report                       the newest recording again (or name one by ID or label)
 python -m phobos_modkit rimworld-perf mod "Combat Extended"        one mod: its busiest methods and where its time went
+python -m phobos_modkit rimworld-perf callers GenTypes.IsSealedWithCache   what calls one method, and the mods above it
 python -m phobos_modkit rimworld-perf compare                      the last two recordings, as shares
 python -m phobos_modkit rimworld-perf compare before after         two recordings by ID or label
 python -m phobos_modkit rimworld-perf list                         every recording kept
@@ -64,6 +65,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `record` | Record the running game, then report it. Attaches Microsoft's dotnet-trace and dotnet-counters to the running game; it changes nothing in it. | runs other programs |
 | `index` | Index a speedscope file recorded by hand with dotnet-trace. | reads only |
 | `mod` | One mod in a recording. | reads only |
+| `callers` | How the stacks running one method reach it, and the mods above it. | reads only |
 | `compare` | Two recordings, as shares of the main thread and of ticking. | reads only |
 | `list` | Every recording and snapshot kept. | reads only |
 | `pack` | Pack the large files of recordings and heaps kept plain (before 1.149.0). With `--apply`, packs each recording's trace and each heap's own files with zstd in the kit's cache, removing a plain file only once its packed one reads back the same; without, only says. | writes |
@@ -102,7 +104,9 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--counters VALUE` | `index` | dotnet-counters' JSON file from the same time |  |
 | `--label VALUE` | `index` | a few words to find the recording by |  |
 | `NAME` | `mod` | a mod's name; \* and ? are wildcards |  |
-| `RECORDING` | `mod` | (optional) a recording's ID or label; the newest when left out |  |
+| `RECORDING` | `mod`, `callers` | (optional) a recording's ID or label; the newest when left out |  |
+| `METHOD` | `callers` | Namespace.Type.Method, or its end (GenTypes.IsSealedWithCache); \* and ? are wildcards |  |
+| `--all-threads` | `callers` | every thread, not only the main one |  |
 | `FIRST` | `compare` | (optional) the earlier recording; the second newest when both are left out |  |
 | `SECOND` | `compare` | (optional) the later recording; the newest when both are left out |  |
 | `--apply` | `pack` | pack them; without this, only say which and how large |  |
@@ -163,6 +167,17 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
   often; the second does the work. The first recording of the owner's game (17 November 2026) needed it: Search and Rescue called
   Smart Medicine's medicine search inside a scoring loop, and the caused-by table alone named only Smart Medicine.
 - **Where the thread was** is the method running when the sample was taken: the place to look for the slow line.
+- **Hot spots** (1.151.0) put back together what **caused by** scatters: time in one game or engine method, or in .NET code it
+  called, with where the thread mostly was, what called it and the mods that lead to it. Caused by gives such time to whichever mod
+  is innermost above it, a little to each, so a slow game method that many mods call shows nowhere else. The owner's recording of
+  18 November 2026 needed it: 49% of ticking was the game's own `GenTypes.IsSealedWithCache`, which `ThingWithComps.GetComp` calls
+  and which takes a lock on every call, spread over 47 mods' calls of `GetComp` and listed only as .NET's
+  `Monitor.Enter_Slowpath`. A game or engine method is listed at 2% of ticking or more.
+- **`callers METHOD`** (1.151.0) follows one method: its total, the parts of the loop it ran in, what called it directly, the
+  first game, engine or mod method above it (passing over .NET and libraries such as Harmony), the innermost and the outermost
+  mods above it, and where its time went below it. A name without wildcards matches the end of a method's name after a dot
+  (`GenTypes.IsSealedWithCache`); `*` and `?` are the only wildcards, since generic names hold brackets. `--all-threads` looks
+  at every thread, with a table by thread.
 - **Running managed code** against **in native code or waiting**: the runtime marks each sample. Native time is the engine,
   the operating system, garbage collection or a wait; it is still time the frame took.
 - **Patched game methods** are methods Harmony rewrote, with everything they call. Harmony 2 names them

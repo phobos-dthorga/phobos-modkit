@@ -12,6 +12,8 @@ How time is attributed (stated in every report):
   a Harmony prefix or postfix is its own frame, so it counts for the mod that wrote it. Work a transpiler puts inside a game method,
   and code the compiler inlined into its caller, cannot be seen apart.
 - **Spent in** is the frame the thread was in when sampled.
+- **Callers** and **hot spots** (1.151.0) walk a stack upwards from a method, passing over .NET's and libraries' frames, to name
+  the game, engine or mod method a piece of work belongs to, and the mods above it.
 - Sampling sees about one stack per millisecond per thread, so a method that ran for less than that can be missed or over-counted
   by chance; totals over a recording of many seconds are reliable to a few percent.
 """
@@ -81,6 +83,17 @@ def split_frame(name):
 def type_of(method):
     """Namespace.Type of Namespace.Type.Method."""
     return method.rsplit(".", 1)[0] if "." in method else ""
+
+
+def method_matcher(pattern):
+    """A test for a method's name (Namespace.Type.Method), case ignored. * and ? are wildcards and nothing else is: generic names
+    hold brackets (List`1[System.__Canon].CopyTo). A name without wildcards matches itself, or the end of a name after a dot, so
+    GenTypes.IsSealedWithCache finds Verse.GenTypes.IsSealedWithCache."""
+    wanted = pattern.strip().lower()
+    if "*" in wanted or "?" in wanted:
+        found = re.compile("".join(".*" if c == "*" else "." if c == "?" else re.escape(c) for c in wanted), re.DOTALL)
+        return lambda method: found.fullmatch(method.lower()) is not None
+    return lambda method: (low := method.lower()) == wanted or low.endswith("." + wanted)
 
 
 # ---- Reading a speedscope file into the index ----
@@ -227,6 +240,42 @@ class Share:
     def total(self):
         return self.cpu + self.native
 
+    def add(self, kind, ms):
+        if kind == CPU:
+            self.cpu += ms
+        else:
+            self.native += ms
+
+
+# Owners whose frames are passed over when asking "which game, engine or mod method was this, really": .NET's own code and the
+# libraries a mod calls (Harmony), which do work on someone else's behalf.
+PASS_OVER = (RUNTIME, LIBRARY)
+NO_MOD = Owner(MOD, "")             # the key for "no mod on the stack" in the tables below
+
+
+class Callers:
+    """How the stacks running one method reach it, totalled (Recording.callers): each table is {key: Share}."""
+
+    def __init__(self):
+        self.total = Share()
+        self.targets = defaultdict(Share)       # (method, Owner): the methods the name matched
+        self.direct = defaultdict(Share)        # (method, Owner) just above it, or ("", None) at a thread's start
+        self.owned = defaultdict(Share)         # (method, Owner): the first method above that is not .NET's or a library's
+        self.inner = defaultdict(Share)         # Owner: the innermost mod above it, NO_MOD when none
+        self.outer = defaultdict(Share)         # Owner: the outermost mod above it, NO_MOD when none
+        self.leaf = defaultdict(Share)          # (method, Owner): where the thread was, at or below it
+        self.nodes = defaultdict(Share)         # the stack's node where the method was met, for the timeline
+
+
+class HotSpot:
+    """Time in one game or engine method, or in .NET and library code it called (Recording.hot_spots)."""
+
+    def __init__(self):
+        self.total = Share()
+        self.leaf = defaultdict(Share)          # (method, Owner) where the thread was
+        self.caller = defaultdict(Share)        # (method, Owner): the first method above it not .NET's or a library's
+        self.mods = defaultdict(Share)          # Owner: the innermost mod above it, NO_MOD when none
+
 
 class Recording:
     """One indexed recording, read whole into memory: frames, the stack tree, time per stack and the owners of modules."""
@@ -342,6 +391,85 @@ class Recording:
             node = self.parent[node]
         frames.reverse()
         return frames
+
+    def nodes_up(self, node):
+        """The stack's nodes from the one sampled up to the thread's start: innermost first."""
+        found = []
+        while node >= 0:
+            found.append(node)
+            node = self.parent[node]
+        return found
+
+    def method_at(self, node):
+        """(method, Owner) of a stack's node."""
+        frame = self.frame_of[node]
+        return self.frames[frame][2], self.owner_of_frame(frame)
+
+    def _first_owned(self, nodes):
+        """The first of nodes (innermost first) whose owner is not .NET or a library, or None."""
+        return next((n for n in nodes if self.owner_of_frame(self.frame_of[n]).kind not in PASS_OVER), None)
+
+    # Where a method is reached from
+
+    def callers(self, samples, matches):
+        """Callers of the method `matches(name)` picks, from samples: what called it, the first game, engine or mod method above it,
+        the mods above it and where the thread was below it. A method on a stack twice (recursion) counts from its outermost call."""
+        found, memo = Callers(), {}
+        for node, kind, ms in samples:
+            site = memo.get(node, False)
+            if site is False:
+                site = memo[node] = self._call_site(node, matches)
+            if site is None:
+                continue
+            target, direct, owned, inner, outer, leaf, at = site
+            for table, key in ((found.targets, target), (found.direct, direct), (found.owned, owned), (found.inner, inner),
+                               (found.outer, outer), (found.leaf, leaf), (found.nodes, at)):
+                table[key].add(kind, ms)
+            found.total.add(kind, ms)
+        return found
+
+    def _call_site(self, node, matches):
+        ups = self.nodes_up(node)
+        at = next((i for i in range(len(ups) - 1, -1, -1) if matches(self.frames[self.frame_of[ups[i]]][2])), None)
+        if at is None:
+            return None
+        above = ups[at + 1:]
+        owned = self._first_owned(above)
+        inner = self.label(above[0]) if above else None
+        outer = self.outermost_mod(above[0]) if above else None
+        return (self.method_at(ups[at]), self.method_at(above[0]) if above else ("", None),
+                self.method_at(owned) if owned is not None else ("", None),
+                inner if inner is not None and inner.kind == MOD else NO_MOD, outer or NO_MOD, self.method_at(ups[0]), ups[at])
+
+    def hot_spots(self, samples):
+        """{(method, Owner): HotSpot} for game and engine methods: the time the thread spent in each, or in .NET and library code it
+        called, with where the thread was, what called it and the mods above it. Caused by gives this time to the innermost mod
+        above, a little to each; put back together, one slow game method that many mods call stands out."""
+        found, memo = defaultdict(HotSpot), {}
+        for node, kind, ms in samples:
+            site = memo.get(node, False)
+            if site is False:
+                site = memo[node] = self._hot_site(node)
+            if site is None:
+                continue
+            anchor, leaf, caller, mod = site
+            spot = found[anchor]
+            spot.total.add(kind, ms)
+            spot.leaf[leaf].add(kind, ms)
+            spot.caller[caller].add(kind, ms)
+            spot.mods[mod].add(kind, ms)
+        return dict(found)
+
+    def _hot_site(self, node):
+        ups = self.nodes_up(node)
+        at = self._first_owned(ups)
+        if at is None or self.owner_of_frame(self.frame_of[at]).kind not in (GAME, ENGINE):
+            return None                    # a mod's own work: its busiest methods already show it
+        above = ups[ups.index(at) + 1:]
+        caller = self._first_owned(above)
+        mod = self.label(at)
+        return (self.method_at(at), self.method_at(ups[0]), self.method_at(caller) if caller is not None else ("", None),
+                mod if mod.kind == MOD else NO_MOD)
 
     # Aggregates
 

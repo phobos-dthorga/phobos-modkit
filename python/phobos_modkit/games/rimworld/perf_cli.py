@@ -4,6 +4,7 @@
     rimworld-perf record --seconds 60 --label "many wounded"
     rimworld-perf report                     the newest recording again (or name one: 20261117-1845, or its label)
     rimworld-perf mod "Combat Extended"      one mod in a recording: its busiest methods and where its time went
+    rimworld-perf callers GenTypes.IsSealedWithCache   what calls one method, the mods above it, and where its time goes
     rimworld-perf compare                    the last two recordings, as shares of the main thread and of ticking
     rimworld-perf list                       every recording and snapshot kept
     rimworld-perf pack                       pack the large files of recordings and heaps kept before 1.149.0 (--apply)
@@ -39,6 +40,7 @@ install folder, and nothing else; nothing is written to the game.
 from __future__ import annotations
 
 import argparse
+from collections import defaultdict
 from contextlib import closing
 from datetime import datetime, timezone
 import fnmatch
@@ -59,7 +61,8 @@ from ... import process_memory as pm
 from ...manifest import READS, RUNS, WRITES
 from ...progress import Progress
 from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
-from ...sampling import CPU, MOD, UNKNOWN, Recording, SamplingError, index_speedscope, modules, read_counters, write_counters, write_owners
+from ...sampling import (CPU, MOD, NATIVE, NO_MOD, UNKNOWN, Recording, SamplingError, Share, index_speedscope, method_matcher, modules,
+                         read_counters, write_counters, write_owners)
 from ... import heap_reader as hreader
 from ... import checks as check_engine
 from ... import checks_live
@@ -70,7 +73,7 @@ from . import perf_snapshots as snap
 from . import perf_watch as pw
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
-REPORTS = ("report", "record", "index", "mod", "compare", "list", "stack", "stack-report", "heap", "heap-report", "heap-compare",
+REPORTS = ("report", "record", "index", "mod", "callers", "compare", "list", "stack", "stack-report", "heap", "heap-report", "heap-compare",
            "watch", "watch-report", "watch-status", "watch-stop", "watch-mark", "look", "look-kind", "look-why", "look-serve",
            "look-check", "look-thaw", "pack", "unpack")
 FREEZE_HELP = ("freeze the game and read it in place instead of a snapshot, when Windows has no room to copy it (error 1450); it "
@@ -122,6 +125,10 @@ def _parser():
     m = sub.add_parser("mod", parents=[common], help="one mod in a recording")
     m.add_argument("name", help="a mod's name; * and ? are wildcards")
     m.add_argument("recording", nargs="?", help="a recording's ID or label; the newest when left out")
+    cl = sub.add_parser("callers", parents=[common], help="how the stacks running one method reach it, and the mods above it")
+    cl.add_argument("method", help="Namespace.Type.Method, or its end (GenTypes.IsSealedWithCache); * and ? are wildcards")
+    cl.add_argument("recording", nargs="?", help="a recording's ID or label; the newest when left out")
+    cl.add_argument("--all-threads", action="store_true", help="every thread, not only the main one")
     k = sub.add_parser("compare", parents=[common], help="two recordings, as shares of the main thread and of ticking")
     k.add_argument("first", nargs="?", help="the earlier recording; the second newest when both are left out")
     k.add_argument("second", nargs="?", help="the later recording; the newest when both are left out")
@@ -322,6 +329,103 @@ def _counter_rows(rec):
     return rows
 
 
+HOT_SPOT_SHARE = 0.02               # a hot spot is listed when it took at least 2 % of ticking
+HOT_SPOT_NOTE = ("Time in one game or engine method, or in .NET code it called, put back together. **Caused by** gives this time "
+                 "to whichever mod is innermost above it, a little to each, so a slow game method many mods call shows nowhere "
+                 "else. `rimworld-perf callers METHOD` follows one further.")
+NO_MOD_TEXT = "no mod on the stack"
+START_TEXT = "(the start of the thread)"
+MODS_SHOWN = 3
+
+
+def _who(owner):
+    return NO_MOD_TEXT if owner == NO_MOD else owner.name
+
+
+def _largest(shares, whole):
+    """'method (share)' of the largest entry of {(method, Owner): Share}, or '-'."""
+    if not shares:
+        return "-"
+    (method, _), share = max(shares.items(), key=lambda kv: (kv[1].total, kv[0][0]))
+    return f"{method or START_TEXT} ({pct(share.total, whole)})"
+
+
+def _mods_text(shares):
+    ordered = sorted(shares.items(), key=lambda kv: (-kv[1].total, kv[0].name))
+    parts = [f"{_who(o)} {ms(s.total)} ms" for o, s in ordered[:MODS_SHOWN]]
+    if len(ordered) > MODS_SHOWN:
+        parts.append(f"{len(ordered) - MODS_SHOWN} more")
+    return ", ".join(parts)
+
+
+def _hot_spot_rows(spots, whole, top):
+    listed = sorted(((key, spot) for key, spot in spots.items() if spot.total.total >= HOT_SPOT_SHARE * whole),
+                    key=lambda kv: (-kv[1].total.total, kv[0][0]))
+    rows = []
+    for (method, owner), spot in listed[:top]:
+        total = spot.total.total
+        rows.append((method, owner.name, ms(total), pct(total, whole), _largest(spot.leaf, total), _largest(spot.caller, total),
+                     _mods_text(spot.mods)))
+    return rows, len(listed)
+
+
+def _site_rows(shares, whole, top):
+    ordered = sorted(shares.items(), key=lambda kv: (-kv[1].total, kv[0][0]))
+    return [(method or START_TEXT, owner.name if owner else "-", ms(s.total), pct(s.total, whole))
+            for (method, owner), s in ordered[:top]], len(ordered)
+
+
+def _mod_rows(shares, whole, top):
+    ordered = sorted(shares.items(), key=lambda kv: (-kv[1].total, kv[0].name))
+    return [(_who(o), ms(s.total), pct(s.total, whole)) for o, s in ordered[:top]], len(ordered)
+
+
+def callers_report(rec, folder, pattern, top, all_threads=False):
+    """callers: how the stacks running one method reach it, and where its time goes."""
+    matches = method_matcher(pattern)
+    main = rec.main_thread()
+    threads = sorted(rec.threads) if all_threads else [main]
+    by_thread = {t: rec.callers(rec.thread_samples(t), matches) for t in threads}
+    found = rec.callers([s for t in threads for s in rec.thread_samples(t)], matches)
+    total = found.total.total
+    if not total:
+        raise PerfError(f'No stack in {folder.name} ran a method matching "{pattern}"' +
+                        (" on the main thread; add --all-threads to look at every thread." if not all_threads else "."))
+    report = Report(f"rimworld-perf: callers of {pattern} in {folder.name}", [CAVEAT])
+    where = "on all threads" if all_threads else f"on the main thread ({pct(total, rec.duration_ms(main))} of it)"
+    report.lines.append(f"**{ms(total)} ms {where}**, {ms(found.total.cpu)} ms of it running managed code. A method on a stack "
+                        "twice counts from its outermost call.")
+    if len(found.targets) > 1:
+        rows, count = _site_rows(found.targets, total, top)
+        report.section("The methods the name matched", Table(["Method", "Owner", "ms", "Share"], rows, count))
+    if not all_threads:
+        phases, _ = perf.phases()
+        cache, parts = {}, defaultdict(Share)
+        for node, share in found.nodes.items():
+            parts[rec.phase_of(node, phases, cache)].add(CPU, share.cpu)
+            parts[rec.phase_of(node, phases, cache)].add(NATIVE, share.native)
+        report.section("By part of the game loop", Table(["Part", "ms", "Share"], [
+            (name or "other (outside the named parts)", ms(s.total), pct(s.total, total))
+            for name, s in sorted(parts.items(), key=lambda kv: (-kv[1].total, kv[0] or "~"))]))
+    else:
+        rows = [(rec.thread_label(t), ms(c.total.total), pct(c.total.total, total))
+                for t, c in sorted(by_thread.items(), key=lambda kv: (-kv[1].total.total, kv[0])) if c.total.total]
+        report.section("By thread", Table(["Thread", "ms", "Share"], rows[:top], len(rows)))
+    for title, shares in (("Called directly by", found.direct),
+                          ("The first game, engine or mod method above it (passing over .NET and libraries)", found.owned)):
+        rows, count = _site_rows(shares, total, top)
+        report.section(title, Table(["Method", "Owner", "ms", "Share"], rows, count))
+    rows, count = _mod_rows(found.inner, total, top)
+    report.section("The mods that lead to it (the innermost mod above it)", Table(["Mod", "ms", "Share"], rows, count))
+    rows, count = _mod_rows(found.outer, total, top)
+    report.section("The mods whose code it starts from (the outermost mod above it)",
+                   "The first mod on the stack from the thread's start decides when and how often; the innermost does the work.",
+                   Table(["Mod", "ms", "Share"], rows, count))
+    rows, count = _site_rows(found.leaf, total, top)
+    report.section("Where its time goes (where the thread was, at or below it)", Table(["Method", "Owner", "ms", "Share"], rows, count))
+    return report
+
+
 def summary_report(rec, folder, top):
     phases, ticking = perf.phases()
     main = rec.main_thread()
@@ -358,6 +462,11 @@ def summary_report(rec, folder, top):
         report.section("Ticking: mods' busiest methods (including what they call)", Table(["Method", "Mod", "ms", "Share of ticking"], rows, total))
         rows, total = _method_rows(rec.self_methods(tick_samples), tick_share.total, top)
         report.section("Ticking: where the thread was when sampled", Table(["Method", "Owner", "ms", "Share of ticking"], rows, total))
+        rows, total = _hot_spot_rows(rec.hot_spots(tick_samples), tick_share.total, top)
+        if rows:
+            report.section("Ticking: hot spots in the game's and the engine's code, and the mods that lead to them", HOT_SPOT_NOTE,
+                           Table(["Game or engine method", "Owner", "ms", "Share of ticking", "Mostly in", "Called from",
+                                  "Mods that lead to it"], rows, total))
         rows, total = _method_rows(rec.inclusive_methods(tick_samples, lambda o, p: p), tick_share.total, top, show_owner=False)
         if rows:
             report.section("Ticking: game methods other mods have patched (including what they call)",
@@ -852,6 +961,9 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
             first = find(root, args.first) if args.first else found[-2]
             second = find(root, args.second) if args.second else found[-1]
             report = compare_report(Recording(first / INDEX_NAME), Recording(second / INDEX_NAME), (first.name, second.name), args.top)
+        elif args.report == "callers":
+            folder = find(root, args.recording)
+            report = callers_report(Recording(folder / INDEX_NAME), folder, args.method, args.top, args.all_threads)
         elif args.report == "mod":
             folder = find(root, args.recording)
             report = mod_report(Recording(folder / INDEX_NAME), folder, args.name, args.top)
@@ -900,6 +1012,7 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
     "unpack": {"effect": WRITES, "note": "Writes one recording's trace or one heap's .gcdump out plain beside its packed copy, in "
                                          "the kit's cache; never writes over a file."},
     "mod": {"question": "What does one mod cost while the game runs?"},
+    "callers": {"question": "Which code calls a slow method, and which mods lead to it?"},
     "compare": {"question": "Did a change make the game faster?"},
     "stack": {"effect": RUNS, "question": "My game froze: where is it stuck, and whose code is it?",
               "note": "Attaches Microsoft's dotnet-stack to the running game a few times; it changes nothing in it."},

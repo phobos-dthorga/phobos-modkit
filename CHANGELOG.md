@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.151.0] - 2026-11-28
+
+### Added
+
+- **rimworld-perf callers, and a table of hot spots in the game's own code** (the owner's "implement all of these", 28 Nov 2026,
+  after a read of their recordings found 35% of the main thread in one vanilla method that no table named). `callers METHOD` says
+  what calls a method, the mods above it and where its time goes; the report's hot spots put back together time in one game or
+  engine method that caused by spreads over many mods. Game-free in `sampling`. How: [rimworld-perf](docs/rimworld-perf.md).
+
 ## [1.150.0] - 2026-11-28
 
 ### Added
