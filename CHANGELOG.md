@@ -32,6 +32,9 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
   tick; each recording notes its game version, save and mods. compare warns when two recordings are not like for like and gives
   each mod's cost in milliseconds a tick. A next game needs only its own meter's name in its adapter. How:
   [rimworld-perf](docs/rimworld-perf.md).
+- **rimworld-perf trend follows our own mods across every recording**: their share of ticking and milliseconds a tick in each,
+  marked where it moved 2 points from the earlier recordings' middle, and each mod in the newest against that middle. On the
+  owner's recordings ours caused 0.1% to 2.6% of ticking. How: [rimworld-perf](docs/rimworld-perf.md).
 
 ## [1.150.0] - 2026-11-28
 

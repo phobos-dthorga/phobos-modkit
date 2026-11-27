@@ -30,6 +30,7 @@ PHASES_FILE = Path(__file__).with_name("perf-phases.json")
 GAME_METER = "DThorga.RimWorld"
 COUNTER_SETS = ("System.Runtime", GAME_METER)
 SPEEDS = {0: "paused", 1: "normal", 2: "fast", 3: "superfast", 4: "ultrafast"}
+OWN_MODS = "D'thorga*"               # trend's default: the brand's mods, by their display names (the shared brand rule)
 THREADS_FILE = Path(__file__).with_name("perf-threads.json")
 
 

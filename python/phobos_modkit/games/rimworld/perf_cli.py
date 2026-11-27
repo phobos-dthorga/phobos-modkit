@@ -6,6 +6,7 @@
     rimworld-perf mod "Combat Extended"      one mod in a recording: its busiest methods and where its time went
     rimworld-perf callers GenTypes.IsSealedWithCache   what calls one method, the mods above it, and where its time goes
     rimworld-perf compare                    the last two recordings, as shares of the main thread and of ticking
+    rimworld-perf trend                      our own mods' share of ticking in every recording kept, and where it rose
     rimworld-perf reindex --all              rebuild recordings indexed before 1.151.0 from their kept traces, with timelines
     rimworld-perf list                       every recording and snapshot kept
     rimworld-perf pack                       pack the large files of recordings and heaps kept before 1.149.0 (--apply)
@@ -77,7 +78,7 @@ from . import perf_snapshots as snap
 from . import perf_watch as pw
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
-REPORTS = ("report", "record", "index", "reindex", "mod", "callers", "compare", "list", "stack", "stack-report", "heap", "heap-report", "heap-compare",
+REPORTS = ("report", "record", "index", "reindex", "mod", "callers", "compare", "trend", "list", "stack", "stack-report", "heap", "heap-report", "heap-compare",
            "watch", "watch-report", "watch-status", "watch-stop", "watch-mark", "look", "look-kind", "look-why", "look-serve",
            "look-check", "look-thaw", "pack", "unpack")
 FREEZE_HELP = ("freeze the game and read it in place instead of a snapshot, when Windows has no room to copy it (error 1450); it "
@@ -141,6 +142,9 @@ def _parser():
     k = sub.add_parser("compare", parents=[common], help="two recordings, as shares of the main thread and of ticking")
     k.add_argument("first", nargs="?", help="the earlier recording; the second newest when both are left out")
     k.add_argument("second", nargs="?", help="the later recording; the newest when both are left out")
+    tr = sub.add_parser("trend", parents=[common], help="some mods' share of ticking in every recording kept, and where it rose")
+    tr.add_argument("name", nargs="?", default=perf.OWN_MODS,
+                    help=f"the mods to follow, by name; * and ? are wildcards (default {perf.OWN_MODS!r}: our own)")
     sub.add_parser("list", parents=[common], help="every recording and snapshot kept")
     pk = sub.add_parser("pack", parents=[common], help="pack the large files of recordings and heaps kept plain (before 1.149.0)")
     pk.add_argument("--apply", action="store_true", help="pack them; without this, only say which and how large")
@@ -1003,6 +1007,76 @@ def compare_report(before, after, names, top):
     return report
 
 
+TREND_POINTS = 2.0                  # a share this many points from the earlier recordings' middle value is marked
+
+
+def _median(values):
+    ordered = sorted(values)
+    if not ordered:
+        return None
+    middle = len(ordered) // 2
+    return ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+
+
+def trend_note(share, earlier):
+    """A mark for a share (in %) against the earlier recordings' middle value, or ''."""
+    middle = _median(earlier)
+    if middle is None:
+        return ""
+    change = share - middle
+    if change >= TREND_POINTS:
+        return f"**up {change:.1f} points** on the earlier middle ({middle:.1f}%)"
+    if change <= -TREND_POINTS:
+        return f"down {-change:.1f} points on the earlier middle ({middle:.1f}%)"
+    return ""
+
+
+def trend_report(root, pattern, top):
+    """trend: the share of ticking the mods matching pattern caused in each recording kept, oldest first."""
+    found = recordings(root)
+    if not found:
+        raise PerfError(f"No recordings in {root}. Make one with: rimworld-perf record")
+    wanted = pattern.lower()
+    phases, ticking = perf.phases()
+    rows, shares, per_mod, earlier_mod = [], [], {}, {}
+    for position, folder in enumerate(found):
+        rec = Recording(folder / INDEX_NAME)
+        main = rec.main_thread()
+        samples = rec.in_phase(rec.thread_samples(main), phases, ticking)
+        tick_total = sum(v for _, _, v in samples)
+        mods = {o.name: s.total for o, s in rec.by_owner(samples).items()
+                if o.kind == MOD and fnmatch.fnmatchcase(o.name.lower(), wanted)}
+        share = 100 * sum(mods.values()) / tick_total if tick_total else 0.0
+        per_tick = ms_per_tick(rec, tick_total, main)
+        ours_per_tick = f"{per_tick * share / 100:.3f}" if per_tick is not None else "-"
+        busiest = max(mods.items(), key=lambda kv: (kv[1], kv[0]))[0] if mods else "-"
+        rows.append((folder.name, rec.meta.get("label", ""), pct(tick_total, rec.duration_ms(main)), f"{share:.1f}%", ours_per_tick,
+                     busiest, trend_note(share, shares)))
+        shares.append(share)
+        mod_shares = {name: 100 * value / tick_total for name, value in mods.items()} if tick_total else {}
+        if position < len(found) - 1:
+            for name, value in mod_shares.items():
+                earlier_mod.setdefault(name, []).append(value)
+        else:
+            per_mod = mod_shares
+    report = Report(f"rimworld-perf: trend of {pattern}", [
+        f"{len(found)} recordings, oldest first: the share of ticking the mods matching \"{pattern}\" caused (the innermost mod on "
+        f"the stack), marked where it moved {TREND_POINTS:g} points or more from the earlier recordings' middle value. Recordings "
+        "differ in what was on screen, the save and the speed: a mark is a place to look, not a verdict.", CAVEAT])
+    report.section("Recordings", Table(["Recording", "Label", "Ticking (of the main thread)", "Their share of ticking",
+                                        "Their ms a tick", "Busiest of them", "Note"], rows))
+    if len(found) > 1:
+        names = sorted(set(per_mod) | set(earlier_mod), key=lambda n: (-(per_mod.get(n, 0.0)), n))
+        rows = []
+        for name in names:
+            newest = per_mod.get(name, 0.0)
+            middle = _median(earlier_mod.get(name, [])) or 0.0
+            rows.append((name, f"{newest:.1f}%", f"{middle:.1f}%", points(newest - middle)))
+        report.section("Each of them in the newest recording, against the earlier middle",
+                       Table(["Mod", "Newest", "Earlier middle", "Change (points)"], rows[:top], len(rows)))
+    return report
+
+
 def _plain_files(args, environ, settings_file):
     """[(kind, folder, file)] of every large file kept plain: each recording's trace and each heap's own files."""
     found = [("recording", folder, folder / dd.TRACE_FILE) for folder in recordings(recordings_root(args, environ, settings_file))]
@@ -1423,6 +1497,8 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
             first = find(root, args.first) if args.first else found[-2]
             second = find(root, args.second) if args.second else found[-1]
             report = compare_report(Recording(first / INDEX_NAME), Recording(second / INDEX_NAME), (first.name, second.name), args.top)
+        elif args.report == "trend":
+            report = trend_report(root, args.name, args.top)
         elif args.report == "reindex":
             report, data = reindex_report(args, root, environ, run)
         elif args.report == "callers":
@@ -1480,6 +1556,7 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
     "reindex": {"effect": RUNS, "note": "Runs Microsoft's dotnet-trace convert on a recording's kept trace (a file; no program is "
                                         "attached) and writes a new index for it in the kit's cache; the trace is untouched."},
     "compare": {"question": "Did a change make the game faster?"},
+    "trend": {"question": "Have our own mods grown costlier from one recording to the next?"},
     "stack": {"effect": RUNS, "question": "My game froze: where is it stuck, and whose code is it?",
               "note": "Attaches Microsoft's dotnet-stack to the running game a few times; it changes nothing in it."},
     "stack-report": {"question": "What did the stack snapshots show?"},

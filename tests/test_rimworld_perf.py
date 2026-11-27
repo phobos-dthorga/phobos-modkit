@@ -355,6 +355,20 @@ class CommandTests(unittest.TestCase):
         self.assertNotIn("save", perf.context(FIXTURES / "rimworld" / "player-1.7.log", None, "2026-01-02 10:00:00"))
         self.assertEqual('Context: RimWorld 1.7.9999.1, save "Colony1" (loaded with 5 mods), 2 mods active.', perf_cli.context_text(found))
 
+    def test_trend_follows_some_mods_across_recordings(self):
+        for label, hour in (("before", 18), ("after", 19)):
+            self.run_cli("index", str(TRACE), "--counters", str(COUNTERS), "--label", label, *self.common, now=datetime(2026, 11, 17, hour, 0, 0))
+        code, text = self.run_cli("trend", "example*", *self.common)
+        self.assertEqual(perf_cli.EXIT_OK, code, text)
+        self.assertIn("| 20261117-180000-before | before | 63.6% | 57.1% | 0.638 | Example Medical |  |", text)
+        self.assertIn("| Example Medical | 57.1% | 57.1% | +0.0 |", text)
+        code, text = self.run_cli("trend", *self.common)                  # our own by default: none in the fixture
+        self.assertIn("| 0.0% |", text)
+        self.assertEqual("**up 3.0 points** on the earlier middle (2.0%)", perf_cli.trend_note(5.0, [1.0, 2.0, 9.0]))
+        self.assertEqual("down 2.5 points on the earlier middle (4.5%)", perf_cli.trend_note(2.0, [4.0, 5.0]))
+        self.assertEqual("", perf_cli.trend_note(5.0, []))
+        self.assertEqual("", perf_cli.trend_note(5.0, [4.0]))
+
     def test_record_without_the_game(self):
         with mock.patch.object(dd, "find_processes", return_value=[]):
             code, text = self.run_cli("record", *self.common)

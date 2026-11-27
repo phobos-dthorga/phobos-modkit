@@ -31,6 +31,7 @@ python -m phobos_modkit rimworld-perf callers GenTypes.IsSealedWithCache   what 
 python -m phobos_modkit rimworld-perf compare                      the last two recordings, as shares
 python -m phobos_modkit rimworld-perf compare before after         two recordings by ID or label
 python -m phobos_modkit rimworld-perf list                         every recording kept
+python -m phobos_modkit rimworld-perf trend                        our own mods' share of ticking in every recording, and where it rose
 python -m phobos_modkit rimworld-perf reindex --all                recordings indexed before 1.151.0, rebuilt with their timelines
 python -m phobos_modkit rimworld-perf index FILE.speedscope.json --counters FILE.json   a trace recorded by hand
 ```
@@ -70,6 +71,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `mod` | One mod in a recording. | reads only |
 | `callers` | How the stacks running one method reach it, and the mods above it. | reads only |
 | `compare` | Two recordings, as shares of the main thread and of ticking. | reads only |
+| `trend` | Some mods' share of ticking in every recording kept, and where it rose. | reads only |
 | `list` | Every recording and snapshot kept. | reads only |
 | `pack` | Pack the large files of recordings and heaps kept plain (before 1.149.0). With `--apply`, packs each recording's trace and each heap's own files with zstd in the kit's cache, removing a plain file only once its packed one reads back the same; without, only says. | writes |
 | `unpack` | Write a recording's trace or a heap's .gcdump out plain, for PerfView. Writes one recording's trace or one heap's .gcdump out plain beside its packed copy, in the kit's cache; never writes over a file. | writes |
@@ -114,6 +116,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--all-threads` | `callers` | every thread, not only the main one |  |
 | `FIRST` | `compare` | (optional) the earlier recording; the second newest when both are left out |  |
 | `SECOND` | `compare` | (optional) the later recording; the newest when both are left out |  |
+| `NAME` | `trend` | (optional) the mods to follow, by name; \* and ? are wildcards (default "D'thorga\*": our own) | `D'thorga*` |
 | `--apply` | `pack` | pack them; without this, only say which and how large |  |
 | `NAME` | `unpack` | a recording's or a heap's ID (its start is enough) or label |  |
 | `--times N` | `stack` | how many snapshots (default 3) | `3` |
@@ -244,6 +247,11 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
   second with their slowest second, each second's longest frame, the game speed, spawned pawns and maps. With the ticks, the report
   gives **the main thread's ticking a tick**, in milliseconds: what the player feels, whatever the speed. Without the framework the
   report says the figures were not recorded. The meter's names are its source's; **not yet seen in a real recording**.
+- **`trend [NAME]`** (1.151.0): the share of ticking the mods matching a name caused in every recording kept, oldest first (by
+  default `D'thorga*`, our own, the adapter's `OWN_MODS`), with their milliseconds a tick where the game's meter ran, the busiest
+  of them, and a mark where the share moved 2 points or more from the earlier recordings' middle value; then each of them in the
+  newest recording against that middle. Recordings differ in what was on screen, the save and the speed, so a mark is a place to
+  look, not a verdict. On the owner's three recordings of 17 and 18 November 2026 our mods caused 0.1% to 2.6% of ticking.
 - **Context** (1.151.0): `record` notes the game's version and the save last loaded before it (from Player.log) and how many mods
   ModsConfig.xml has active; the report says them in one line.
 - **Compare** uses shares of the main thread and of ticking, not milliseconds: a faster game ticks more often, so a mod's
