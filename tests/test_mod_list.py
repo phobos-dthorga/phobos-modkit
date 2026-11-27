@@ -450,7 +450,7 @@ class Command(unittest.TestCase):
                       "since": ("reads", None),
                       "save": ("writes", "--apply"), "forget": ("writes", "--apply"), "export": ("writes", "--apply"),
                       "subscribe": ("writes", "--apply"), "unsubscribe": ("writes", "--apply"), "write": ("writes", "--apply"),
-                          "mods": ("reads", None), "databases": ("reads-online", "--fetch"), "backups": ("reads", None), "games": ("reads", None)})
+                          "mods": ("reads", None), "start": ("runs", "--apply"), "databases": ("reads-online", "--fetch"), "backups": ("reads", None), "games": ("reads", None)})
         self.assertEqual(reports["check"]["surface"], "mod-list")
 
 

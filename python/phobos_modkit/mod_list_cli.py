@@ -10,6 +10,7 @@
     mod-list rules --name GAME --drop N [--apply]                      take your rule N away
     mod-list rules --name GAME --import-manager [--apply]              bring your rules over from the mod manager (RimSort) (1.144.0)
     mod-list databases --name GAME [--fetch [--stale] [--only NAME]]   the community lists the sorter reads; fetch them (1.144.0)
+    mod-list start --name GAME [--apply]                               start the game through Steam, as a mod manager's Run game (1.146.0)
     mod-list lists --name GAME                                         every saved list: by name, at game starts, saves, RimSort
     mod-list since --name GAME [--list KEY]                            what the first game run after your last change showed (1.85.0)
     mod-list compare --name GAME --list KEY --from SOURCE:REF          what loading a list would change (or --file PATH)
@@ -35,6 +36,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 
 from . import cache as derived
@@ -49,7 +51,7 @@ from . import mod_sort
 from .github import http_get as github_get
 from .games import MOD_LIST_GAMES, mod_list_adapter, mod_list_game
 from .installs import game_running
-from .manifest import ONLINE, READS, WRITES
+from .manifest import ONLINE, READS, RUNS, WRITES
 from .progress import Progress
 from .report import Bullets, Fact, Report, Table, envelope_text, home_redactor, keep, render_markdown
 
@@ -119,6 +121,9 @@ def _parser():
     databases.add_argument("--stale", action="store_true",
                            help=f"with --fetch, only the lists older than {mod_databases.FRESH_DAYS} days")
     databases.add_argument("--only", action="append", metavar="NAME", help="with --fetch, only this list (again for several)")
+    start = sub.add_parser("start", help="start the game through Steam, refused while it runs; only with --apply")
+    _common(start, lists=False)
+    start.add_argument("--apply", action="store_true", help="ask Steam to start it; without it, only say what it would do")
     since = sub.add_parser("since", help="what the first game run after the last change made here showed; only reads")
     _common(since)
     lists = sub.add_parser("lists", help="every saved list: by name, kept at game starts, each save's, and RimSort's history")
@@ -572,6 +577,36 @@ def databases_report(adapter, args, environ=None, get=None, now=None, progress=N
     return report, data
 
 
+def open_address(address):
+    """Hands an address to the system's own opener (steam:// goes to the Steam client), as a link pressed in a browser would."""
+    if sys.platform == "win32":
+        os.startfile(address)   # noqa: S606  (the owner's press; the address is the kit's own, steam://rungameid/<app id>)
+        return
+    subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", address],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def start_report(adapter, args, running=game_running, opener=None):
+    """The game started through the Steam client (1.146.0; the owner's choice of 28 Nov 2026, "Save and start the game", as RimSort's
+    Run game, so RimSort can retire): `steam://rungameid/<app id>`, so Steam starts it as from the library, with its own launch
+    options. Refused while the game already runs."""
+    app_id = getattr(adapter, "app_id", None)
+    if not app_id:
+        raise core.FixError(f"{adapter.name} has no Steam app ID, so Steam cannot be asked to start it.")
+    found = running(list(getattr(adapter, "processes", ())))
+    if found:
+        raise core.FixError(f"{adapter.name} is running already ({', '.join(sorted(found))}).")
+    address = f"steam://rungameid/{app_id}"
+    data = {"address": address, "applied": bool(args.apply), "started": False}
+    if args.apply:
+        (opener or open_address)(address)
+        data["started"] = True
+    report = Report(f"Mod list: {'asked Steam to start' if args.apply else 'would ask Steam to start'} {adapter.name}")
+    report.lines.append(f"Steam is handed {address}, as pressing Play in its library."
+                        + ("" if args.apply else " **Add --apply to start it.**"))
+    return report, data
+
+
 def lists_report(adapter, args, environ=None):
     found = mod_lists.every_list(adapter, environ, args.settings)
     data = {"sources": {source: [mod_lists.list_data(s) for s in items] for source, items in found.items()},
@@ -815,7 +850,7 @@ def undo(adapter, args, environ=None, running=game_running, now=None):
                     "keys": [adapter.key(i) for i in ids]}
 
 
-def main(argv=None, environ=None, out=None, post=None, running=None, now=None, steam=None, stdin=None, get=None):
+def main(argv=None, environ=None, out=None, post=None, running=None, now=None, steam=None, stdin=None, get=None, opener=None):
     out = out or sys.stdout
     environ = os.environ if environ is None else environ
     try:
@@ -864,6 +899,8 @@ def main(argv=None, environ=None, out=None, post=None, running=None, now=None, s
             report, data = rules(adapter, args, environ, now)
         elif args.report == "since":
             report, data = since_report(adapter, args, environ)
+        elif args.report == "start":
+            report, data = start_report(adapter, args, running or game_running, opener)
         elif args.report == "databases":
             report, data = databases_report(adapter, args, environ, get, now, Progress(environ))
         elif args.report == "lists":
@@ -910,6 +947,8 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS, "surface": "mod-li
                         "rules": {"effect": WRITES, "when": "--apply", "question": "Which load-order rules does the sorter read?"},
                         "lists": {"question": "Which saved mod lists can I load?"},
                         "since": {"question": "Did my last change to the mod list break anything?"},
+                        "start": {"effect": RUNS, "when": "--apply", "question": None,
+                                  "note": "hands steam://rungameid/<app id> to the system's opener, so the Steam client starts the game"},
                         "databases": {"effect": ONLINE, "when": "--fetch",
                                       "question": "How old are the community lists my mods are sorted and checked with?",
                                       "note": "with --fetch, reads public files from raw.githubusercontent.com, keyless, into the "

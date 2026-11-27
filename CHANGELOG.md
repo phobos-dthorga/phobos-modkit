@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.146.0] - 2026-11-28
+
+### Added
+
+- **mod-list start: the game started through Steam** (the owner's choice of 28 Nov 2026, "Save and start the game", the third
+  piece of retiring RimSort, as its Run game). Hands `steam://rungameid/<app id>` to the system's opener, so the Steam client starts
+  the game as from its library, with its own launch options; refused while the game already runs. Marked `runs` with `--apply`, so
+  D'thorga Companion runs it only on a press. How: [mod-list](docs/mod-list.md).
+
 ## [1.145.0] - 2026-11-28
 
 ### Changed
