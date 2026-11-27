@@ -4,6 +4,22 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.138.0] - 2026-11-27
+
+### Added
+
+- **zeroed status: whether a look for zero-filled files is due** (the owner's choice of 27 Nov 2026, "Home notices by itself").
+  It asks Windows' System log for the last unexpected shutdown and reads when a check of the usual folders last ran, in about
+  0.1 s, so D'thorga Companion runs the two-minute check by itself once after each crash or power cut, reaching back to it. How:
+  [zeroed](docs/zeroed.md#read-this-first).
+- **crash-dump --list: every dump kept, newest first, without opening one** (the same choice), so Home can say a program crashed
+  since you last looked. How: [crash-dump](docs/crash-dump.md#the-list-1138.0).
+
+### Fixed
+
+- **zeroed leaves WebView2's own cache out** (the same day). The first look reported the Companion's
+  `EBWebView\BrowserMetrics-spare.pma`, which WebView2 keeps filled with zeros on purpose, as a crash's damage.
+
 ## [1.137.0] - 2026-11-27
 
 ### Added

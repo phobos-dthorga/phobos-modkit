@@ -15,6 +15,13 @@ choice: a check to run after a crash, by hand or from D'thorga Companion.
 - **Some files are all zeros by design** (a placeholder, an empty image). Each found file says where it is, so one can be told
   apart; nothing is changed unless `restore --apply` is asked for, and then only tracked files.
 - **Nothing is deleted.** A damaged build is remade by a full rebuild; damage in git's own store is `git fsck`'s to describe.
+- **`status` says when to look, at once** (1.138.0; the owner's choice of 27 Nov 2026, "Home notices by itself"). It asks
+  Windows' System log for the last unexpected shutdown (Kernel-Power 41, EventLog 6008: about 0.1 s) and reads when a check of
+  the usual folders last ran (kept in the kit's cache as `zeroed/last-check.json`; a check with `--root` is not counted). A check
+  is `due` when a shutdown is newer than the last check, and `days` reaches back to it (three at least, thirty at most). D'thorga
+  Companion's Home asks `status` and runs the check by itself only then, once after each crash or power cut.
+- **WebView2's own cache is left out** (1.138.0): the Companion's `EBWebView` folder keeps `BrowserMetrics-spare.pma` filled
+  with zeros on purpose, which the first look on 27 Nov 2026 reported as a crash's damage.
 
 ## Examples
 
@@ -25,6 +32,7 @@ python -m phobos_modkit zeroed check --root PATH           look only in one fold
 python -m phobos_modkit zeroed check --games FILE          the repositories another games list names
 python -m phobos_modkit zeroed restore                     which zero-filled files git tracks it would write back
 python -m phobos_modkit zeroed restore --apply             write the last commit's copy over each of them
+python -m phobos_modkit zeroed status                      when the PC last shut down unexpectedly, and whether a check is due
 ```
 
 ## Reports and options
@@ -36,18 +44,19 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | --- | --- | --- |
 | `check` | Every zero-filled file, what it is and what puts it right. | reads only |
 | `restore` | Put zero-filled files git tracks back as the last commit has them; only with `--apply`. | writes, with `--apply` |
+| `status` | When Windows last shut down unexpectedly, and whether a check has looked since. | reads only |
 
 | Option | Reports | What it does | Default |
 | --- | --- | --- | --- |
-| `--root PATH` | all | look only here (again for several). Repeatable. |  |
-| `--days N` | all | open files written in the last N days (default 3) | `3` |
-| `--all` | all | open every file, however old (slow on large folders) |  |
-| `--games FILE` | all | the games list naming the repositories (else the Companion's) |  |
+| `--root PATH` | `check`, `restore` | look only here (again for several). Repeatable. |  |
+| `--days N` | `check`, `restore` | open files written in the last N days (default 3) | `3` |
+| `--all` | `check`, `restore` | open every file, however old (slow on large folders) |  |
+| `--games FILE` | `check`, `restore` | the games list naming the repositories (else the Companion's) |  |
 | `--apply` | `restore` | write them back; without it, only say which |  |
 
 - Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
 - [Common options](common-options.md) explains `--root`, `--json` and `--no-redact`, which many commands share.
-- Only one of `--days`, `--all` at a time.
+- Only one of `--days`, `--all` at a time (`check`, `restore`).
 <!-- end generated -->
 
 ## Inputs

@@ -9,6 +9,7 @@ one without a debugger or symbols; `windows-dumps` asks Windows to keep full dum
 python -m phobos_modkit crash-dump                     the newest dump
 python -m phobos_modkit crash-dump --program RimWorld  the newest dump of one program
 python -m phobos_modkit crash-dump FILE.dmp            one dump
+python -m phobos_modkit crash-dump --list              every dump kept, newest first, by program, without opening one
 python -m phobos_modkit windows-dumps --program RimWorld          what Windows does now, and the lines that change it
 python -m phobos_modkit windows-dumps --program RimWorld --apply  full dumps of that program only (administrator window)
 python -m phobos_modkit windows-dumps --program RimWorld --off    back to Windows' default for it
@@ -29,6 +30,7 @@ Effect: reads only.
 | `--program VALUE` | with no file named, only this program's dumps, by the start of the file name |  |
 | `--folder VALUE` | the crash dumps folder (else PHOBOS_CRASH_DUMPS, else %LOCALAPPDATA%\CrashDumps) |  |
 | `--no-names` | do not ask dotnet-dump to name methods, even in a full dump |  |
+| `--list` | list the dumps kept, newest first, without opening any |  |
 | `--top N` | rows per table (default 15) | `15` |
 
 - It also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
@@ -85,6 +87,12 @@ as .NET's own error output, in about 3 seconds.
   come from the stack's memory, as for a small dump.
 - **A dump .NET writes itself** (createdump, from `DOTNET_DbgEnableMiniDump`) names no failing thread and keeps the stack only in
   the full memory list; crash-dump reads the first thread, where that writer put the failing one.
+
+### The list (1.138.0)
+
+`--list` names every `.dmp` in the folder, newest first, with its program (from Windows' `PROGRAM.exe.PID.dmp` name), its time
+in UTC and its size, opening none of them (about 0.1 s): D'thorga Companion's Home reads it to say a program crashed since you
+last looked. `data` holds `folder` and `dumps` [{file, program, time, size}]; `--program` keeps one program's, `--top` the newest N.
 
 ## Effects
 

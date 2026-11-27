@@ -3,6 +3,7 @@
     crash-dump                       the newest dump in Windows' CrashDumps folder
     crash-dump --program RimWorld    the newest dump of one program
     crash-dump FILE.dmp              one dump
+    crash-dump --list                every dump kept, newest first, without opening one (quick; 1.138.0)
 
 Reads only the dump. Windows keeps these in %LOCALAPPDATA%\\CrashDumps when a program dies without being able to report it. A small
 dump holds the failing thread's stack but not the memory that would name a compiled method, and the report says what it could not tell.
@@ -33,6 +34,7 @@ def _parser():
     p.add_argument("--program", help="with no file named, only this program's dumps, by the start of the file name")
     p.add_argument("--folder", help="the crash dumps folder (else PHOBOS_CRASH_DUMPS, else %%LOCALAPPDATA%%\\CrashDumps)")
     p.add_argument("--no-names", action="store_true", help="do not ask dotnet-dump to name methods, even in a full dump")
+    p.add_argument("--list", action="store_true", help="list the dumps kept, newest first, without opening any")
     p.add_argument("--top", type=int, default=15, help="rows per table (default 15)")
     p.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
     p.add_argument("--no-redact", action="store_true", help="show the home folder instead of ~")
@@ -143,6 +145,29 @@ def _names(path, summary, environ, run):
     return names, notes
 
 
+def program_of(name):
+    """The program a dump's file name names: Windows writes PROGRAM.exe.PID.dmp, or PROGRAM.exe(N).PID.dmp for a second."""
+    head = name.split(".exe", 1)[0] if ".exe" in name.lower() else name.split(".", 1)[0]
+    return head.split("(", 1)[0] or name
+
+
+def listed(folder, program=None, top=None):
+    """[{file, program, time, size}] of the dumps in a folder, newest first, one program's when named; never opened."""
+    found = []
+    for path in Path(folder).glob("*.dmp"):
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        if program and not path.name.lower().startswith(program.lower()):
+            continue
+        found.append({"file": path.name, "program": program_of(path.name),
+                      "time": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(timespec="seconds"),
+                      "size": stat.st_size})
+    found.sort(key=lambda d: (d["time"], d["file"]), reverse=True)
+    return found[:top] if top else found
+
+
 def main(argv=None, environ=None, out=None, run=None):
     out = out or sys.stdout
     environ = os.environ if environ is None else environ
@@ -151,6 +176,20 @@ def main(argv=None, environ=None, out=None, run=None):
     except SystemExit as stop:
         return EXIT_USAGE if stop.code else EXIT_OK
     redact = keep if args.no_redact else home_redactor()
+    if args.list:
+        try:
+            folder = _folder(args, environ)
+        except DumpError as failed:
+            print(redact(str(failed)), file=sys.stderr)
+            return EXIT_FAILED
+        dumps = listed(folder, args.program, args.top) if folder.is_dir() else []
+        report = Report(f"Crash dumps: {len(dumps)} kept" if dumps else "Crash dumps: none kept")
+        if dumps:
+            report.section("Newest first", Table(["When", "Program", "File", "Bytes"],
+                                                 [[d["time"], d["program"], d["file"], str(d["size"])] for d in dumps]))
+        data = {"folder": str(folder), "dumps": dumps}
+        out.write((envelope_text("crash-dump", report, redact, data) if args.json else render_markdown(report, redact)) + "\n")
+        return EXIT_OK
     try:
         path = Path(args.dump) if args.dump else newest_dump(_folder(args, environ), args.program)
         if path is None:
