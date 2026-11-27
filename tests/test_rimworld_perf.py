@@ -184,6 +184,10 @@ class RecordingTests(unittest.TestCase):
                           "Verse.Pawn.Tick": (10, {"none": 10}), "Waylith.Rendering.Submit": (30, {"none": 30}),
                           "Verse.Root_Play.Update": (10, {"none": 10})}, spots)
 
+    def test_the_mods_seen_running_inside_a_patched_method(self):
+        self.assertEqual({"Verse.Pawn.Tick": {"Example Medical": 40, "Other Mod": 20}},
+                         {m: {o.name: round(s.total, 3) for o, s in owners.items()} for m, owners in self.rec.patch_runners(self.samples).items()})
+
     def test_threads_are_named_by_what_their_stacks_hold(self):
         self.assertEqual("the game's main loop", self.rec.thread_role(self.main, perf.thread_roles()))
         waiting = next(t for t in self.rec.threads if t != self.main)
@@ -376,6 +380,27 @@ class CommandTests(unittest.TestCase):
         self.assertIn("| Example Medical | mod | 40 | 57.1% |", text)                 # the day's owners, kept
         self.assertIn("Time paused for garbage collection | 3.0% of the time", text)   # and its counters
         self.assertIn('("old")', text)
+
+    def test_the_patch_list_names_transpilers(self):
+        from phobos_modkit.games.rimworld import patches
+        index = self.tmp / "cache" / patches.CACHE_FOLDER / patches.INDEX_NAME
+        index.parent.mkdir(parents=True)
+        with closing(sqlite3.connect(index)) as conn:
+            conn.executescript(patches.SCHEMA)
+            conn.executemany("INSERT INTO owners VALUES (?, ?, ?, ?)", [("a.dll", 1, "example.medical", "Example Medical"),
+                                                                       ("b.dll", 2, "example.rewriter", "Example Rewriter")])
+            conn.executemany("INSERT INTO patches (path, kind, target_type, target_member) VALUES (?, ?, ?, ?)",
+                             [("b.dll", "transpiler", "Verse.Pawn", "Tick"), ("a.dll", "postfix", "Verse.Pawn", "Tick")])
+            conn.commit()
+        self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--label", "one", *self.common)[0])
+        code, text = self.run_cli("report", *self.common)
+        self.assertIn("| Verse.Pawn.Tick (patched) | 70 | 100.0% | Example Medical, Other Mod | Example Rewriter; 1 other patch listed |", text)
+
+    def test_without_the_patch_list(self):
+        self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--label", "one", *self.common)[0])
+        code, text = self.run_cli("report", *self.common)
+        self.assertIn("run `rimworld-patches` once to name transpilers here", text)
+        self.assertIn("| Verse.Pawn.Tick (patched) | 70 | 100.0% | Example Medical, Other Mod | - |", text)
 
     def test_pack_and_unpack_what_was_kept_plain(self):
         # The owner's choice by card (28 Nov 2026): recordings and heaps alike, "Compress them too".

@@ -197,6 +197,13 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
   (`dynamicClass.Verse.TickManager.DoSingleTick_Patch6`), and adds glue named `dynamicClass.Glue:AbiFixup<... Type:Method(...)>`.
   All three read as the original method, so a patched part of the loop is still found. Recordings indexed by an older version
   are read the same way: their frame names are split again when they load.
+- **Who patched a patched game method** (1.151.0): **mods seen running inside it** are those whose code ran directly inside the
+  rewritten method in the recording, its prefixes and postfixes among them (Harmony runs them as calls from it). **A transpiler
+  rewrites the method itself**, so its work counts as the game's and no sample can tell it apart; transpilers are named from
+  `rimworld-patches`' list, read only and as it stands today (its mods, not the recording's day's), with a count of the other
+  patches it lists. The two see different things: on the owner's game the list missed a postfix Turn It On and Off - RePowered
+  adds at run time, which the recording saw run, and only the list can name a transpiler. Without the list the report says to run
+  `rimworld-patches` once.
 - **Owners**: `Assembly-CSharp` and `RimWorld` are the game; other DLLs in the install folder are the engine and Ludeon's
   libraries (Waylith, Brutal, Steamworks); `System.*` and `Microsoft.*` are .NET; Harmony and MonoMod are libraries; every active
   mod's assemblies for the game's version are that mod's, the first in load order winning when two ship one name. A module no

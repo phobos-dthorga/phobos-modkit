@@ -699,7 +699,55 @@ def allocation_sections(rec, report, main, top):
     report.section("Allocations, sampled", *blocks)
 
 
-def summary_report(rec, folder, top):
+PATCHED_NOTE = ("**Mods seen running inside it** are those whose code ran directly inside the rewritten method in this recording: "
+                "its prefixes and postfixes among them. **A transpiler rewrites the method itself**, so its work counts as the "
+                "game's and no sample can tell it apart: transpilers are named from the patch list (`rimworld-patches`), which "
+                "reads today's mods, not the recording's day's.")
+NO_PATCH_LIST = "The patch list has not been made yet: run `rimworld-patches` once to name transpilers here."
+
+
+def patch_lookup_for(args, environ, settings_file):
+    """A function naming the transpilers and counting the other patches on a method from rimworld-patches' index, read only;
+    None when the index has not been made."""
+    from . import patches
+    index = derived.folder(patches.CACHE_FOLDER, args.cache, environ, settings_file) / patches.INDEX_NAME
+    if not index.is_file():
+        return None
+    try:
+        with closing(derived.open_read_only(index)) as conn:
+            rows = conn.execute("SELECT p.target_type, p.target_member, p.kind, o.mod FROM patches p JOIN owners o ON o.path = p.path "
+                                "ORDER BY o.position").fetchall()
+    except sqlite3.Error:
+        return None
+    known = defaultdict(list)
+    for target_type, member, kind, mod in rows:
+        known[(target_type, member)].append((kind, mod))
+
+    def lookup(method):
+        target_type, _, member = method.rpartition(".")
+        found = known.get((target_type, member), []) + (known.get((target_type, member[4:]), [])
+                                                        if member.startswith(("get_", "set_")) else [])
+        transpilers = sorted({mod for kind, mod in found if kind == "transpiler"})
+        others = len([1 for kind, _ in found if kind != "transpiler"])
+        text = ", ".join(transpilers) if transpilers else "none listed"
+        return text + (f"; {others} other patch{'es' if others != 1 else ''} listed" if others else "")
+    return lookup
+
+
+def _patched_rows(rec, samples, whole, top, patch_lookup):
+    patched = rec.inclusive_methods(samples, lambda o, p: p)
+    runners = rec.patch_runners(samples)
+    ordered = sorted(patched.items(), key=lambda kv: (-kv[1].total, kv[0][0]))
+    rows = []
+    for (method, _, _), share in ordered[:top]:
+        seen = sorted(runners.get(method, {}).items(), key=lambda kv: (-kv[1].total, kv[0].name))
+        seen_text = ", ".join(o.name for o, _ in seen[:MODS_SHOWN]) + (f", {len(seen) - MODS_SHOWN} more" if len(seen) > MODS_SHOWN else "")
+        rows.append((method + " (patched)", ms(share.total), pct(share.total, whole), seen_text or "-",
+                     patch_lookup(method) if patch_lookup else "-"))
+    return rows, len(ordered)
+
+
+def summary_report(rec, folder, top, patch_lookup=None):
     phases, ticking = perf.phases()
     main = rec.main_thread()
     samples = rec.thread_samples(main)
@@ -742,10 +790,12 @@ def summary_report(rec, folder, top):
             report.section("Ticking: hot spots in the game's and the engine's code, and the mods that lead to them", HOT_SPOT_NOTE,
                            Table(["Game or engine method", "Owner", "ms", "Share of ticking", "Mostly in", "Called from",
                                   "Mods that lead to it"], rows, total))
-        rows, total = _method_rows(rec.inclusive_methods(tick_samples, lambda o, p: p), tick_share.total, top, show_owner=False)
+        rows, total = _patched_rows(rec, tick_samples, tick_share.total, top, patch_lookup)
         if rows:
             report.section("Ticking: game methods other mods have patched (including what they call)",
-                           Table(["Method", "ms", "Share of ticking"], rows, total))
+                           PATCHED_NOTE + ("" if patch_lookup else " " + NO_PATCH_LIST),
+                           Table(["Method", "ms", "Share of ticking", "Mods seen running inside it",
+                                  "Transpilers (the patch list, as of today)"], rows, total))
     rows, total = _owner_rows(rec.by_owner(samples), whole, top)
     report.section("The whole main thread: who caused the time", Table(OWNER_HEADERS, rows, total))
     if rec.has_timeline:
@@ -1264,7 +1314,7 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
                 folder, notes = _index(args, root, environ, settings_file, now or datetime.now())
             else:
                 folder = find(root, args.recording)
-            report = summary_report(Recording(folder / INDEX_NAME), folder, args.top)
+            report = summary_report(Recording(folder / INDEX_NAME), folder, args.top, patch_lookup_for(args, environ, settings_file))
             for note in notes:
                 if note not in report.lines:
                     report.lines.insert(1, note)

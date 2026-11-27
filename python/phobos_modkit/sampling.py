@@ -585,6 +585,25 @@ class Recording:
                 self.method_at(owned) if owned is not None else ("", None),
                 inner if inner is not None and inner.kind == MOD else NO_MOD, outer or NO_MOD, self.method_at(ups[0]), ups[at])
 
+    def patch_runners(self, samples):
+        """{method: {Owner: Share}}: for each method Harmony rewrote, the mods whose code ran directly inside it in these samples.
+        Harmony runs a prefix or postfix as a call from the rewritten method, so they are here, with whatever else of a mod's the
+        method calls; a transpiler's work is inside the method itself and is not."""
+        found, memo = defaultdict(lambda: defaultdict(Share)), {}
+        for node, kind, ms in samples:
+            if node not in memo:
+                pairs = set()
+                frames = self.path(node)
+                for here, below in zip(frames, frames[1:]):
+                    if self.frames[here][3]:
+                        owner = self.owner_of_frame(below)
+                        if owner.kind == MOD:
+                            pairs.add((self.frames[here][2], owner))
+                memo[node] = pairs
+            for method, owner in memo[node]:
+                found[method][owner].add(kind, ms)
+        return {method: dict(owners) for method, owners in found.items()}
+
     def hot_spots(self, samples):
         """{(method, Owner): HotSpot} for game and engine methods: the time the thread spent in each, or in .NET and library code it
         called, with where the thread was, what called it and the mods above it. Caused by gives this time to the innermost mod

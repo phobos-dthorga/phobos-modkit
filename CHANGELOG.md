@@ -24,6 +24,9 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
   waited, for how long, and which thread held the lock and what it was running; who allocates what, by mod, type and method. Read
   from the trace dotnet-trace keeps, by the new game-free `nettrace` and `dotnet_events`. Checked on a small program of our own; not
   yet seen on the game. How: [rimworld-perf](docs/rimworld-perf.md).
+- **rimworld-perf names who patched each patched game method**: the mods seen running inside it in the recording (prefixes and
+  postfixes among them), and the transpilers from rimworld-patches' list, whose work no sample can tell from the game's. How:
+  [rimworld-perf](docs/rimworld-perf.md).
 
 ## [1.150.0] - 2026-11-28
 
