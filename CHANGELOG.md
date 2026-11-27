@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.139.0] - 2026-11-27
+
+### Added
+
+- **The manifest says which reports read the whole PC** (found on 27 Nov 2026 while building D'thorga Companion's crash note:
+  its Reports page offered only a game's own reports, so "Why did this program crash?" could not be reached). A report's new
+  `scope` is `machine` when it reads this PC as a whole, with no repository: `crash-dump`, `windows-dumps` and `zeroed`. A program
+  may offer those beside any game's own; the rest stay null, since run with no repository they would read the wrong folder. How:
+  [manifest](docs/manifest.md).
+
 ## [1.138.0] - 2026-11-27
 
 ### Added

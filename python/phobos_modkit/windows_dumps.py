@@ -211,4 +211,4 @@ def main(argv=None, environ=None, out=None, registry=None):
 
 MANIFEST = {"game": None, "parser": _parser, "effect": READS,
             "note": "--apply and --off write the one registry key for the program named; they need an administrator window.",
-            "question": "Will Windows keep a crash dump that can name the methods?"}
+            "question": "Will Windows keep a crash dump that can name the methods?", "scope": "machine"}

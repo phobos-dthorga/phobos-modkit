@@ -337,7 +337,7 @@ def main(argv=None, environ=None, out=None):
 
 
 MANIFEST = {"game": None, "parser": _parser, "effect": READS,
-            "question": "Did a crash leave any files filled with zeros?",
+            "question": "Did a crash leave any files filled with zeros?", "scope": "machine",
             "reports": {"check": {"question": "Did a crash leave any files filled with zeros?"},
                         "restore": {"effect": WRITES, "when": "--apply", "question": None},
                         "status": {"question": "Did my PC shut down unexpectedly since the last look for zero-filled files?"}}}

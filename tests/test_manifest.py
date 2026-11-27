@@ -40,6 +40,14 @@ class Manifest(unittest.TestCase):
             known = {r["name"] for r in find(self.data, name)["reports"]}
             self.assertLessEqual(set(declared.get("reports", {})), known, name)
 
+    def test_machine_wide_reports_say_so_and_others_are_null(self):
+        # 1.139.0: a program may offer these beside any game's reports, with no repository named.
+        scopes = {(c["name"], r["name"]): r["scope"] for c in self.data["commands"] for r in c["reports"]}
+        self.assertEqual("machine", scopes[("crash-dump", None)])
+        self.assertEqual("machine", scopes[("zeroed", "status")])
+        self.assertIsNone(scopes[("picks", "list")])
+        self.assertTrue(set(scopes.values()) <= {None, "machine"})
+
     def test_questions_are_questions(self):
         asked = [r["question"] for c in self.data["commands"] for r in c["reports"] if r["question"]]
         self.assertGreater(len(asked), 10)

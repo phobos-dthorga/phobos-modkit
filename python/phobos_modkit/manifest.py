@@ -68,7 +68,7 @@ def _options(parser):
 
 def _report(name, helptext, parser, declared):
     effect = {"effect": declared["effect"], "when": None, "note": declared.get("note"), "question": declared.get("question"),
-              "surface": declared.get("surface"), "waits": declared.get("waits")}
+              "surface": declared.get("surface"), "waits": declared.get("waits"), "scope": declared.get("scope")}
     effect.update(declared.get("reports", {}).get(name, {}))
     options, exclusive = _options(parser)
     return {"name": name, "help": helptext, **effect, "options": options, "exclusive": exclusive}

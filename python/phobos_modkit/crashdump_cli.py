@@ -204,4 +204,4 @@ def main(argv=None, environ=None, out=None, run=None):
     return EXIT_OK
 
 
-MANIFEST = {"game": None, "parser": _parser, "effect": READS, "question": "Why did this program crash?"}
+MANIFEST = {"game": None, "parser": _parser, "effect": READS, "question": "Why did this program crash?", "scope": "machine"}
