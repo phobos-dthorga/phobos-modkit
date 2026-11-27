@@ -410,11 +410,21 @@ def backups_of(backups, mod):
 
 
 PEEKS = "backup-peeks"
+# The kinds of changed file a program sets beside a backup's copy (D'thorga Companion's Mods page draws pictures, decoded textures
+# among them, and plays sounds): only these are copied out of a zipped backup with its name and version (1.149.0). Before, every
+# changed file was, and 200 peeks held 150 MB of assemblies and XML that nothing compared.
+COMPARED_KINDS = frozenset({"picture", "texture", "sound"})
 
 
 def _peek_folder(where, name):
     from . import cache as derived
     return derived.folder(DIGEST_CACHE, None, where.environ, where.settings) / PEEKS / name
+
+
+def compared(relative):
+    """Whether a changed file is one a program compares with a backup's copy, by its kind (changes.MEDIA)."""
+    from .changes import MEDIA          # changes reads this module's changelog helpers, so not at import time
+    return MEDIA.get(Path(relative).suffix.lower()) in COMPARED_KINDS
 
 
 def _identity_files(game):
@@ -428,7 +438,7 @@ def read_backup(where, name, measure=False, also=()):
     path = archives.stored(where.backups, name)
     if path is None or not archives.is_archive(path):
         return read_copy("backup", where.backups / name, where.game, measure, name)
-    wanted, extra = _identity_files(where.game), set(also)
+    wanted, extra = _identity_files(where.game), {relative for relative in also if compared(relative)}
     folder = archives.peek(path, lambda relative: relative.lower() in wanted or relative in extra, _peek_folder(where, name))
     copy = read_copy("backup", folder, where.game, False, name)
     copy.archive = path
@@ -772,7 +782,7 @@ def survey(where, mods=None, measure=True, run=subprocess.run, progress=None):
         installed_folder = where.installed(mod)
         installed = read_copy("installed", installed_folder, where.game) if installed_folder.is_dir() else None
         files = checks.compare_files(installed.folder, repository.folder, install_only) if installed is not None else None
-        # A zipped backup's changed files are copied out beside its name and version, so a picture can be compared with it.
+        # A zipped backup's changed pictures and sounds are copied out beside its name and version, so they can be compared.
         changed_paths = [p["path"] for p in (files or {}).get("paths", [])]
         backups = [read_backup(where, name, measure, changed_paths) for name in backups_of(where.backups, mod)]
         changed = uncommitted(where.root, [f"{where.config['mods']}/{mod}", *where.config.get("sharedSources", [])])

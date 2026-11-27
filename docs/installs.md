@@ -144,9 +144,11 @@ is read without unpacking the rest; LZMA saved only 7% more.
   folder and its zip) before its folder goes. One that fails a check, or would leave under 1 GB free, stays a folder and is named.
   **Every install and go-back packs too**, after removing repeats (`installs.tidy`), so older backups turn into zips at the next
   install without anything to run.
-- **Reading a zipped backup**: its name, version, changelog and install record, and the files `status` finds changed between the
-  install and the repository, are copied into the kit's cache (`installs/backup-peeks/<backup>`), which is the folder `status`
-  names for it, so a program can show a changed picture from it. A backup never changes, so they are copied once.
+- **Reading a zipped backup**: its name, version, changelog and install record, and the changed pictures, textures and sounds
+  `status` finds between the install and the repository, are copied into the kit's cache (`installs/backup-peeks/<backup>`),
+  which is the folder `status` names for it, so a program can show a changed picture from it. A backup never changes, so they are
+  copied once. **Other changed files are not copied out** (1.149.0): nothing compares an assembly or XML side by side, and 200
+  peeks had held 150 MB of them; a peek lets go of any file it no longer wants the next time it is read.
 - **Going back to a zipped backup** unpacks it beside the game's mods folder, then swaps as before; the zip is kept. A zip naming
   a path outside its folder is refused.
 - `content_digests` gives the full and lean digests in one reading. Their formula is unchanged, so digests kept for folders still hold.

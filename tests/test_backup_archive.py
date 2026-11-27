@@ -89,6 +89,40 @@ class PackingTests(unittest.TestCase):
             self.assertEqual((code, backup["backup"], backup["version"]), (0, name, "0.1.0"))
             self.assertEqual((Path(backup["folder"]) / "Textures" / "Boat.png").read_bytes(), b"old picture")
 
+    def test_only_pictures_and_sounds_are_copied_out_to_compare(self):
+        # 1.149.0: a program compares pictures and sounds side by side; assemblies and XML filled 150 MB of peeks for nothing.
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Fixture(tmp)
+            name = "Thing-20261101-120000"
+            for folder, data in ((f.repo / ".local" / "backups" / name, b"old"), (f.game / "Mods" / "Thing", b"installed"),
+                                 (f.repo / "mods" / "Thing", b"repository")):
+                _picture(folder, data)
+                for relative in ("Assemblies/Thing.dll", "Defs/Things.xml"):
+                    (folder / relative).parent.mkdir(parents=True, exist_ok=True)
+                    (folder / relative).write_bytes(data)
+            installs.pack(f.where)
+            code, answer = f.run("status")
+            peek = Path(answer["data"]["mods"][0]["backups"][0]["folder"])
+            self.assertEqual(code, 0)
+            self.assertTrue((peek / "Textures" / "Boat.png").is_file())
+            self.assertFalse((peek / "Assemblies" / "Thing.dll").exists())
+            self.assertFalse((peek / "Defs" / "Things.xml").exists())
+
+    def test_a_peek_lets_go_of_files_no_longer_wanted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = write_mod(Path(tmp) / "Thing", "0.1.0", "# Thing changelog\n")
+            _picture(folder)
+            (folder / "Assemblies").mkdir()
+            (folder / "Assemblies" / "Thing.dll").write_bytes(b"code")
+            archive = Path(tmp) / "Thing.zip"
+            archives.write(folder, archive)
+            peek = Path(tmp) / "peek"
+            archives.peek(archive, lambda relative: True, peek)
+            self.assertTrue((peek / "Assemblies" / "Thing.dll").is_file())
+            archives.peek(archive, lambda relative: relative.endswith(".png"), peek)
+            self.assertTrue((peek / "Textures" / "Boat.png").is_file())
+            self.assertFalse((peek / "Assemblies").exists())
+
     def test_going_back_to_a_zipped_backup_unpacks_it_in_place(self):
         with tempfile.TemporaryDirectory() as tmp:
             f = Fixture(tmp)

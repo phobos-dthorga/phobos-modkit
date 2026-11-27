@@ -24,6 +24,12 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
   zstd compression, built into Python from 3.14, is always there for the kit's kept copies. An older Python is refused in words;
   D'thorga Companion's installer already ships 3.14. A file `bundle` makes still promises 3.10 to modders.
 
+### Fixed
+
+- **A zipped install backup copies out only the changed files a program compares** (pictures, textures and sounds), with its
+  name and version. Every changed file was copied out before, and the owner's 200 peeks held 188 MB, 150 MB of it assemblies and
+  XML nothing compared; each peek lets go of them the next time it is read. How: [installs](docs/installs.md).
+
 ## [1.148.0] - 2026-11-28
 
 ### Added

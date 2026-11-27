@@ -131,8 +131,9 @@ def unpack(archive, folder):
 
 def peek(archive, wanted, folder):
     """Unpacks the archive's files that `wanted` (a function of a relative path) asks for into folder, for reading as plain files:
-    a mod's name and version, its changelog, its install record, a changed picture. A backup never changes, so what is there is
-    kept; a folder taken from another archive of the same name is emptied first. Returns folder."""
+    a mod's name and version, its changelog, its install record, a changed picture. A backup never changes, so what is there and
+    still wanted is kept, and a file no longer wanted is removed (1.149.0); a folder taken from another archive of the same name is
+    emptied first. Returns folder."""
     archive, folder = Path(archive), Path(folder)
     stat = archive.stat()
     mark = f"{stat.st_size} {int(stat.st_mtime)}"
@@ -152,6 +153,15 @@ def peek(archive, wanted, folder):
             target.parent.mkdir(parents=True, exist_ok=True)
             with opened.open(info) as source, open(target, "wb") as out:
                 shutil.copyfileobj(source, out, 1024 * 1024)
+    for found in sorted(folder.rglob("*"), reverse=True):
+        relative = found.relative_to(folder).as_posix()
+        if found.is_file() and relative != _MARK and not wanted(relative):
+            _gone(found)
+        elif found.is_dir():
+            try:
+                found.rmdir()
+            except OSError:
+                pass
     return folder
 
 
