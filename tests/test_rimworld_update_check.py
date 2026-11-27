@@ -86,6 +86,19 @@ class TemporaryTests(unittest.TestCase):
         self.assertEqual(["unchanged", "no-update", "one-build"], [r["status"] for r in rows])
         self.assertEqual(1, len(self.asked))          # only the build inside the window is compared
 
+    def test_a_reviewed_build_is_not_compared_again(self):
+        entry = {**self.entry(), "reviewed": {"build": f"{2:064x}".upper(), "on": "2026-11-27", "note": "rewritten for it"}}
+        rows = uc.temporary_rows([entry], self.versions, SINCE, self.compare(([], [item("Vehicles.VehiclePawn.DeSpawn")], [])))
+        self.assertEqual("reviewed", rows[0]["status"])
+        self.assertIn("read on 2026-11-27: rewritten for it", rows[0]["detail"])
+        self.assertEqual(f"{2:064x}"[:uc.BUILD_PREFIX], rows[0]["build"])
+        self.assertEqual([], self.asked)              # nothing compared
+
+    def test_a_review_of_an_older_build_does_not_cover_a_newer_one(self):
+        entry = {**self.entry(), "reviewed": {"build": f"{1:064x}", "on": "2026-11-10"}}
+        rows = uc.temporary_rows([entry], self.versions, SINCE, self.compare(([], [item("Vehicles.VehiclePawn.DeSpawn")], [])))
+        self.assertEqual("removed", rows[0]["status"])
+
     def test_a_named_mod_must_match_the_archive(self):
         rows = uc.temporary_rows([self.entry(mod="Someone Else")], self.versions, SINCE, self.compare(([], [], [])))
         self.assertEqual("one-build", rows[0]["status"])

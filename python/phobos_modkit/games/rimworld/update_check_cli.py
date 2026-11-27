@@ -16,7 +16,9 @@ Four answers from one run, for an agent session and for D'thorga Companion's "Si
 
 The repository says what is ours in config/update-check.json: {"ourPackageIds": ["Author.*"], "targets": {"sources": [...],
 "assemblies": [...], "typeLookups": [...]}, "temporaryPatches": "config/temporary-patches.json"}. The temporary patches file
-lists {"row", "patch", "mod", "file", "members": ["Type.Member"]} under "patches". Reads only.
+lists {"row", "patch", "mod", "file", "members": ["Type.Member"]} under "patches". Once an update to a row's members has been
+read, the row may add "reviewed": {"build": "<the start of the newest build's SHA-256, as a row's build shows it>", "on":
+"YYYY-MM-DD", "note": "what was found"}: while that build is the newest, the row is reviewed instead of changed. Reads only.
 """
 from __future__ import annotations
 
@@ -52,6 +54,8 @@ SIMPLE_XPATH = re.compile(r"""^/?Defs/(?P<type>[\w.*]+)\[defName\s*=\s*(?P<q>["'
                           r"""(?P<rest>(?:/[\w.]+(?:\[[\w.]+\s*=\s*(["'])[^"']*\5\])?)*)/?$""")
 # Operations whose xpath is a question, not a target: finding nothing is an answer, not a fault.
 QUESTIONS = ("PatchOperationConditional", "PatchOperationTest", "PatchOperationFindMod")
+# How much of a build's SHA-256 a temporary row shows, for its "reviewed" note to name.
+BUILD_PREFIX = 12
 # Operations whose value can make a node an xpath later names.
 ADDS = ("PatchOperationAdd", "PatchOperationInsert", "PatchOperationAddModExtension")
 
@@ -117,9 +121,16 @@ def _when(version):
     return version.version or version.seen_at
 
 
+def _reviewed_for(reviewed, newer):
+    """Whether a row's "reviewed" note is for this build: its "build" begins the build's SHA-256."""
+    build = ((reviewed or {}).get("build") or "").strip().lower()
+    return bool(build) and (newer.sha256 or "").lower().startswith(build)
+
+
 def temporary_rows(entries, versions_by_file, since, compare):
-    """[{row, patch, mod, file, status, members, detail}] for each listed patch. `compare(older, newer, patterns)` gives
-    (changes, removed, added) for the members named: an added member counts as a change (a fix can be a new constructor)."""
+    """[{row, patch, mod, file, status, members, detail, build}] for each listed patch. `compare(older, newer, patterns)` gives
+    (changes, removed, added) for the members named: an added member counts as a change (a fix can be a new constructor).
+    A row whose "reviewed" note names the newest build is `reviewed`, with no compare: someone read that update already."""
     rows = []
     for entry in entries:
         file = entry["file"]
@@ -135,11 +146,19 @@ def temporary_rows(entries, versions_by_file, since, compare):
         if (newer.seen_at or "") < since:
             rows.append({**row, "status": "no-update", "detail": f"no update in the window; last kept {newer.seen_at} UTC"})
             continue
+        when = f"{_when(older)} to {_when(newer)}"
+        row["build"] = (newer.sha256 or "")[:BUILD_PREFIX]
+        if _reviewed_for(entry.get("reviewed"), newer):
+            seen = entry["reviewed"]
+            rows.append({**row, "status": "reviewed",
+                         "detail": f"the update of {when} was read on {seen.get('on', 'an unrecorded day')}"
+                                   + (f": {seen['note']}" if seen.get("note") else "")
+                                   + "; the patch stays until a newer build"})
+            continue
         patterns = [p for m in entry["members"] for p in (f"*.{m.lower()}", f"*.{m.lower()}(*")]
         changes, removed, added = compare(older, newer, patterns)
         names = sorted({_member(c.right.full) for c in changes} | {_member(i.full) for i in added})
         gone = sorted({_member(i.full) for i in removed})
-        when = f"{_when(older)} to {_when(newer)}"
         if gone:
             rows.append({**row, "status": "removed", "changed": names, "removed": gone,
                          "detail": f"{', '.join(gone)} removed in {when}: the patch cannot reach it"})
@@ -450,8 +469,12 @@ def temporary_section(report, data, rows, top):
         report.section("Temporary patches", "None listed (config/update-check.json names no temporaryPatches file).")
         return
     act = [r for r in rows if r["status"] in ("changed", "removed")]
+    read = sum(1 for r in rows if r["status"] == "reviewed")
     lead = (f"{len(act)} of {len(rows)} touched by an update: **read whether the fault is fixed** before taking a patch out."
-            if act else f"None of {len(rows)} touched by an update in the window: every one stays.")
+            if act else f"None of {len(rows)} touched by an update in the window: every one stays."
+            if not read else f"None of {len(rows)} waits to be read: every one stays.")
+    if read:
+        lead += f" {read} {'was' if read == 1 else 'were'} touched by an update already read (reviewed)."
     report.section("Temporary patches", lead, Table(["Row", "Patch", "Mod", "Status", "What"],
                                                     [[str(r["row"]), r["patch"], r["mod"], r["status"], r["detail"]]
                                                      for r in rows][:top], len(rows)))

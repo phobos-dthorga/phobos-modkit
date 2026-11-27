@@ -76,7 +76,10 @@ change (a fix can be a new constructor).
 ### Reading the answers
 
 - **Temporary patches**: `changed` or `removed` means **read whether the fault is fixed** before taking the patch out; `unchanged`
-  means the patch stays; `no-update` and `one-build` mean there is nothing new to compare.
+  means the patch stays; `no-update` and `one-build` mean there is nothing new to compare. **Once the update is read**, add
+  `"reviewed": {"build": "...", "on": "YYYY-MM-DD", "note": "what was found"}` to the row in the temporary patches file, its
+  `build` copied from the row (the start of the newest build's SHA-256): the row reads `reviewed` until a newer build arrives,
+  and is then compared again.
 - **XML patches** are checked against the Defs as written, before any patch, as the game applies them. A Def a patch adds whole
   (an Add at `Defs`) counts as defined. A node not there as written is looked for in the patched-Defs file (every patch applied),
   when one exists: found there is `patched`, a pass; the file is only as fresh as the last time the game was asked to write it.

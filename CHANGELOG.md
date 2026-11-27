@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.136.0] - 2026-11-27
+
+### Added
+
+- **A temporary patch's row can say its update was read** (the owner, 27 Nov 2026: "mark the jet rows as reviewed"). The update
+  check kept calling the jets' rearm, sortie and class rows `changed` though phobos-rimworld had rewritten them for those very
+  builds, and nothing could say so. A row's `reviewed` note names the build read; while it is the newest, the row reads
+  `reviewed` and is not compared, and each compared row now shows its `build` to copy. How:
+  [rimworld-update-check](docs/rimworld-update-check.md#reading-the-answers).
+
 ## [1.135.0] - 2026-11-27
 
 ### Added
