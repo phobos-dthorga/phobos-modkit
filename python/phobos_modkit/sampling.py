@@ -30,7 +30,10 @@ import sqlite3
 
 from . import cache as derived
 
-INDEX_FORMAT = "1"
+INDEX_FORMAT = "2"                 # 2 (1.151.0) keeps each thread's timeline; 1 is still read, without one
+READABLE_FORMATS = ("1", "2")
+LOOP_SHARE = 0.2                   # a method on the stack for a fifth of a thread's time or more is its loop, not a stretch of work
+STALL_SHARE, STALL_SLACK_MS = 0.9, 2.0   # a deeper method covering 90% of a stretch, within 2 ms (about a sample), is its stall
 CPU_FRAME = "CPU_TIME"
 NATIVE_FRAME = "UNMANAGED_CODE_TIME"
 CPU, NATIVE, OTHER = "cpu", "native", "other"
@@ -105,6 +108,7 @@ CREATE TABLE thread (id INTEGER PRIMARY KEY, name TEXT, start_ms REAL, end_ms RE
 CREATE TABLE sample (thread INTEGER, node INTEGER, kind TEXT, ms REAL);
 CREATE TABLE owner (module TEXT PRIMARY KEY, kind TEXT, name TEXT);
 CREATE TABLE counter (name TEXT, tags TEXT, mean REAL, max REAL, samples INTEGER);
+CREATE TABLE span (thread INTEGER, start_ms REAL, end_ms REAL, node INTEGER, kind TEXT);
 """
 
 
@@ -145,17 +149,25 @@ def index_speedscope(path, index, meta=None):
             rows.append((len(rows), name, module, method, int(patched)))
     nodes = {}                     # (parent node, frame) -> node
     node_rows = []
-    threads, samples = [], []
+    threads, samples, spans = [], [], []
     for header, start, end in _profiles(text):
         thread = len(threads)
         totals = defaultdict(float)                # (node, kind) -> ms
         stack = []                                 # (speedscope frame, node at that depth)
         last = None
+        open_span = None                           # [start, end, node, kind] of the thread's timeline so far
         for event in _EVENT.finditer(text, start, end):
             at = float(event.group("at"))
             if last is not None and stack and at > last:
                 top = stack[-1][0]
-                totals[(stack[-1][1], pseudo.get(top, OTHER))] += at - last
+                node, kind = stack[-1][1], pseudo.get(top, OTHER)
+                totals[(node, kind)] += at - last
+                if open_span and open_span[1] == last and open_span[2] == node and open_span[3] == kind:
+                    open_span[1] = at
+                else:
+                    if open_span and open_span[2] >= 0:
+                        spans.append((thread, *open_span))
+                    open_span = [last, at, node, kind]
             last = at
             frame = int(event.group("frame"))
             if event.group("kind") == "O":
@@ -169,6 +181,8 @@ def index_speedscope(path, index, meta=None):
                 stack.append((frame, node))
             elif stack:
                 stack.pop()
+        if open_span and open_span[2] >= 0:
+            spans.append((thread, *open_span))
         cpu = sum(v for (n, k), v in totals.items() if k == CPU)
         native = sum(v for (n, k), v in totals.items() if k == NATIVE)
         threads.append((thread, header.get("name", f"thread {thread}"), float(header.get("startValue", 0)),
@@ -185,6 +199,7 @@ def index_speedscope(path, index, meta=None):
         conn.executemany("INSERT INTO node VALUES (?, ?, ?)", node_rows)
         conn.executemany("INSERT INTO thread VALUES (?, ?, ?, ?, ?, ?)", threads)
         conn.executemany("INSERT INTO sample VALUES (?, ?, ?, ?)", samples)
+        conn.executemany("INSERT INTO span VALUES (?, ?, ?, ?, ?)", spans)
         derived.write_meta(conn, {"index_format": INDEX_FORMAT, **(meta or {})})
         conn.commit()
     return len(threads)
@@ -299,8 +314,10 @@ class Recording:
         self.index = Path(index)
         with closing(derived.open_read_only(self.index)) as conn:
             self.meta = dict(conn.execute("SELECT key, value FROM meta"))
-            if self.meta.get("index_format") != INDEX_FORMAT:
+            if self.meta.get("index_format") not in READABLE_FORMATS:
                 raise SamplingError(f"{self.index} was built by another version of this tool; record again.")
+            self.has_timeline = bool(conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'span'").fetchone())
             # Split again from the name, so a recording indexed by an older version reads names this one knows (Harmony 3's).
             self.frames = {r[0]: (r[1], *split_frame(r[1])) for r in conn.execute("SELECT id, name FROM frame")}
             self.parent, self.frame_of = {}, {}
@@ -313,6 +330,7 @@ class Recording:
         self._type_owner = None
         self._labels = {}
         self._outer = {}
+        self._spans = {}
 
     # Threads
 
@@ -503,6 +521,115 @@ class Recording:
         mod = self.label(at)
         return (self.method_at(at), self.method_at(ups[0]), self.method_at(caller) if caller is not None else ("", None),
                 mod if mod.kind == MOD else NO_MOD)
+
+    # The timeline (index format 2)
+
+    def spans(self, thread):
+        """[(start ms, end ms, node, kind)] of a thread in time order: what its stack was from one sample to the next. [] for an
+        index without a timeline."""
+        if not self.has_timeline:
+            return []
+        if thread not in self._spans:
+            with closing(derived.open_read_only(self.index)) as conn:
+                self._spans[thread] = conn.execute("SELECT start_ms, end_ms, node, kind FROM span WHERE thread = ? ORDER BY start_ms",
+                                                   (thread,)).fetchall()
+        return self._spans[thread]
+
+    def windows(self, thread, width_ms, key):
+        """[(window start ms, {key(node): Share})]: a thread's time in windows of width_ms, each span cut at the windows' edges."""
+        found = defaultdict(lambda: defaultdict(Share))
+        memo = {}
+        for start, end, node, kind in self.spans(thread):
+            if node not in memo:
+                memo[node] = key(node)
+            label = memo[node]
+            at = start
+            while at < end:
+                window = int(at // width_ms)
+                upto = min(end, (window + 1) * width_ms)
+                found[window][label].add(kind, upto - at)
+                at = upto
+        return [(window * width_ms, dict(found[window])) for window in sorted(found)]
+
+    def stretches(self, thread, keep, loop_share=LOOP_SHARE):
+        """{(method, Owner): (longest ms, its start ms, how many stretches, its depth on the stack)}: how long each method stayed on a
+        thread's stack with no sample outside it, for frames where keep(method, Owner). A method on the stack for loop_share of the
+        thread's time or more is its loop, left out. Back-to-back calls with no sample between them look like one stretch. Nested
+        methods of one stall share its start and length; the depth tells the innermost (`innermost_stretches`)."""
+        spans = self.spans(thread)
+        if not spans:
+            return {}
+        whole = sum(end - start for start, end, _, _ in spans)
+        on_stack = defaultdict(float)
+        paths = {}
+        for start, end, node, _ in spans:
+            if node not in paths:
+                paths[node] = list(reversed(self.nodes_up(node)))
+            for n in paths[node]:
+                on_stack[n] += end - start
+        loops = {n for n, ms in on_stack.items() if ms >= loop_share * whole}
+        kept = {}
+        found = {}
+        opened = []                               # [(node, since)] root first, the frames open now
+        last_end = None
+
+        def close(upto, at):
+            while len(opened) > upto:
+                depth = len(opened)
+                node, since = opened.pop()
+                if node in loops:
+                    continue
+                key = kept.get(node)
+                if key is None:
+                    method, owner = self.method_at(node)
+                    key = kept[node] = (method, owner) if keep(method, owner) else False
+                if key is False:
+                    continue
+                length = at - since
+                longest, began, count, deep = found.get(key, (0.0, 0.0, 0, 0))
+                found[key] = (length, since, count + 1, depth) if length > longest else (longest, began, count + 1, deep)
+
+        for start, end, node, _ in spans:
+            if last_end is not None and start > last_end:
+                close(0, last_end)                    # a gap in the samples ends every stretch
+            path = paths[node]
+            same = 0
+            while same < len(opened) and same < len(path) and opened[same][0] == path[same]:
+                same += 1
+            close(same, start)
+            opened.extend((n, start) for n in path[same:])
+            last_end = end
+        close(0, last_end)
+        return found
+
+    @staticmethod
+    def innermost_stretches(found, min_ms):
+        """[((method, Owner), (longest, start, count, depth), callers above it)] longest first: of the methods whose longest
+        stretches are one stall, only the innermost, with how many methods above it shared it. A method is a caller in a deeper
+        method's stall when the deeper one lies inside its stretch (a sample's width either side) and covers STALL_SHARE of it."""
+        candidates = sorted(((key, value) for key, value in found.items() if value[0] >= min_ms), key=lambda kv: (-kv[1][3], kv[0][0]))
+        kept, above = [], {}
+        for key, value in candidates:
+            length, start, _, depth = value
+            owner = next((k for k, v in kept if v[3] > depth and v[1] >= start - STALL_SLACK_MS
+                          and v[1] + v[0] <= start + length + STALL_SLACK_MS and v[0] >= STALL_SHARE * length), None)
+            if owner is None:
+                kept.append((key, value))
+                above[key] = 0
+            else:
+                above[owner] += 1
+        return sorted(((key, value, above[key]) for key, value in kept), key=lambda row: (-row[1][0], row[0][0]))
+
+    def stall_owners(self, thread, node, start_ms, length_ms):
+        """{Owner: ms}: who caused the time inside one stall, from every span of it under node."""
+        found = defaultdict(float)
+        end_ms = start_ms + length_ms
+        for begin, end, leaf, _ in self.spans(thread):
+            if end <= start_ms or begin >= end_ms:
+                continue
+            if node in self.nodes_up(leaf):
+                found[self.label(leaf)] += min(end, end_ms) - max(begin, start_ms)
+        return dict(found)
 
     # Aggregates
 

@@ -6,6 +6,7 @@
     rimworld-perf mod "Combat Extended"      one mod in a recording: its busiest methods and where its time went
     rimworld-perf callers GenTypes.IsSealedWithCache   what calls one method, the mods above it, and where its time goes
     rimworld-perf compare                    the last two recordings, as shares of the main thread and of ticking
+    rimworld-perf reindex --all              rebuild recordings indexed before 1.151.0 from their kept traces, with timelines
     rimworld-perf list                       every recording and snapshot kept
     rimworld-perf pack                       pack the large files of recordings and heaps kept before 1.149.0 (--apply)
     rimworld-perf unpack 20261117-1900       write a recording's trace or a heap's .gcdump out plain, for PerfView
@@ -61,7 +62,7 @@ from ... import process_memory as pm
 from ...manifest import READS, RUNS, WRITES
 from ...progress import Progress
 from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
-from ...sampling import (CPU, MOD, NATIVE, NO_MOD, UNKNOWN, Recording, SamplingError, Share, index_speedscope, method_matcher, modules,
+from ...sampling import (CPU, ENGINE, GAME, MOD, NATIVE, NO_MOD, UNKNOWN, Recording, SamplingError, Share, index_speedscope, method_matcher, modules,
                          read_counters, write_counters, write_owners)
 from ... import heap_reader as hreader
 from ... import checks as check_engine
@@ -73,7 +74,7 @@ from . import perf_snapshots as snap
 from . import perf_watch as pw
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
-REPORTS = ("report", "record", "index", "mod", "callers", "compare", "list", "stack", "stack-report", "heap", "heap-report", "heap-compare",
+REPORTS = ("report", "record", "index", "reindex", "mod", "callers", "compare", "list", "stack", "stack-report", "heap", "heap-report", "heap-compare",
            "watch", "watch-report", "watch-status", "watch-stop", "watch-mark", "look", "look-kind", "look-why", "look-serve",
            "look-check", "look-thaw", "pack", "unpack")
 FREEZE_HELP = ("freeze the game and read it in place instead of a snapshot, when Windows has no room to copy it (error 1450); it "
@@ -122,6 +123,9 @@ def _parser():
     i.add_argument("file", help="a .speedscope.json file from dotnet-trace")
     i.add_argument("--counters", help="dotnet-counters' JSON file from the same time")
     i.add_argument("--label", help="a few words to find the recording by")
+    ri = sub.add_parser("reindex", parents=[common], help="rebuild a recording's index from its kept trace, with its timeline")
+    ri.add_argument("recording", nargs="?", help="a recording's ID or label; the newest when left out")
+    ri.add_argument("--all", action="store_true", help="every recording kept")
     m = sub.add_parser("mod", parents=[common], help="one mod in a recording")
     m.add_argument("name", help="a mod's name; * and ? are wildcards")
     m.add_argument("recording", nargs="?", help="a recording's ID or label; the newest when left out")
@@ -423,7 +427,150 @@ def callers_report(rec, folder, pattern, top, all_threads=False):
                    Table(["Mod", "ms", "Share"], rows, count))
     rows, count = _site_rows(found.leaf, total, top)
     report.section("Where its time goes (where the thread was, at or below it)", Table(["Method", "Owner", "ms", "Share"], rows, count))
+    if rec.has_timeline and not all_threads:
+        width = window_width(rec.duration_ms(main) / 1000)
+        windows = rec.windows(main, width * 1000, lambda node: rec._call_site(node, matches) is not None)
+        report.section("Over time", f"Its time on the main thread in each {width} s.", Table(["Window", "ms", "Share of the window"], [
+            (_window_text(start, width), ms(shares[True].total if True in shares else 0.0),
+             pct(shares[True].total if True in shares else 0.0, sum(s.total for s in shares.values()))) for start, shares in windows]))
     return report
+
+
+def reindex_one(folder, tool, run):
+    """Rebuilds one recording's index from its kept trace, keeping its owners (the mod list of its day), counters and meta.
+    Returns what happened, in words."""
+    index = Path(folder) / INDEX_NAME
+    plain = Path(folder) / dd.TRACE_FILE
+    unpacked = False
+    if not plain.is_file():
+        if not packed.packed_of(plain).is_file():
+            return "no trace kept, so it cannot be rebuilt"
+        packed.unpack(packed.packed_of(plain), plain)
+        unpacked = True
+    fresh = index.with_name("index.new.sqlite")
+    speedscope = None
+    try:
+        speedscope = dd.convert(plain, tool, run)
+        meta = {k: v for k, v in derived.read_meta(index).items() if k != "index_format"}
+        meta.update(reindexed_by=__version__)
+        threads = index_speedscope(speedscope, fresh, meta)
+        with closing(sqlite3.connect(fresh)) as conn:
+            conn.execute("ATTACH DATABASE ? AS old", (str(index),))
+            conn.execute("INSERT INTO owner SELECT module, kind, name FROM old.owner")
+            conn.execute("INSERT INTO counter SELECT name, tags, mean, max, samples FROM old.counter")
+            conn.commit()
+            conn.execute("DETACH DATABASE old")
+        derived.remove(index)
+        fresh.replace(index)
+    finally:
+        derived.remove(fresh)
+        if speedscope is not None:
+            derived.remove(speedscope)
+        if unpacked:
+            derived.remove(plain)
+    return f"rebuilt: {threads} threads, with its timeline"
+
+
+def reindex_report(args, root, environ, run):
+    targets = recordings(root) if args.all else [find(root, args.recording)]
+    if not targets:
+        raise PerfError(f"No recordings in {root}.")
+    found, _ = dd.ensure([dd.TRACE], environ, run)
+    rows = [(folder.name, reindex_one(folder, found[dd.TRACE], run)) for folder in targets]
+    report = Report(f"rimworld-perf: {len(rows)} recordings rebuilt" if len(rows) != 1 else f"rimworld-perf: {rows[0][0]} rebuilt",
+                    ["Each index was made again from the recording's kept trace with dotnet-trace's own converter, keeping who owned "
+                     "each module on the day it was recorded, its counters and its label. The trace itself is untouched."])
+    report.section("Recordings", Table(["Recording", "Result"], rows))
+    return report, {"rebuilt": [name for name, said in rows if said.startswith("rebuilt")]}
+
+
+STRETCH_MIN_MS = 50                 # an unbroken stretch is listed from 50 ms: three frames at 60 a second
+SPIKE_TIMES, SPIKE_POINTS = 2.0, 10.0   # a window's busiest mod is marked at twice its average share and 10 points over it
+NO_TIMELINE = ("This recording was indexed before 1.151.0, so it keeps no timeline: `rimworld-perf reindex {name}` rebuilds it "
+               "from its kept trace in a few seconds, with the tables over time.")
+STRETCH_NOTE = ("How long a method stayed on the main thread's stack with no sample outside it: the main thread did nothing else "
+                "for at least that long, so a stretch over a frame's length is a hitch. Back-to-back calls with no sample between "
+                "them look like one stretch. Methods on the stack for a fifth of the time or more are the loop itself and left "
+                "out; listed from {min} ms.")
+
+
+def window_width(seconds):
+    """Seconds a row of the tables over time covers: about a dozen to twenty rows."""
+    return 5 if seconds <= 90 else 15 if seconds <= 300 else 30
+
+
+def _window_text(start_ms, width_s):
+    return f"{start_ms / 1000:g}-{start_ms / 1000 + width_s:g} s"
+
+
+def timeline_sections(rec, report, main, top):
+    """The tables over time: the main loop by window, and the longest unbroken stretches."""
+    phases, ticking = perf.phases()
+    whole = rec.duration_ms(main)
+    width = window_width(whole / 1000)
+    cache = {}
+    windows = rec.windows(main, width * 1000, lambda node: (rec.phase_of(node, phases, cache), rec.label(node)))
+    overall = defaultdict(float)
+    tick_total = 0.0
+    for _, shares in windows:
+        for (phase, owner), share in shares.items():
+            if phase == ticking:
+                tick_total += share.total
+                if owner.kind == MOD:
+                    overall[owner] += share.total
+    rows = []
+    for start, shares in windows:
+        span = sum(s.total for s in shares.values())
+        if span < width * 1000 / 2:
+            continue                       # the recording's last few moments: too short to say anything
+        ticks = sum(s.total for (phase, _), s in shares.items() if phase == ticking)
+        mods = defaultdict(float)
+        for (phase, owner), share in shares.items():
+            if phase == ticking and owner.kind == MOD:
+                mods[owner] += share.total
+        busiest, note = "-", ""
+        if mods and ticks:
+            owner, value = max(mods.items(), key=lambda kv: (kv[1], kv[0].name))
+            here, average = 100 * value / ticks, 100 * overall[owner] / tick_total if tick_total else 0.0
+            busiest = f"{owner.name} ({here:.0f}% of its ticking)"
+            if here >= SPIKE_TIMES * average and here - average >= SPIKE_POINTS:
+                note = f"**{here / average:.1f} times its average**" if average else "**only here**"
+        rows.append((_window_text(start, width), pct(ticks, span), busiest, note))
+    report.section("Over time: the main thread, window by window",
+                   f"Each row is {width} s of the main thread: its share spent ticking, and the mod that caused the most of that "
+                   "ticking. A mark means that mod took at least twice its usual share there: work it does now and then.",
+                   Table(["Window", "Ticking", "Busiest mod while ticking", "Note"], rows))
+    found = rec.stretches(main, lambda method, owner: owner.kind in (MOD, GAME, ENGINE))
+    listed = rec.innermost_stretches(found, STRETCH_MIN_MS)
+    if listed:
+        report.section("The longest unbroken stretches on the main thread", STRETCH_NOTE.format(min=STRETCH_MIN_MS),
+                       Table(["Method (the innermost of the stall)", "Owner", "Longest (ms)", "At (s into the recording)",
+                              "Times on the stack", "Methods above it in the same stall", "Caused by, inside the stall"],
+                             [(method, owner.name, ms(longest), f"{began / 1000:.1f}", f"{count:,}", f"{above:,}",
+                               _stall_text(rec, main, method, began, longest))
+                              for (method, owner), (longest, began, count, _), above in listed[:top]], len(listed)))
+
+
+def _stall_text(rec, thread, method, began, longest):
+    node = _node_of(rec, thread, method, began)
+    if node is None:
+        return "-"
+    shares = rec.stall_owners(thread, node, began, longest)
+    whole = sum(shares.values())
+    ordered = sorted(shares.items(), key=lambda kv: (-kv[1], kv[0].name))[:MODS_SHOWN]
+    return ", ".join(f"{o.name} {pct(v, whole)}" for o, v in ordered)
+
+
+def _node_of(rec, thread, method, at_ms):
+    """The stack's node where method was on the thread at a moment: the first span from then that holds it."""
+    for start, end, node, _ in rec.spans(thread):
+        if end <= at_ms:
+            continue
+        for n in rec.nodes_up(node):
+            if rec.method_at(n)[0] == method:
+                return n
+        return None
+    return None
 
 
 def summary_report(rec, folder, top):
@@ -475,6 +622,10 @@ def summary_report(rec, folder, top):
                            Table(["Method", "ms", "Share of ticking"], rows, total))
     rows, total = _owner_rows(rec.by_owner(samples), whole, top)
     report.section("The whole main thread: who caused the time", Table(OWNER_HEADERS, rows, total))
+    if rec.has_timeline:
+        timeline_sections(rec, report, main, top)
+    else:
+        report.lines.append(NO_TIMELINE.format(name=folder.name))
     counters = _counter_rows(rec)
     report.section("Garbage collection and the runtime", Table(["Measure", "Average", "Worst"], counters) if counters
                    else "No counters were recorded.")
@@ -967,6 +1118,8 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
             first = find(root, args.first) if args.first else found[-2]
             second = find(root, args.second) if args.second else found[-1]
             report = compare_report(Recording(first / INDEX_NAME), Recording(second / INDEX_NAME), (first.name, second.name), args.top)
+        elif args.report == "reindex":
+            report, data = reindex_report(args, root, environ, run)
         elif args.report == "callers":
             folder = find(root, args.recording)
             report = callers_report(Recording(folder / INDEX_NAME), folder, args.method, args.top, args.all_threads)
@@ -1019,6 +1172,8 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
                                          "the kit's cache; never writes over a file."},
     "mod": {"question": "What does one mod cost while the game runs?"},
     "callers": {"question": "Which code calls a slow method, and which mods lead to it?"},
+    "reindex": {"effect": RUNS, "note": "Runs Microsoft's dotnet-trace convert on a recording's kept trace (a file; no program is "
+                                        "attached) and writes a new index for it in the kit's cache; the trace is untouched."},
     "compare": {"question": "Did a change make the game faster?"},
     "stack": {"effect": RUNS, "question": "My game froze: where is it stuck, and whose code is it?",
               "note": "Attaches Microsoft's dotnet-stack to the running game a few times; it changes nothing in it."},

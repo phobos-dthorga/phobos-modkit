@@ -16,6 +16,10 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
   the engine's job workers from a RimWorld data file, and .NET's own (the JIT compiling through Harmony's hook among them) from the
   core. The owner's recordings showed the audio thread at up to 88% of a core, listed till now as "the engine". A next game lists
   its engine's threads in its own data file. How: [rimworld-perf](docs/rimworld-perf.md).
+- **rimworld-perf keeps each recording's timeline, with tables over time and the longest stalls of the main thread**: who was
+  busiest window by window, marked where a mod did twice its usual share, and the longest stretches a method held the main thread
+  with the mods inside each. The owner's recordings showed job searches of up to 174 ms. `reindex` rebuilds older recordings from
+  their kept traces in about 10 s each. Game-free in `sampling`. How: [rimworld-perf](docs/rimworld-perf.md).
 
 ## [1.150.0] - 2026-11-28
 

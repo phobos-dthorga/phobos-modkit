@@ -30,6 +30,7 @@ python -m phobos_modkit rimworld-perf callers GenTypes.IsSealedWithCache   what 
 python -m phobos_modkit rimworld-perf compare                      the last two recordings, as shares
 python -m phobos_modkit rimworld-perf compare before after         two recordings by ID or label
 python -m phobos_modkit rimworld-perf list                         every recording kept
+python -m phobos_modkit rimworld-perf reindex --all                recordings indexed before 1.151.0, rebuilt with their timelines
 python -m phobos_modkit rimworld-perf index FILE.speedscope.json --counters FILE.json   a trace recorded by hand
 ```
 
@@ -64,6 +65,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `report` | A recording: phases, who caused the time, busiest methods, garbage collection. | reads only |
 | `record` | Record the running game, then report it. Attaches Microsoft's dotnet-trace and dotnet-counters to the running game; it changes nothing in it. | runs other programs |
 | `index` | Index a speedscope file recorded by hand with dotnet-trace. | reads only |
+| `reindex` | Rebuild a recording's index from its kept trace, with its timeline. Runs Microsoft's dotnet-trace convert on a recording's kept trace (a file; no program is attached) and writes a new index for it in the kit's cache; the trace is untouched. | runs other programs |
 | `mod` | One mod in a recording. | reads only |
 | `callers` | How the stacks running one method reach it, and the mods above it. | reads only |
 | `compare` | Two recordings, as shares of the main thread and of ticking. | reads only |
@@ -103,8 +105,9 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `FILE` | `index` | a .speedscope.json file from dotnet-trace |  |
 | `--counters VALUE` | `index` | dotnet-counters' JSON file from the same time |  |
 | `--label VALUE` | `index` | a few words to find the recording by |  |
+| `RECORDING` | `reindex`, `mod`, `callers` | (optional) a recording's ID or label; the newest when left out |  |
+| `--all` | `reindex` | every recording kept |  |
 | `NAME` | `mod` | a mod's name; \* and ? are wildcards |  |
-| `RECORDING` | `mod`, `callers` | (optional) a recording's ID or label; the newest when left out |  |
 | `METHOD` | `callers` | Namespace.Type.Method, or its end (GenTypes.IsSealedWithCache); \* and ? are wildcards |  |
 | `--all-threads` | `callers` | every thread, not only the main one |  |
 | `FIRST` | `compare` | (optional) the earlier recording; the second newest when both are left out |  |
@@ -196,6 +199,24 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
   libraries (Waylith, Brutal, Steamworks); `System.*` and `Microsoft.*` are .NET; Harmony and MonoMod are libraries; every active
   mod's assemblies for the game's version are that mod's, the first in load order winning when two ship one name. A module no
   rule matches is listed as unmatched.
+- **Over time** (1.151.0) splits the main thread into windows (5 s for a recording up to 90 s, 15 s up to 5 minutes, 30 s beyond):
+  its share spent ticking, and the mod that caused the most of that ticking, **marked when it took at least twice its usual share
+  and 10 points more**: work a mod does now and then, which totals over the whole recording hide. A window less than half full
+  (the recording's last moments) is left out. `callers` has its own table over time: on the owner's recording of 18 November 2026
+  the lock in `GenTypes.IsSealedWithCache` took 32% to 38% of every 5 s, a steady cost rather than bursts.
+- **The longest unbroken stretches** (1.151.0): how long a method stayed on the main thread's stack with no sample outside it.
+  The main thread did nothing else for at least that long, so a stretch over a frame's length (16.7 ms at 60 frames a second) is a
+  hitch. Listed from 50 ms. Each stall is listed once, by its innermost method: a method whose stretch a deeper one covers at least
+  90% of, within 2 ms, counts as "above it in the same stall". **Caused by, inside the stall** totals who caused the time over every
+  moment of it, not only its first. Methods on the stack for a fifth of the time or more are the loop itself and left out, and
+  **back-to-back calls with no sample between them look like one stretch**: a long `Pawn.TickInterval` can be many pawns in a row.
+  The owner's recording of 18 November 2026 had job searches of 154 to 174 ms, one with The Dead Man's Switch - Legion causing 63% of
+  it.
+- **The timeline** is kept in the index from 1.151.0 (index format 2): each thread's stack from one sample to the next. Recordings
+  indexed before then still read, without the tables over time, and the report says so. **`reindex`** rebuilds them from their kept
+  trace (`trace.nettrace.zst`) with dotnet-trace's own converter, which reads the file only (about 10 s for a minute of the owner's
+  game), keeping who owned each module on the day it was recorded, its counters and its label; the index grows about three and a
+  half times (1 MB to 3.5 MB for a minute).
 - **Compare** uses shares of the main thread and of ticking, not milliseconds: a faster game ticks more often, so a mod's
   milliseconds per second can rise when the game speeds up.
 
@@ -315,8 +336,12 @@ cannot be made again.
 
 ## Limits
 
-- Sampling sees about one stack per millisecond per thread. Totals over many seconds are reliable to a few percent; a method
-  that ran for less than a millisecond in all can be missed or over-counted by chance.
+- Sampling sees about one stack per millisecond per thread in principle; **on the owner's game a sample came every 1.5 ms**
+  (median of 38,676 on the main thread, 18 November 2026), once 43 ms apart. Totals over many seconds are reliable to a few
+  percent; a method that ran for less than a couple of milliseconds in all can be missed or over-counted by chance.
+- **Each sample stops the runtime** (the trace held 38,698 suspensions in its 60 s), and a thread stops where the runtime may stop
+  it, so samples land on such places and code with many of them, such as a lock's spin, can look hotter than it is. A lock's real
+  waits are measured as events from 1.151.0, not sampled.
 - The trace counts no calls and no ticks, so it cannot give ticks per second.
 - Overloads of one method are counted together (the report drops argument lists).
 - The phase patterns were read from the game's code. In the first recording of the game (RimWorld 1.7.5011, 349 mods, 17 November

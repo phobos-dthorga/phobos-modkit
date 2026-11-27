@@ -234,6 +234,18 @@ def counter_events(path):
     return found
 
 
+def convert(nettrace, tool, run=subprocess.run):
+    """dotnet-trace's own speedscope export of a .nettrace file, written beside it; returns the speedscope file. It reads the file
+    only: no program is attached. About 10 s for a minute of the owner's game (110 MB), seen 28 November 2026."""
+    nettrace = Path(nettrace)
+    out = nettrace.with_name(nettrace.name.split(".", 1)[0])
+    _output([tool, "convert", nettrace, "--format", "Speedscope", "-o", out], run, STOP_GRACE_SECONDS, "dotnet-trace convert")
+    speedscope = out.with_name(out.name + SPEEDSCOPE_SUFFIX)
+    if not speedscope.is_file():
+        raise DiagnosticsError(f"dotnet-trace convert finished but wrote no {speedscope.name}.")
+    return speedscope
+
+
 def record(pid, seconds, folder, trace_tool, counters_tool, popen=subprocess.Popen):
     """Record a program for `seconds`: a sampled trace (converted to speedscope) and its counters, side by side.
 

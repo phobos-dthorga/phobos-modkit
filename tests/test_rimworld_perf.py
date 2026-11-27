@@ -4,10 +4,12 @@ The fixture's main thread, in milliseconds: 0-40 a mod's method calling a game m
 ticking; 40-60 another mod's postfix calling a .NET list; 60-70 the patched Pawn.Tick itself; 70-100 the engine drawing the map,
 in native code; 100-110 the frame update itself. A second thread waits for its whole 100 ms.
 """
+from contextlib import closing
 import io
 from datetime import datetime
 from pathlib import Path
 import shutil
+import sqlite3
 import subprocess
 import tempfile
 import unittest
@@ -19,7 +21,7 @@ from phobos_modkit import packed
 from phobos_modkit import sampling
 from phobos_modkit.games.rimworld import perf, perf_cli
 from phobos_modkit.games.rimworld import perf_snapshots as snap
-from phobos_modkit.sampling import ENGINE, GAME, LIBRARY, MOD, RUNTIME, UNKNOWN, Owner
+from phobos_modkit.sampling import ENGINE, GAME, LIBRARY, MOD, RUNTIME, UNKNOWN, Owner  # noqa: F401
 
 TRACE = FIXTURES / "rimworld" / "perf" / "main-loop.speedscope.json"
 COUNTERS = FIXTURES / "rimworld" / "perf" / "counters.json"
@@ -32,6 +34,14 @@ def indexed(tmp):
     sampling.write_owners(index, perf.classify(sampling.modules(index), {"waylith"}, MODS))
     sampling.write_counters(index, sampling.read_counters(COUNTERS))
     return sampling.Recording(index)
+
+
+def without_timeline(index):
+    """Makes an index look as 1.150.0 built it: format 1, no timeline."""
+    with closing(sqlite3.connect(index)) as conn:
+        conn.execute("DROP TABLE span")
+        conn.execute("UPDATE meta SET value = '1' WHERE key = 'index_format'")
+        conn.commit()
 
 
 def named(shares):
@@ -183,6 +193,33 @@ class RecordingTests(unittest.TestCase):
         self.assertEqual("ticking", self.rec.thread_role(self.main, [("drawing", ["Verse.Map.MapUpdate"]),
                                                                      ("ticking", ["Verse.TickManager.DoSingleTick"])]))
 
+    def test_the_timeline_keeps_each_stretch_of_one_stack(self):
+        self.assertTrue(self.rec.has_timeline)
+        self.assertEqual([(0, 40, "cpu"), (40, 60, "cpu"), (60, 70, "cpu"), (70, 100, "native"), (100, 110, "cpu")],
+                         [(a, b, k) for a, b, _, k in self.rec.spans(self.main)])
+        phases, _ = perf.phases()
+        windows = self.rec.windows(self.main, 50, lambda node: self.rec.phase_of(node, phases, {}))
+        self.assertEqual([(0, {"ticking (the simulation)": 50}), (50, {"ticking (the simulation)": 20, "map and world drawing": 30}),
+                          (100, {None: 10})], [(start, {k: round(v.total, 3) for k, v in shares.items()}) for start, shares in windows])
+
+    def test_unbroken_stretches_and_their_stalls(self):
+        found = self.rec.stretches(self.main, lambda m, o: o.kind in (MOD, GAME, ENGINE), loop_share=0.5)
+        # Root_Play.Update, DoSingleTick and Pawn.Tick hold half the time or more: the loop itself. The .NET list is not kept.
+        self.assertEqual({"Example.Dosing.DoseService.MakeJob": (40, 0, 1, 4), "Verse.PawnCapacityUtility.CalculateCapacityLevel": (40, 0, 1, 5),
+                          "Other.Patches.Pawn_Tick.Postfix": (20, 40, 1, 4), "Verse.Map.MapUpdate": (30, 70, 1, 2),
+                          "Waylith.Rendering.Submit": (30, 70, 1, 3)}, {m: v for (m, _), v in found.items()})
+        stalls = [(m, above) for (m, _), _, above in sampling.Recording.innermost_stretches(found, 25)]
+        self.assertEqual([("Verse.PawnCapacityUtility.CalculateCapacityLevel", 1), ("Waylith.Rendering.Submit", 1)], stalls)
+        node = next(n for n in self.rec.nodes_up(self.rec.spans(self.main)[0][2]) if self.rec.method_at(n)[0].endswith("MakeJob"))
+        self.assertEqual({"Example Medical": 40}, {o.name: v for o, v in self.rec.stall_owners(self.main, node, 0, 40).items()})
+
+    def test_an_index_from_before_the_timeline_still_reads(self):
+        without_timeline(self.rec.index)
+        old = sampling.Recording(self.rec.index)
+        self.assertFalse(old.has_timeline)
+        self.assertEqual([], old.spans(self.main))
+        self.assertEqual({}, old.stretches(self.main, lambda m, o: True))
+
     def test_a_file_that_is_not_a_trace(self):
         bad = Path(self.tmp) / "bad.json"
         bad.write_text('{"profiles": []}', encoding="utf-8")
@@ -300,6 +337,32 @@ class CommandTests(unittest.TestCase):
         self.assertIn("| Verse.PawnCapacityUtility.CalculateCapacityLevel | RimWorld | 40 | 57.1% | "
                       "Verse.PawnCapacityUtility.CalculateCapacityLevel (100.0%) | Example.Dosing.DoseService.MakeJob (100.0%) | "
                       "Example Medical 40 ms |", text)
+
+    def test_reindex_rebuilds_an_old_recording_with_its_timeline(self):
+        self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--counters", str(COUNTERS), "--label", "old", *self.common)[0])
+        folder = self.tmp / "cache" / perf_cli.CACHE_FOLDER / "20261117-180000-old"
+        without_timeline(folder / perf_cli.INDEX_NAME)
+        code, text = self.run_cli("report", "old", *self.common)
+        self.assertIn("rimworld-perf reindex 20261117-180000-old", text)
+        self.assertNotIn("## Over time", text)
+        (folder / dd.TRACE_FILE).write_bytes(b"nettrace")
+        packed.pack(folder / dd.TRACE_FILE)
+
+        def run(command, **_):
+            command = [str(c) for c in command]
+            if "convert" in command:
+                shutil.copyfile(TRACE, command[command.index("-o") + 1] + dd.SPEEDSCOPE_SUFFIX)
+            return subprocess.CompletedProcess(command, 0, "", "")
+        with mock.patch.object(perf, "active_mod_assemblies", return_value=({}, set())):   # owners come from the old index
+            code, text = self.run_cli("reindex", "--all", *self.common, run=run)
+        self.assertEqual(perf_cli.EXIT_OK, code, text)
+        self.assertIn("| 20261117-180000-old | rebuilt: 2 threads, with its timeline |", text)
+        self.assertEqual(["index.sqlite", "trace.nettrace.zst"], sorted(p.name for p in folder.iterdir()))
+        code, text = self.run_cli("report", "old", *self.common)
+        self.assertIn("## Over time: the main thread, window by window", text)
+        self.assertIn("| Example Medical | mod | 40 | 57.1% |", text)                 # the day's owners, kept
+        self.assertIn("Time paused for garbage collection | 3.0% of the time", text)   # and its counters
+        self.assertIn('("old")', text)
 
     def test_pack_and_unpack_what_was_kept_plain(self):
         # The owner's choice by card (28 Nov 2026): recordings and heaps alike, "Compress them too".
