@@ -105,6 +105,34 @@ def rules_file(game, environ=None, settings=None):
     return folder(game, environ, settings) / "rules.json"
 
 
+# Rules brought over from a mod manager (1.144.0) are kept with when its file was last changed, so its copy stops being read until
+# it changes again.
+MANAGER_SOURCE = "manager"
+
+
+def _rules_data(path):
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) and data.get("format") == RULES_FORMAT else {}
+
+
+def imported_from(path):
+    """{source: the brought-over file's modification time in ns} from the owner's rules file."""
+    found = _rules_data(path).get("imported")
+    return {k: v for k, v in found.items() if isinstance(v, int)} if isinstance(found, dict) else {}
+
+
+def imported_unchanged(path, source, their_file):
+    """Whether the rules in `their_file` were brought over and the file has not changed since."""
+    stamp = imported_from(path).get(source)
+    try:
+        return stamp is not None and Path(their_file).stat().st_mtime_ns <= stamp
+    except OSError:
+        return False
+
+
 def load_own_rules(path):
     """[{"mod", "kind", "other", "added"}] from the owner's rules file; empty when there is none."""
     try:
@@ -116,12 +144,42 @@ def load_own_rules(path):
     return [r for r in data.get("rules", []) if isinstance(r, dict) and r.get("kind") in RULE_KINDS and r.get("mod")]
 
 
-def _save_own_rules(path, rules):
+def _save_own_rules(path, rules, imported=None):
     path = Path(path)
+    imported = imported_from(path) if imported is None else imported
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps({"format": RULES_FORMAT, "rules": rules}, indent=1), encoding="utf-8")
+    data = {"format": RULES_FORMAT, "rules": rules}
+    if imported:
+        data["imported"] = imported
+    temporary.write_text(json.dumps(data, indent=1), encoding="utf-8")
     os.replace(temporary, path)
+
+
+def import_rules(adapter, path, rule_set, source=MANAGER_SOURCE, now=None, apply=False):
+    """Brings a mod manager's rules into the owner's own (1.144.0): each rule not kept already, with its note; with `apply`,
+    written, and the manager's file marked as brought over. The rules that would be added (or were)."""
+    own = load_own_rules(path)
+    have = {(adapter.key(r["mod"]), r["kind"], adapter.key(r.get("other", ""))) for r in own}
+    stamp = (now or datetime.now(timezone.utc)).date().isoformat()
+    added = []
+    for mod, entry in sorted(rule_set.rules.items()):
+        wanted = [(kind, other, note) for kind in ("after", "before") for other, note in entry.get(kind, [])]
+        wanted += [(kind, "", entry[kind]) for kind in ("top", "bottom") if entry.get(kind) is not None]
+        for kind, other, note in wanted:
+            key = (adapter.key(mod), kind, adapter.key(other))
+            if key in have or (other and key[0] == key[2]):
+                continue
+            have.add(key)
+            rule = {"mod": mod, "kind": kind, "other": other, "added": stamp}
+            if note:
+                rule["note"] = note
+            added.append(rule)
+    if apply:
+        imported = dict(imported_from(path))
+        imported[source] = Path(rule_set.where).stat().st_mtime_ns
+        _save_own_rules(path, own + added, imported)
+    return added
 
 
 def add_rule(adapter, path, mod, kind, other="", now=None):
@@ -158,9 +216,9 @@ def own_rule_set(adapter, path):
     for rule in load_own_rules(path):
         entry = rules.setdefault(adapter.key(rule["mod"]), {"after": [], "before": [], "top": None, "bottom": None})
         if rule["kind"] in ("after", "before"):
-            entry[rule["kind"]].append((rule["other"], ""))
+            entry[rule["kind"]].append((rule["other"], rule.get("note", "")))
         else:
-            entry[rule["kind"]] = ""
+            entry[rule["kind"]] = rule.get("note", "")
     return RuleSet(YOURS, "Your rules here", str(path), rules, editable=True)
 
 

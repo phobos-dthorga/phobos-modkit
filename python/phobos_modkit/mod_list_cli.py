@@ -8,6 +8,8 @@
     mod-list rules --name GAME                                         your own rules, and every rule set the sorter reads
     mod-list rules --name GAME --mod ID --after OTHER [--apply]        keep a rule of your own (also --before, --top, --bottom)
     mod-list rules --name GAME --drop N [--apply]                      take your rule N away
+    mod-list rules --name GAME --import-manager [--apply]              bring your rules over from the mod manager (RimSort) (1.144.0)
+    mod-list databases --name GAME [--fetch [--stale] [--only NAME]]   the community lists the sorter reads; fetch them (1.144.0)
     mod-list lists --name GAME                                         every saved list: by name, at game starts, saves, RimSort
     mod-list since --name GAME [--list KEY]                            what the first game run after your last change showed (1.85.0)
     mod-list compare --name GAME --list KEY --from SOURCE:REF          what loading a list would change (or --file PATH)
@@ -42,7 +44,9 @@ from . import mod_list as core
 from . import mod_lists
 from . import mod_runs
 from .steam import client as steam_client
+from . import mod_databases
 from . import mod_sort
+from .github import http_get as github_get
 from .games import MOD_LIST_GAMES, mod_list_adapter, mod_list_game
 from .installs import game_running
 from .manifest import ONLINE, READS, WRITES
@@ -105,7 +109,16 @@ def _parser():
     where.add_argument("--top", action="store_true", help="it loads as near the top as its rules allow")
     where.add_argument("--bottom", action="store_true", help="it loads as near the bottom as its rules allow")
     where.add_argument("--drop", type=int, metavar="N", help="take your rule N away (as `rules` numbers them)")
+    where.add_argument("--import-manager", action="store_true",
+                       help="bring your rules over from the game's mod manager (RimSort), each one not kept already (1.144.0)")
     rules.add_argument("--apply", action="store_true", help="keep the change; without it, only say what it would be")
+    databases = sub.add_parser("databases", help="the community lists the sorter and the check read: where from and how old")
+    _common(databases, lists=False)
+    databases.add_argument("--fetch", action="store_true",
+                           help="fetch them from their public GitHub repositories into the kit's cache (keyless)")
+    databases.add_argument("--stale", action="store_true",
+                           help=f"with --fetch, only the lists older than {mod_databases.FRESH_DAYS} days")
+    databases.add_argument("--only", action="append", metavar="NAME", help="with --fetch, only this list (again for several)")
     since = sub.add_parser("since", help="what the first game run after the last change made here showed; only reads")
     _common(since)
     lists = sub.add_parser("lists", help="every saved list: by name, kept at game starts, each save's, and RimSort's history")
@@ -454,16 +467,35 @@ def rules(adapter, args, environ=None, now=None):
         if args.apply:
             mod_sort.add_rule(adapter, path, args.mod, kind, other, now)
             data["applied"] = True
+    elif args.import_manager:
+        theirs = adapter.manager_rule_set() if hasattr(adapter, "manager_rule_set") else None
+        manager = getattr(adapter, "manager_name", "the mod manager")
+        if theirs is None:
+            raise core.FixError(f"{manager} keeps no rules of yours for {adapter.name}.")
+        added = mod_sort.import_rules(adapter, path, theirs, now=now, apply=args.apply)
+        data["imported"] = [dict(r, words=mod_sort.rule_words(r)) for r in added]
+        total = len(_manager_rules(adapter, theirs))
+        data["changed"] = (f"bring over {len(added)} of your {total} rules in {manager}"
+                           + (f"; {total - len(added)} are kept here already" if total > len(added) else ""))
+        data["applied"] = bool(args.apply)
     elif args.mod:
         raise core.FixError("Say where it loads: --after, --before, --top or --bottom.")
     own = mod_sort.load_own_rules(path)
+    manager_set = adapter.manager_rule_set() if hasattr(adapter, "manager_rule_set") else None
     data.update(rules=[dict(r, number=n, words=mod_sort.rule_words(r)) for n, r in enumerate(own, 1)],
                 sets=[mod_sort.rule_data(s) for s in mod_sort.every_rule_set(adapter, environ, args.settings)],
-                theirs=_manager_rules(adapter))
+                theirs=_manager_rules(adapter),
+                manager={"name": getattr(adapter, "manager_name", ""), "count": len(_manager_rules(adapter, manager_set)),
+                         "where": manager_set.where if manager_set else "",
+                         "broughtOver": bool(manager_set) and mod_sort.imported_unchanged(path, mod_sort.MANAGER_SOURCE,
+                                                                                          manager_set.where)})
     report = Report(f"Mod list: {len(own)} rules of your own for {adapter.name}")
     if data["changed"]:
         report.lines.append(("Done: " if data["applied"] else "Preview: ") + data["changed"] + "."
                             + ("" if data["applied"] else " **Add --apply to keep it.**"))
+    if data.get("imported"):
+        report.section("Brought over" if data["applied"] else "Would be brought over",
+                       Bullets([r["words"] + (f" ({r['note']})" if r.get("note") else "") for r in data["imported"]]))
     if own:
         report.section("Your rules here", Bullets([f"{r['number']}. {r['words']}" for r in data["rules"]]))
     if data["theirs"]:
@@ -473,10 +505,12 @@ def rules(adapter, args, environ=None, now=None):
     return report, data
 
 
-def _manager_rules(adapter):
-    """The owner's rules a mod manager keeps (RimSort's user rules), in words, read only."""
+def _manager_rules(adapter, only=None):
+    """The owner's rules a mod manager keeps (RimSort's user rules), in words, read only: those the sorter reads (none once brought
+    over), or every one in `only`."""
     found = []
-    for rule_set in (adapter.rule_sets() if hasattr(adapter, "rule_sets") else []):
+    sets = [only] if only is not None else (adapter.rule_sets() if hasattr(adapter, "rule_sets") else [])
+    for rule_set in sets:
         if rule_set.source != mod_sort.YOURS:
             continue
         for mod, entry in sorted(rule_set.rules.items()):
@@ -493,6 +527,49 @@ def _manager_rules(adapter):
 
 SOURCE_WORDS = {mod_lists.SAVED: "Saved by name", mod_lists.KEPT: "Kept at a game start", mod_lists.SAVE: "From a save",
                 mod_lists.MANAGER: "RimSort's history"}
+
+
+def databases_report(adapter, args, environ=None, get=None, now=None, progress=None):
+    """The community lists the sorter and the check read (1.144.0): the kit's copy and the mod manager's, which is read, how old;
+    with --fetch, fetched first."""
+    lists = tuple(getattr(adapter, "databases", ()))
+    now = now.timestamp() if hasattr(now, "timestamp") else now
+    version = adapter.game_version() if hasattr(adapter, "game_version") else ""
+    root = adapter.manager_folder() if hasattr(adapter, "manager_folder") else None
+    manager = getattr(adapter, "manager_name", "the mod manager")
+    fetched = []
+    if args.fetch and lists:
+        only = args.only
+        if args.stale:
+            stale = {r["name"] for r in mod_databases.status(adapter.game, lists, version, root, environ, args.settings, now) if r["stale"]}
+            only = [d.name for d in lists if d.name in stale and (not args.only or d.name in args.only)]
+        if only is None or only:
+            def told(step, of, label):
+                if progress:
+                    progress(f"Fetching {label}", step, of)
+            fetched = mod_databases.fetch(adapter.game, lists, version, environ, args.settings, get or github_get, now, only, told)
+    rows = mod_databases.status(adapter.game, lists, version, root, environ, args.settings, now)
+    data = {"databases": rows, "fetched": fetched, "manager": manager, "freshDays": mod_databases.FRESH_DAYS}
+    report = Report(f"Mod list: the community lists for {adapter.name}")
+    if not lists:
+        report.lines.append(f"The tools read no community lists for {adapter.name}.")
+        return report, data
+    for each in fetched:
+        said = f"{each['label']}: {each['fetched']} fetched, {each['unchanged']} unchanged"
+        if each["missing"]:
+            said += f"; not published: {', '.join(each['missing'])}"
+        report.lines.append(said + (f". **{each['error']}**" if each["error"] else "."))
+
+    def whose(row):
+        return {"ours": "the tools' copy", "theirs": f"{manager}'s copy"}.get(row["read"], "none yet")
+    report.section("The lists", Table(["List", "Read from", "Age (days)", "From"],
+                                      [[r["label"], whose(r), "" if r["age_days"] is None else f"{r['age_days']:g}",
+                                        f"github.com/{r['repo']} ({r['licence']})"] for r in rows]))
+    stale = [r["label"] for r in rows if r["stale"]]
+    if stale:
+        report.lines.append(f"Older than {mod_databases.FRESH_DAYS} days, or not here yet: {', '.join(stale)}. "
+                            "**Fetch them with --fetch.**")
+    return report, data
 
 
 def lists_report(adapter, args, environ=None):
@@ -738,7 +815,7 @@ def undo(adapter, args, environ=None, running=game_running, now=None):
                     "keys": [adapter.key(i) for i in ids]}
 
 
-def main(argv=None, environ=None, out=None, post=None, running=None, now=None, steam=None, stdin=None):
+def main(argv=None, environ=None, out=None, post=None, running=None, now=None, steam=None, stdin=None, get=None):
     out = out or sys.stdout
     environ = os.environ if environ is None else environ
     try:
@@ -787,6 +864,8 @@ def main(argv=None, environ=None, out=None, post=None, running=None, now=None, s
             report, data = rules(adapter, args, environ, now)
         elif args.report == "since":
             report, data = since_report(adapter, args, environ)
+        elif args.report == "databases":
+            report, data = databases_report(adapter, args, environ, get, now, Progress(environ))
         elif args.report == "lists":
             report, data = lists_report(adapter, args, environ)
         elif args.report in ("compare", "load"):
@@ -831,6 +910,10 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS, "surface": "mod-li
                         "rules": {"effect": WRITES, "when": "--apply", "question": "Which load-order rules does the sorter read?"},
                         "lists": {"question": "Which saved mod lists can I load?"},
                         "since": {"question": "Did my last change to the mod list break anything?"},
+                        "databases": {"effect": ONLINE, "when": "--fetch",
+                                      "question": "How old are the community lists my mods are sorted and checked with?",
+                                      "note": "with --fetch, reads public files from raw.githubusercontent.com, keyless, into the "
+                                              "kit's cache"},
                         "compare": {"question": "What would loading a saved mod list change?"},
                         "load": {"effect": WRITES, "when": "--apply", "question": None},
                         "save": {"effect": WRITES, "when": "--apply", "question": None},

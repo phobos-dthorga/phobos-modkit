@@ -4,6 +4,20 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.144.0] - 2026-11-28
+
+### Added
+
+- **mod-list databases: the community lists, fetched by the kit itself** (the owner's choice of 28 Nov 2026, "Own data + your
+  rules", the first piece of retiring RimSort). The four lists RimSort clones for RimWorld (the community's load-order rules, the
+  Steam Workshop database, No Version Warning, Use This Instead) are fetched from the same public repositories, keyless, into the
+  kit's cache, each file asked for with its ETag so an unchanged one is not downloaded again; `--stale` fetches only those over 7
+  days old. The sorter and the check read **the newer copy**, the kit's or RimSort's, so nothing changes while RimSort still
+  refreshes its own. Game-free: a game names its lists as `Database` rows. How: [mod-list](docs/mod-list.md).
+- **mod-list rules --import-manager: your RimSort rules brought over** into your own rules, each with its note, skipping any kept
+  already. Once brought over, RimSort's copy is no longer read, so no rule counts twice, until it changes in RimSort. Rules of your
+  own now keep their notes.
+
 ## [1.143.0] - 2026-11-28
 
 ### Added

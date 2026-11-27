@@ -26,7 +26,9 @@ from ...mod_list import Mod, ModList, Need, TieIn
 from ...installs import game_running
 from ...steam.client import library_path as steam_library_path
 from ...mod_lists import FILE, MANAGER, SAVE, SavedList
-from ...mod_sort import CODE, COMMUNITY, WORKSHOP, YOURS, RuleSet
+from ... import mod_databases
+from ...mod_databases import Database
+from ...mod_sort import CODE, COMMUNITY, MANAGER_SOURCE, WORKSHOP, YOURS, RuleSet, imported_unchanged, rules_file
 from .installs import PROCESSES
 from .loading import STEAM_SUFFIX, _version_key, bare_id, conditional_folders, load_folders, read_mods_config
 from .mods import _about_root, _child, _text
@@ -55,6 +57,21 @@ _VERSIONS_CACHE = {}
 # Seen 23 Nov 2026: 1 id for 1.7, and 2,846 replacements.
 RIMSORT_NO_VERSION_WARNING = "dbs/NoVersionWarning"
 RIMSORT_USE_THIS_INSTEAD = "dbs/UseThisInstead/replacements.json"
+# The same four lists, fetched by the kit itself (1.144.0; the owner's choice of 28 Nov 2026, "Own data + your rules", so RimSort
+# can retire): the public repositories RimSort clones (seen in its dbs folder, 28 Nov 2026, each on `main`). Whichever copy is newer,
+# the kit's or RimSort's, is read.
+COMMUNITY_DB, WORKSHOP_DB, NO_VERSION_DB, USE_INSTEAD_DB = "community-rules", "workshop-database", "no-version-warning", \
+    "use-this-instead"
+DATABASES = (
+    Database(COMMUNITY_DB, "The community's load-order rules", "RimSort/Community-Rules-Database", ("communityRules.json",),
+             "CC0-1.0", manager="dbs/Community-Rules-Database"),
+    Database(WORKSHOP_DB, "The Steam Workshop database (each item's required items and versions)", "RimSort/Steam-Workshop-Database",
+             ("steamDB.json",), "CC0-1.0", manager="dbs/Steam-Workshop-Database"),
+    Database(NO_VERSION_DB, "No Version Warning (mods known to work on a version they do not name)", "emipa606/NoVersionWarning",
+             ("{version}/ModIdsToFix.xml",), "MIT", manager="dbs/NoVersionWarning"),
+    Database(USE_INSTEAD_DB, "Use This Instead (replacements for old mods)", "emipa606/UseThisInstead", ("replacements.json",),
+             "MIT", manager="dbs/UseThisInstead", packed=("replacements.json",)),
+)
 # Lists the game and RimSort keep (1.75.0). A save (.rws) starts with <meta>: gameVersion, then modIds, modSteamIds and modNames
 # in load order (Verse.ScribeMetaHeaderUtility.WriteMetaHeader); the game's own saved list (.rml, ModLists folder) is that header
 # and a <modList> of <ids> and <names> (Verse.GameDataSaveLoader.SaveModList). RimSort keeps a history of lists as JSON
@@ -401,6 +418,8 @@ class RimWorld:
     app_id = APP_ID
     processes = PROCESSES
     managers = MANAGERS
+    manager_name = "RimSort"
+    databases = DATABASES
 
     def __init__(self, environ=None, settings=None, steam=None):
         self.environ = os.environ if environ is None else environ
@@ -620,16 +639,16 @@ class RimWorld:
             pass
         base = rimsort_folder(self.environ)
         if mod.workshop_id:
-            for name in RIMSORT_WORKSHOP:
-                versions = read_workshop_versions(base / name)
-                if versions is not None:
-                    if version in versions.get(mod.workshop_id, set()):
-                        return f"its Workshop page names {version}"
-                    break
+            path = self._list_file(WORKSHOP_DB, "steamDB.json", [base / name for name in RIMSORT_WORKSHOP])
+            versions = read_workshop_versions(path) if path else None
+            if versions is not None and version in versions.get(mod.workshop_id, set()):
+                return f"its Workshop page names {version}"
         if not hasattr(self, "_known_working"):
             self._known_working = {}
         if version not in self._known_working:
-            self._known_working[version] = read_known_working(base / RIMSORT_NO_VERSION_WARNING, version)
+            relative = f"{version}/ModIdsToFix.xml"
+            path = self._list_file(NO_VERSION_DB, relative, [base / RIMSORT_NO_VERSION_WARNING / relative])
+            self._known_working[version] = read_known_working(path.parent.parent, version) if path else set()
         if self.key(mod.id) in self._known_working[version]:
             return "the community's No Version Warning list says it works"
         return ""
@@ -637,8 +656,28 @@ class RimWorld:
     def replacements(self):
         """The community's Use This Instead rules (1.85.0), read where RimSort keeps them."""
         if not hasattr(self, "_replacements"):
-            self._replacements = read_replacements(rimsort_folder(self.environ) / RIMSORT_USE_THIS_INSTEAD)
+            path = self._list_file(USE_INSTEAD_DB, "replacements.json", [rimsort_folder(self.environ) / RIMSORT_USE_THIS_INSTEAD])
+            self._replacements = read_replacements(path) if path else []
         return self._replacements
+
+    def manager_folder(self):
+        """RimSort's data folder, whose copies of the community lists are read while newer than the kit's (1.144.0)."""
+        return rimsort_folder(self.environ)
+
+    def _list_file(self, name, relative, manager_paths):
+        """The newer of the kit's copy of a community list's file and RimSort's (1.144.0), or None when neither is there."""
+        database = next(d for d in DATABASES if d.name == name)
+        ours = mod_databases.our_copy(self.game, database, relative, self.environ, self.settings)
+        return mod_databases.newest(ours, *manager_paths)
+
+    def manager_rule_set(self):
+        """The owner's own rules made in RimSort, as RimSort keeps them, whether or not they were brought over; None without."""
+        base = rimsort_folder(self.environ)
+        for name in RIMSORT_USER:
+            rules = read_rimsort_rules(base / name)
+            if rules is not None:
+                return RuleSet(YOURS, "Your rules in RimSort", str(base / name), rules)
+        return None
 
     def rule_sets(self):
         """The rules RimSort keeps on this PC: the owner's own, and the community's, each read as it is (1.74.0); and what each active
@@ -651,15 +690,21 @@ class RimWorld:
             code = None
         if code is not None:
             found.append(RuleSet(CODE, "What their code is built on (their assemblies)", "the active mods' assemblies", code))
-        for source, label, names in ((YOURS, "Your rules in RimSort", RIMSORT_USER),
-                                     (WORKSHOP, "The Workshop's required items (RimSort's database)", RIMSORT_WORKSHOP),
-                                     (COMMUNITY, "The community rules (RimSort's database)", RIMSORT_COMMUNITY)):
+        # Your rules in RimSort, until brought over (1.144.0): once they are, and while RimSort's file is unchanged since, the
+        # copy among your rules here is the one read, so no rule is read twice.
+        theirs = self.manager_rule_set()
+        if theirs is not None and not imported_unchanged(rules_file(self.game, self.environ, self.settings), MANAGER_SOURCE,
+                                                         theirs.where):
+            found.append(theirs)
+        for source, label, name, relative, names in (
+                (WORKSHOP, "The Workshop's required items", WORKSHOP_DB, "steamDB.json", RIMSORT_WORKSHOP),
+                (COMMUNITY, "The community rules", COMMUNITY_DB, "communityRules.json", RIMSORT_COMMUNITY)):
             reader = read_workshop_rules if source == WORKSHOP else read_rimsort_rules
-            for name in names:
-                rules = reader(base / name)
-                if rules is not None:
-                    found.append(RuleSet(source, label, str(base / name), rules))
-                    break
+            path = self._list_file(name, relative, [base / n for n in names])
+            rules = reader(path) if path else None
+            if rules is not None:
+                whose = "RimSort's database" if str(path).startswith(str(base)) else "fetched by the tools"
+                found.append(RuleSet(source, f"{label} ({whose})", str(path), rules))
         return found
 
     # -------------------------------------------------- lists kept elsewhere (1.75.0)

@@ -32,6 +32,8 @@ Workshop). The Companion's Mod list page shows it.
 | `mod-list write --name GAME --list KEY [--apply]` | A whole new list at once, read as JSON on standard input, `{"ids": [...], "was": [...]}`: D'thorga Companion's **Save** (1.142.0). Refused when the list changed since `was`, a mod would be listed twice, a mod switched on is not on this PC, or nothing changed; a backup first, as every change | writes with `--apply` |
 | `mod-list sort --name GAME --list KEY [--full] [--apply]` | The list sorted from every rule, each move explained; `--full` rebuilds the whole order | writes with `--apply` |
 | `mod-list rules --name GAME [--mod ID --after OTHER \| --before OTHER \| --top \| --bottom \| --drop N] [--apply]` | Your own rules, your RimSort rules (read only), and every rule set the sorter reads; adds or takes away one of yours | writes with `--apply` |
+| `mod-list rules --name GAME --import-manager [--apply]` | Brings your rules over from the game's mod manager (RimSort), each one not kept already, with its note; once brought, RimSort's copy is no longer read until it changes there (1.144.0) | writes with `--apply` |
+| `mod-list databases --name GAME [--fetch [--stale] [--only NAME]]` | The community lists the sorter and the check read, the kit's copy or the mod manager's, whichever is newer, and how old; `--fetch` fetches them from GitHub (1.144.0) | reads online with `--fetch` |
 | `mod-list since --name GAME [--list KEY]` | What the first game run after the last change made here showed: new errors, clean, or why it cannot tell | reads |
 | `mod-list lists --name GAME` | Every saved list: by name, kept at game starts, each save's, RimSort's history | reads |
 | `mod-list compare --name GAME --list KEY (--from SOURCE:REF \| --file PATH)` | What loading a list would switch on, off and move, and which of its mods are not on this PC, with why | reads |
@@ -61,6 +63,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `undo` | Put a list back as it was before the last change made here; only with `--apply`. | writes, with `--apply` |
 | `sort` | The list sorted from every rule, each move explained; written only with `--apply`. | writes, with `--apply` |
 | `rules` | Your own load-order rules, and every rule set the sorter reads. | writes, with `--apply` |
+| `databases` | The community lists the sorter and the check read: where from and how old. With `--fetch`, reads public files from raw.githubusercontent.com, keyless, into the kit's cache. | reads public pages online, with `--fetch` |
 | `since` | What the first game run after the last change made here showed; only reads. | reads only |
 | `lists` | Every saved list: by name, kept at game starts, each save's, and RimSort's history. | reads only |
 | `compare` | What loading a list would change; only reads. | reads only |
@@ -100,7 +103,11 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--top` | `rules` | it loads as near the top as its rules allow |  |
 | `--bottom` | `rules` | it loads as near the bottom as its rules allow |  |
 | `--drop N` | `rules` | take your rule N away (as `rules` numbers them) |  |
+| `--import-manager` | `rules` | bring your rules over from the game's mod manager (RimSort), each one not kept already (1.144.0) |  |
 | `--apply` | `rules` | keep the change; without it, only say what it would be |  |
+| `--fetch` | `databases` | fetch them from their public GitHub repositories into the kit's cache (keyless) |  |
+| `--stale` | `databases` | with `--fetch`, only the lists older than 7 days |  |
+| `--only NAME` | `databases` | with `--fetch`, only this list (again for several). Repeatable. |  |
 | `--from SOURCE:REF` | `compare`, `load` | a list as `lists` names it: saved:NAME, kept:TIME, save:FILE, manager:FILE |  |
 | `--last-clean` | `compare`, `load` | the newest list kept at a game start that then ran clean (1.85.0) |  |
 | `--file PATH` | `compare`, `load` | a list file (the game's .rml, a save, an exported RimSort list) |  |
@@ -119,7 +126,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 - Every report also takes `--json` (print JSON instead of Markdown) and `--no-redact` (show the home folder instead of ~).
 - [Common options](common-options.md) explains `--settings`, `--top`, `--json` and `--no-redact`, which many commands share.
 - Only one of `--remove`, `--remove-extra`, `--enable`, `--move` at a time (`fix`).
-- Only one of `--after`, `--before`, `--top`, `--bottom`, `--drop` at a time (`rules`).
+- Only one of `--after`, `--before`, `--top`, `--bottom`, `--drop`, `--import-manager` at a time (`rules`).
 - Only one of `--from`, `--last-clean`, `--file` at a time (`compare`, `load`).
 <!-- end generated -->
 
@@ -216,6 +223,24 @@ another group, and its reason follows the links back to the member with a reason
 `mod-list/<game>/backups/<UTC time>--<list>.list` holds the list file as it stood, byte for byte; the `.json` beside it says which
 list, where, what the change was, a hash of what was written (how `undo` sees a later change), and `undone` once an undo has gone
 back on it. Going back keeps the list as it then stood as a backup too ("before going back").
+
+### The community lists, fetched by the kit (1.144.0)
+
+So RimSort can retire (the owner's choice of 28 Nov 2026, "Own data + your rules"), the kit fetches the four lists RimSort clones
+for RimWorld from the same public repositories, keyless, from raw.githubusercontent.com (outside GitHub's hourly API count), into
+`<kit cache>/mod-databases/<game>/<list>/`, with `fetched.json` keeping each file's ETag so an unchanged file is not downloaded again:
+
+| List | Repository | Files read | Licence |
+| --- | --- | --- | --- |
+| `community-rules` | RimSort/Community-Rules-Database | `communityRules.json` | CC0-1.0 |
+| `workshop-database` | RimSort/Steam-Workshop-Database | `steamDB.json` (about 50 MB) | CC0-1.0 |
+| `no-version-warning` | emipa606/NoVersionWarning | `<game version>/ModIdsToFix.xml` | MIT |
+| `use-this-instead` | emipa606/UseThisInstead | `replacements.json`, fetched gzipped | MIT |
+
+**The newer copy is read**, the kit's or RimSort's, file by file, so nothing changes while RimSort still refreshes its own. A list
+older than 7 days (agent default) is called stale; `--fetch --stale` fetches only those. Measured 28 Nov 2026 on the owner's
+connection: all four first fetched in about 8 s; again, all unchanged, in under 2 s. With the newer lists the owner's list still
+sorted with nothing moved. A next game names its lists in its adapter's `databases` (`mod_databases.Database` rows).
 
 ### Subscribing through Steam
 
