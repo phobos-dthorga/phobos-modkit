@@ -4,6 +4,17 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.141.1] - 2026-11-27
+
+### Fixed
+
+- **code: two runs building one index at once no longer crash** (seen 27 Nov 2026: a query died deleting the half-built index a
+  background summary was still writing). Each run now writes its own half-built file, a second run waits for the first's build
+  and uses it, a file that will not delete is never an error, and one a stopped run left is cleared after five minutes.
+- **code: a narrowed query builds only the indexes it reads** (the same day: one corpus's question rebuilt about ninety). A calling
+  script's own trees go in the new `--default-corpus` and `--default-each-in`, read only when the command line names no corpus, so
+  `--corpus NAME=PATH` alone reads that tree; `--in` already narrowed, and its help now says so. How: [code](docs/code.md).
+
 ## [1.141.0] - 2026-11-27
 
 ### Fixed

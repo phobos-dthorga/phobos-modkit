@@ -17,6 +17,12 @@ few hundred tokens.
   interpolated with nested quotes, raw) and character literals are blanked first, so their braces do not count. On the
   owner's trees it misses about two declarations in 100,000; see Limits.
 - `show` hides decompiler notes (`//IL_0047: ...`) and says how many; `--raw` keeps them.
+- **A query builds only the indexes it reads** (1.141.1). `--in` narrows to matching corpora before any is built. A calling
+  script passes its own trees as `--default-corpus` and `--default-each-in`, which are read only when the command line names no
+  `--corpus` or `--each-in` of its own, so `--corpus NAME=PATH` alone reads that one tree.
+- **Two runs may want one index at once** (1.141.1): the second waits for the first's build and uses it, saying so on stderr.
+  Each run writes its own half-built file, so neither can delete the other's; one a stopped run left is cleared after five
+  minutes and never blocks a later run.
 
 ## Examples
 
@@ -53,7 +59,9 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | --- | --- | --- | --- |
 | `--corpus NAME=PATH` | all | a source tree (a folder or one .cs file) under a name; repeatable |  |
 | `--each-in DIR` | all | every folder and .cs file directly inside DIR is a corpus, named after it; repeatable |  |
-| `--in PATTERN` | all | query only corpora whose name matches (\* and ?); repeatable |  |
+| `--default-corpus NAME=PATH` | all | like `--corpus`, but read only when no `--corpus` or `--each-in` is given (a calling script's own trees). Repeatable. |  |
+| `--default-each-in DIR` | all | like `--each-in`, but read only when no `--corpus` or `--each-in` is given. Repeatable. |  |
+| `--in PATTERN` | all | query only corpora whose name matches (\* and ?), and build only their indexes; repeatable |  |
 | `--cache VALUE` | all | where indexes are kept (else PHOBOS_MODKIT_CACHE, settings, the temp folder) |  |
 | `--settings VALUE` | all | a JSON settings file with modkitCachePath |  |
 | `--rebuild` | all | index the chosen corpora again |  |

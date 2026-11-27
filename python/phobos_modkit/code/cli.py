@@ -7,7 +7,9 @@
     code --each-in DIR ... summary                            each child of DIR is a corpus; their sizes
     code compare OLD.dll NEW.dll                              what changed between two builds, member by member
 
-Indexes are built on first use and again when a corpus's files change; --in narrows a query to matching corpora.
+Indexes are built on first use and again when a corpus's files change; --in narrows a query to matching corpora, and
+only their indexes are built. A caller's own trees go in --default-corpus and --default-each-in: they are read only when the
+command line names no corpus of its own, so "--corpus NAME=PATH" alone reads that tree alone.
 """
 from __future__ import annotations
 
@@ -37,8 +39,12 @@ def _parser():
                    help="a source tree (a folder or one .cs file) under a name; repeatable")
     s.add_argument("--each-in", action="append", default=[], metavar="DIR",
                    help="every folder and .cs file directly inside DIR is a corpus, named after it; repeatable")
+    s.add_argument("--default-corpus", action="append", default=[], metavar="NAME=PATH",
+                   help="like --corpus, but read only when no --corpus or --each-in is given (a calling script's own trees)")
+    s.add_argument("--default-each-in", action="append", default=[], metavar="DIR",
+                   help="like --each-in, but read only when no --corpus or --each-in is given")
     s.add_argument("--in", dest="within", action="append", default=[], metavar="PATTERN",
-                   help="query only corpora whose name matches (* and ?); repeatable")
+                   help="query only corpora whose name matches (* and ?), and build only their indexes; repeatable")
     s.add_argument("--cache", help="where indexes are kept (else PHOBOS_MODKIT_CACHE, settings, the temp folder)")
     s.add_argument("--settings", help="a JSON settings file with modkitCachePath")
     s.add_argument("--rebuild", action="store_true", help="index the chosen corpora again")
@@ -74,14 +80,20 @@ def _parser():
     return p
 
 
+def _named(args):
+    """True when the command line names a source: --corpus or --each-in, else the defaults are read."""
+    return bool(args.corpus or args.each_in or args.default_corpus or args.default_each_in)
+
+
 def corpora(args):
     found = []
-    for spec in args.corpus:
+    named, folders = (args.corpus, args.each_in) if args.corpus or args.each_in else (args.default_corpus, args.default_each_in)
+    for spec in named:
         name, sep, path = spec.partition("=")
         if not sep or not name or not path:
             raise index.CodeError(f"--corpus takes NAME=PATH, not {spec!r}")
         found.append(index.Corpus(name, Path(path)))
-    for folder in args.each_in:
+    for folder in folders:
         folder = Path(folder)
         if not folder.is_dir():
             raise index.CodeError(f"--each-in: no folder at {folder}")
@@ -217,6 +229,10 @@ def summary_report(chosen, built):
     return report
 
 
+def _waiting(corpus):
+    print(f"Another run is building the index of {corpus.name}; waiting for it.", file=sys.stderr)
+
+
 def main(argv=None, settings_file=None, environ=None, out=None):
     out = out or sys.stdout
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -237,14 +253,14 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     try:
         cache = derived.folder(index.CACHE_FOLDER, args.cache, environ, settings_file)
         if args.report == "compare":
-            known = corpora(args) if args.corpus or args.each_in else []
+            known = corpora(args) if _named(args) else []
             decompiled = derived.folder(compare.CACHE_FOLDER, args.cache, environ, settings_file)
             report, code = compare.run(args, known, cache, decompiled, environ, settings_file)
             print(envelope_text("code", report, redact) if args.json else render_markdown(report, redact), file=out)
             return code
         chosen, built = [], []
         for corpus in corpora(args):
-            path, fresh = index.ensure(corpus, cache, args.rebuild)
+            path, fresh = index.ensure(corpus, cache, args.rebuild, _waiting)
             chosen.append((corpus, path))
             if fresh:
                 built.append(corpus.name)

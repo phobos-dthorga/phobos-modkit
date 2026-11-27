@@ -1,11 +1,16 @@
 """The code tool on made-up C#: the scanner's hard cases, the index's staleness, and the four queries."""
 import io
+import os
 from pathlib import Path
 import tempfile
+import threading
 import time
 import unittest
+from unittest import mock
 
 import support  # noqa: F401  (the package on the import path)
+from phobos_modkit import cache as derived
+from phobos_modkit.code import index
 from phobos_modkit.code.cli import EXIT_FAILED, EXIT_OK, main
 from phobos_modkit.code.scan import blank, declarations
 
@@ -153,6 +158,120 @@ class Command(unittest.TestCase):
         self.assertIn('Try: code find "*Here*"', text)
         code, text = self.run_main("summary", "--in", "nope*")
         self.assertIn("No corpus matches nope*", text)
+
+
+class TwoRunsAtOnce(unittest.TestCase):
+    """Two runs wanting one index at once (27 Nov 2026: a second run died deleting the first's half-built file)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        (root / "src").mkdir()
+        (root / "src" / "Widget.cs").write_text(HARD, encoding="utf-8")
+        self.corpus = index.Corpus("example", root / "src")
+        self.cache = root / "cache"
+        self.target = index.index_path(self.cache, self.corpus)
+        self.cache.mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_second_run_waits_and_uses_what_the_first_built(self):
+        waited = []
+        with derived.one_builder(self.target):
+            second = threading.Thread(target=lambda: waited.append(index.ensure(self.corpus, self.cache,
+                                                                                waiting=lambda c: waited.append(c.name))))
+            second.start()
+            time.sleep(0.2)
+            self.assertTrue(second.is_alive(), "the second run waits while the first holds the build")
+            index.build(self.corpus, self.target)
+        second.join(10)
+        self.assertEqual(waited, ["example", (self.target, False)])
+
+    def test_another_runs_half_built_file_is_left_alone(self):
+        theirs = self.target.with_name(self.target.stem + ".999-1.building")
+        with open(theirs, "wb") as held:            # held open, as a live build holds it
+            held.write(b"half")
+            path, built = index.ensure(self.corpus, self.cache)
+        self.assertTrue(built)
+        self.assertTrue(theirs.exists())
+        self.assertEqual(index.counts(path)[0], 1)
+
+    def test_a_stopped_runs_leftovers_are_cleared_and_never_block(self):
+        stale = [self.target.with_name(self.target.stem + ".building"),     # named as before 1.141.1
+                 self.target.with_name(self.target.stem + ".123-4.building-journal")]
+        fresh = self.target.with_name(self.target.stem + ".456-7.building")
+        old = time.time() - index.BUILD_STALE_S - 60
+        for path in stale + [fresh]:
+            path.write_bytes(b"half")
+        for path in stale:
+            os.utime(path, (old, old))
+        path, built = index.ensure(self.corpus, self.cache)
+        self.assertTrue(built)
+        self.assertEqual([p.exists() for p in stale], [False, False])
+        self.assertTrue(fresh.exists(), "a recent one may be a live build's")
+        self.assertEqual(sorted(p.name for p in self.cache.glob("*.lock")), [])
+
+    def test_a_half_built_file_that_will_not_delete_is_no_error(self):
+        real = derived.remove
+
+        def stubborn(path):
+            if str(path).endswith(".building"):
+                raise PermissionError(32, "being used by another process", str(path))
+            real(path)
+
+        with mock.patch.object(index.derived, "remove", stubborn):
+            path, built = index.ensure(self.corpus, self.cache, rebuild=True)
+        self.assertTrue(built)
+        self.assertEqual(index.counts(path)[0], 1)
+
+
+class OnlyTheIndexesRead(unittest.TestCase):
+    """A narrowed query builds only the indexes it reads (27 Nov 2026: one corpus's question built about ninety)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.trees = root / "trees"
+        for name in ("Alpha", "Beta"):
+            (self.trees / name).mkdir(parents=True)
+            (self.trees / name / f"{name}.cs").write_text(f"namespace {name} {{ public class {name}Thing {{ }} }}\n",
+                                                           encoding="utf-8")
+        self.own = root / "own"
+        self.own.mkdir()
+        (self.own / "Own.cs").write_text("namespace Own { public class OwnThing { } }\n", encoding="utf-8")
+        self.cache = root / "cache"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_main(self, *args):
+        out = io.StringIO()
+        code = main(list(args) + ["--cache", str(self.cache), "--no-redact"], environ={}, out=out)
+        return code, out.getvalue()
+
+    def indexes(self):
+        return sorted(p.name.split("-")[0] for p in (self.cache / index.CACHE_FOLDER).glob("*.sqlite"))
+
+    def test_defaults_are_read_when_nothing_is_named(self):
+        code, text = self.run_main("find", "*Thing", "--default-each-in", str(self.trees), "--default-corpus", f"own={self.own}")
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("Indexed now: own, Alpha, Beta.", text)
+        self.assertEqual(self.indexes(), ["Alpha", "Beta", "own"])
+
+    def test_a_corpus_named_on_the_command_line_is_read_alone(self):
+        code, text = self.run_main("find", "*Thing", "--corpus", f"mine={self.own}", "--default-each-in", str(self.trees))
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("Own.OwnThing", text)
+        self.assertNotIn("AlphaThing", text)
+        self.assertEqual(self.indexes(), ["mine"])
+
+    def test_in_builds_only_the_matching_indexes(self):
+        code, text = self.run_main("refs", "BetaThing", "--in", "beta", "--default-each-in", str(self.trees),
+                                   "--default-corpus", f"own={self.own}")
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("1 lines use BetaThing: 1 in Beta", text)
+        self.assertEqual(self.indexes(), ["Beta"])
 
 
 if __name__ == "__main__":

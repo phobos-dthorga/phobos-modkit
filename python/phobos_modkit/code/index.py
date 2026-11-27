@@ -9,13 +9,16 @@ from __future__ import annotations
 from contextlib import closing
 from dataclasses import dataclass
 import hashlib
+import os
 from pathlib import Path
 import re
 import sqlite3
+import threading
 import time
 
 from .. import __version__
 from .. import cache as derived
+from .. import file_lock
 from ..query import like
 from .scan import declarations
 
@@ -23,6 +26,11 @@ INDEX_FORMAT = "1"
 CACHE_FOLDER = "code-index"
 SKIPPED_PARTS = {"obj", "bin", ".git", ".vs"}
 TYPE_KINDS = ("class", "struct", "interface", "enum", "record", "delegate")
+# Two runs building one index at once (1.141.1): each writes its own half-built file, named with its process and thread, so
+# neither deletes the other's; the build lock only saves the second run the work. One corpus builds in seconds, so a lock
+# older than BUILD_STALE_S was left by a run that stopped, and a run waits a little longer than that before giving up.
+BUILD_STALE_S = 5 * 60
+BUILD_WAIT_S = BUILD_STALE_S + 60
 
 
 class CodeError(ValueError):
@@ -79,39 +87,102 @@ CREATE INDEX decls_file ON decls (file, start);
 """
 
 
+def _building_name(target):
+    return target.with_name(f"{target.stem}.{os.getpid()}-{threading.get_ident()}.building")
+
+
+def _discard(path):
+    """Delete a half-built file; False when another run still holds it, which is never an error."""
+    try:
+        derived.remove(path)
+        return True
+    except OSError:
+        return False
+
+
+def leftovers(target, older_than_s=BUILD_STALE_S, now=time.time):
+    """Half-built files of this index (and their journals) not touched for older_than_s: what a run that stopped left behind."""
+    target = Path(target)
+    found = []
+    for pattern in (f"{target.stem}.building*", f"{target.stem}.*.building*"):
+        for path in target.parent.glob(pattern):
+            try:
+                if now() - path.stat().st_mtime > older_than_s:
+                    found.append(path)
+            except OSError:
+                continue
+    return sorted(set(found))
+
+
+def _put_in_place(temporary, target):
+    try:
+        temporary.replace(target)
+    except PermissionError:
+        derived.remove(target)      # an index marked read-only can be deleted, not replaced
+        temporary.replace(target)
+
+
 def build(corpus, target, files=None):
     """Index the corpus into target (replacing it). Returns (files, declarations, seconds)."""
     started = time.monotonic()
     files = corpus.files() if files is None else files
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_suffix(".building")
-    derived.remove(temporary)
+    temporary = _building_name(target)
+    _discard(temporary)
     count = 0
-    with closing(sqlite3.connect(temporary)) as conn:
-        conn.executescript(SCHEMA)
-        for file_id, (relative, path) in enumerate(files, 1):
-            text = path.read_text(encoding="utf-8", errors="replace")
-            found = declarations(text)
-            conn.execute("INSERT INTO files VALUES (?, ?, ?)", (file_id, relative, text.count("\n") + 1))
-            conn.executemany("INSERT INTO decls (file, kind, name, owner, full, signature, start, \"end\") "
-                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                             [(file_id, d.kind, d.name, d.owner, d.full, d.signature, d.start, d.end) for d in found])
-            count += len(found)
-        derived.write_meta(conn, {**provenance(corpus, files), "files": len(files), "declarations": count})
-        conn.commit()
-    derived.remove(target)
-    temporary.replace(target)
+    try:
+        with closing(sqlite3.connect(temporary)) as conn:
+            conn.executescript(SCHEMA)
+            for file_id, (relative, path) in enumerate(files, 1):
+                text = path.read_text(encoding="utf-8", errors="replace")
+                found = declarations(text)
+                conn.execute("INSERT INTO files VALUES (?, ?, ?)", (file_id, relative, text.count("\n") + 1))
+                conn.executemany("INSERT INTO decls (file, kind, name, owner, full, signature, start, \"end\") "
+                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                 [(file_id, d.kind, d.name, d.owner, d.full, d.signature, d.start, d.end) for d in found])
+                count += len(found)
+            derived.write_meta(conn, {**provenance(corpus, files), "files": len(files), "declarations": count})
+            conn.commit()
+        try:
+            file_lock.patiently(lambda: _put_in_place(temporary, target))
+        except PermissionError:
+            raise CodeError(f"{corpus.name}: another program held {target.name} for over a second, so its new index could "
+                            f"not replace it. Run this again.") from None
+    finally:
+        _discard(temporary)
     return len(files), count, time.monotonic() - started
 
 
-def ensure(corpus, cache, rebuild=False):
-    """The corpus's current index, building it when missing, stale or asked for. Returns (path, built: bool)."""
+def _stamp(path):
+    try:
+        info = Path(path).stat()
+        return info.st_size, info.st_mtime_ns
+    except OSError:
+        return None
+
+
+def ensure(corpus, cache, rebuild=False, waiting=None):
+    """The corpus's current index, building it when missing, stale or asked for. Returns (path, built: bool).
+
+    One run builds an index at a time; another run wanting it waits, then uses what the first built. `waiting(corpus)` is
+    called when this run has to wait.
+    """
     target = index_path(cache, corpus)
     files = corpus.files()
-    if not rebuild and derived.is_current(target, provenance(corpus, files)):
+    expected = provenance(corpus, files)
+    if not rebuild and derived.is_current(target, expected):
         return target, False
-    build(corpus, target, files)
+    before = _stamp(target)
+    if waiting and target.with_name(target.name + ".lock").exists():
+        waiting(corpus)
+    with derived.one_builder(target, CodeError, BUILD_WAIT_S, BUILD_STALE_S):
+        # The run this one waited for may have just built it, a rebuild included.
+        if derived.is_current(target, expected) and (not rebuild or _stamp(target) != before):
+            return target, False
+        for leftover in leftovers(target):
+            _discard(leftover)
+        build(corpus, target, files)
     return target, True
 
 
