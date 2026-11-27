@@ -82,6 +82,7 @@ Generated from the manifest by `python -m phobos_modkit command-docs --write`. E
 | [`records`](docs/records.md) | any | a copy of D'thorga Companion's own records in a folder of your choosing, and how old the newest is |
 | [`release`](docs/release.md) | any | changelog checks, version constants kept in step, history screen |
 | [`repos`](docs/repos.md) | any | each repository's commits not pushed, files changed, and whether GitHub's checks passed for its last push |
+| [`reviews`](docs/reviews.md) | any | what the owner has marked as read, so a check stops asking about it until a newer build |
 | [`rimworld-archive`](docs/rimworld-archive.md) | rimworld | keep every version of the game's assembly and of tied mods, and compare two of them |
 | [`rimworld-code`](docs/rimworld-code.md) | rimworld | another author's code: its source from a public clone or a decompile, and which assembly holds it |
 | [`rimworld-defs`](docs/rimworld-defs.md) | rimworld | which active mods define and patch each RimWorld Def |

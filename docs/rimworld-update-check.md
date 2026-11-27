@@ -54,9 +54,13 @@ Effect: runs other programs. Runs ilspycmd on archived assemblies and the kit's 
 {
   "ourPackageIds": ["Author.*"],
   "targets": {"sources": ["src/**/*.cs"], "assemblies": ["mods/*/1.7/Assemblies/*.dll"], "typeLookups": ["OptionalMods.TypeNamed"]},
-  "temporaryPatches": "config/temporary-patches.json"
+  "temporaryPatches": "config/temporary-patches.json",
+  "patchedDefsHow": "In the game, with Development mode on: Options, Mod Settings, D'thorga Framework, tick Write every Def ..."
 }
 ```
+
+`patchedDefsHow` (1.137.0) says, in the repository's own words, how to have the game write the patched-Defs file again: the
+check shows it when the file is missing or was written before the window began, since the writer is the repository's own mod.
 
 The temporary patches file lists, under `patches`, `{"row", "patch", "mod", "file", "members": ["Type.Member"]}`: `mod` and `file`
 as the archive names them (`rimworld-archive list`), and a member may end in `.*` for a whole type. An added member counts as a
@@ -79,20 +83,28 @@ change (a fix can be a new constructor).
   means the patch stays; `no-update` and `one-build` mean there is nothing new to compare. **Once the update is read**, add
   `"reviewed": {"build": "...", "on": "YYYY-MM-DD", "note": "what was found"}` to the row in the temporary patches file, its
   `build` copied from the row (the start of the newest build's SHA-256): the row reads `reviewed` until a newer build arrives,
-  and is then compared again.
+  and is then compared again. **The owner can mark a row read without touching the repository** (1.137.0): D'thorga
+  Companion's **I've read it**, or [`reviews mark --kind temporary-patch`](reviews.md), keeps the mark in the Companion's folder.
+  The repository's own note is read first; `reviewedBy` says whose was used (`repository` or `owner`).
 - **XML patches** are checked against the Defs as written, before any patch, as the game applies them. A Def a patch adds whole
   (an Add at `Defs`) counts as defined. A node not there as written is looked for in the patched-Defs file (every patch applied),
   when one exists: found there is `patched`, a pass; the file is only as fresh as the last time the game was asked to write it.
   Failing that, each earlier Add, Insert or AddModExtension on the same Def (a Conditional's `nomatch` Add included) is read: when
   its value makes the node, the row is `found` with `addedBy` naming that patch's file. `node-missing` names how many earlier
   patches name the Def. Conditional, Test and FindMod xpaths are questions, so they are not
-  checked; nor are patches inside a FindMod or MayRequire whose mod is not active.
+  checked; nor are patches inside a FindMod or MayRequire whose mod is not active. **A patched-Defs file written before the
+  window began** (`patchedDefsStale`) may miss what changed since: the lead says so, with `patchedDefsHow` when the repository
+  gives it.
+- **The kit that ran the check** (1.137.0): `kit` {runs, repositoryPins, older}. When the kit running is older than the one the
+  repository pins (as D'thorga Companion's own copy was on 27 Nov 2026), the report says so first: it may lack fixes the
+  repository already has.
 
 ### JSON
 
-`--json` prints the kit's envelope; `data` holds `since`, `parts`, and per part: `names` {found, failing, notChecked, atRunTime,
-assemblies}, `temporary` [rows with status and detail], `updates` [rows with added, removed, signatures, bodies, newTypes,
-newTypeCount, keptAt], `xml` {checked, skipped, rows, patchedDefs}.
+`--json` prints the kit's envelope; `data` holds `since`, `parts`, `kit` {runs, repositoryPins, older}, and per part: `names`
+{found, failing, notChecked, atRunTime, assemblies}, `temporary` [rows with status, detail, build and, when reviewed,
+reviewedBy], `updates` [rows with added, removed, signatures, bodies, newTypes, newTypeCount, keptAt], `xml` {checked, skipped,
+rows, patchedDefs, patchedDefsStale, patchedDefsHow}.
 
 ## Effects
 

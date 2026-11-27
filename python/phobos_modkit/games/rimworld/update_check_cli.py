@@ -34,9 +34,10 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
-from ... import cache as derived
+from ... import __version__, cache as derived, pins, reviews
 from ...assembly_archive import Archive, ArchiveError, archive_root
 from ...code import compare as code_compare, index as code_index
+from ...installs import version_tuple
 from ...manifest import RUNS
 from ...progress import Progress
 from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
@@ -127,10 +128,12 @@ def _reviewed_for(reviewed, newer):
     return bool(build) and (newer.sha256 or "").lower().startswith(build)
 
 
-def temporary_rows(entries, versions_by_file, since, compare):
+def temporary_rows(entries, versions_by_file, since, compare, marks=None):
     """[{row, patch, mod, file, status, members, detail, build}] for each listed patch. `compare(older, newer, patterns)` gives
     (changes, removed, added) for the members named: an added member counts as a change (a fix can be a new constructor).
-    A row whose "reviewed" note names the newest build is `reviewed`, with no compare: someone read that update already."""
+    A row whose "reviewed" note names the newest build is `reviewed`, with no compare: someone read that update already. The note
+    is the repository's own, else the owner's mark (`marks`: {row: note}, from the `reviews` command; 1.137.0), and `reviewedBy`
+    says which."""
     rows = []
     for entry in entries:
         file = entry["file"]
@@ -148,9 +151,10 @@ def temporary_rows(entries, versions_by_file, since, compare):
             continue
         when = f"{_when(older)} to {_when(newer)}"
         row["build"] = (newer.sha256 or "")[:BUILD_PREFIX]
-        if _reviewed_for(entry.get("reviewed"), newer):
-            seen = entry["reviewed"]
-            rows.append({**row, "status": "reviewed",
+        own, marked = entry.get("reviewed"), (marks or {}).get(str(entry.get("row")))
+        seen = own if _reviewed_for(own, newer) else marked if _reviewed_for(marked, newer) else None
+        if seen:
+            rows.append({**row, "status": "reviewed", "reviewedBy": "repository" if seen is own else "owner",
                          "detail": f"the update of {when} was read on {seen.get('on', 'an unrecorded day')}"
                                    + (f": {seen['note']}" if seen.get("note") else "")
                                    + "; the patch stays until a newer build"})
@@ -508,9 +512,12 @@ def xml_section(report, data, result, top):
                  f" {'it' if added == 1 else 'them'}.")
     if result.get("patchedDefs"):
         lead += (f" The patched-Defs file (written {result['patchedDefs']} UTC) confirms {patched} more once every patch has run"
-                 " (the game writes the file again only when asked, so it may be older than the updates).")
+                 + (": **it was written before the window began, so it may miss what changed since**." if
+                    result.get("patchedDefsStale") else " (the game writes the file again only when asked)."))
     else:
-        lead += " No patched-Defs file was found to confirm rows against (D'thorga Framework writes one on request)."
+        lead += " No patched-Defs file was found to confirm rows against."
+    if result.get("patchedDefsHow") and (result.get("patchedDefsStale") or not result.get("patchedDefs")):
+        lead += f" To write it again: {result['patchedDefsHow']}"
     skipped = "; ".join(f"{count} {why}" for why, count in result["skipped"].items())
     blocks = [lead] + ([f"Not checked: {skipped}."] if skipped else [])
     if problems:
@@ -524,6 +531,14 @@ def build_report(args, parts, config, environ, settings_file, now, progress, run
     since = window_start(args.since, args.days, now)
     data["since"] = since
     report.lines.append(f"Updates counted from {since} UTC. Reads only: assemblies as metadata or decompiled, never run.")
+    # 1.137.0: D'thorga Companion ran the check with its own, older kit, so a fix the repository had already pinned was missing.
+    pinned = pins.repository_kit(args.root)
+    runs, pins_version = version_tuple(__version__), version_tuple(pinned)
+    data["kit"] = {"runs": __version__, "repositoryPins": pinned, "older": bool(runs and pins_version and runs < pins_version)}
+    if data["kit"]["older"]:
+        report.lines.append(f"**This check ran with tool kit {__version__}, older than the {pinned} the repository pins**, so it "
+                            "may lack fixes the repository already has: run the repository's own copy, or update the program "
+                            "that ran it.")
     game = paths.game_path(args.game, environ, settings_file)
     workshop = paths.workshop_path(game, args.workshop, environ, settings_file)
     mods_config = paths.config_path(args.config, environ, settings_file)
@@ -549,7 +564,9 @@ def build_report(args, parts, config, environ, settings_file, now, progress, run
             def members(older, newer, patterns):
                 changes, removed, added, *_ = comparer(archive, older, newer, patterns)
                 return changes, removed, added
-            temporary_section(report, data, temporary_rows(read_temporary(args.root, config), versions, since, members), args.top)
+            marks = reviews.marks(args.root, reviews.TEMPORARY_PATCH, environ)
+            temporary_section(report, data, temporary_rows(read_temporary(args.root, config), versions, since, members, marks),
+                              args.top)
         if "updates" in parts:
             step += 1
             progress("Measuring each update", step, total)
@@ -576,6 +593,10 @@ def build_report(args, parts, config, environ, settings_file, now, progress, run
         if dump and Path(dump).is_file():
             written = datetime.fromtimestamp(Path(dump).stat().st_mtime, timezone.utc).strftime("%Y-%m-%d %H:%M")
             result["patchedDefs"] = written
+            # 1.137.0: written before the window began, it cannot hold what was patched since (the C-17's 8-day-old file).
+            result["patchedDefsStale"] = written < since
+        if config.get("patchedDefsHow"):
+            result["patchedDefsHow"] = " ".join(str(config["patchedDefsHow"]).split())
         xml_section(report, data, result, args.top)
         report.lines.append("XML patches are checked against the Defs as written, then against what earlier patches add: a "
                             "node an earlier patch adds only by a path past the simple form still reads as missing, so read the "

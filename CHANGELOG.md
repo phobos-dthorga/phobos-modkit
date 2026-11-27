@@ -4,6 +4,20 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.137.0] - 2026-11-27
+
+### Added
+
+- **reviews: what the owner has marked as read** (the owner's choice of 27 Nov 2026, "Finish today's loop", after marking eight
+  rows reviewed meant an agent editing a JSON file). `reviews mark` keeps one mark per thing and build in D'thorga Companion's
+  folder, so nothing in a repository changes; a newer build asks again. The update check reads the owner's marks beside the
+  repository's own notes, and says whose it used. How: [reviews](docs/reviews.md).
+- **The update check says when its patched-Defs file is old, and when its own kit is** (the same choice). A patched-Defs file
+  written before the window began is called out, with the repository's own `patchedDefsHow` words for writing it again; a check
+  run by a kit older than the one the repository pins says so first, as D'thorga Companion's copy was that day. `pins` reads the
+  version a repository pins from its checkout, which a kit older than the pin can read. How:
+  [rimworld-update-check](docs/rimworld-update-check.md#reading-the-answers).
+
 ## [1.136.0] - 2026-11-27
 
 ### Added

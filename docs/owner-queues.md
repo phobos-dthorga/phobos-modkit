@@ -28,6 +28,9 @@ owner flagged as looking wrong (screen notes). They share one way of working, sa
 | Closed by | Removing it from the config in the commit that acts on it | `picks settle`, in the commit that applies it | `screen-notes resolve --how "..."`; `reopen` undoes it |
 | Shown by | The Companion's Decisions page, which also answers | The Companion's Picks page, which also answers | The Companion, which writes them |
 
+Marks of what the owner has read ([reviews](reviews.md), 1.137.0) are kept the same way, in `reviews/<repository>.jsonl`, but
+nothing waits in a repository: the check that asks is the list, and a newer build asks again.
+
 ## Decisions
 
 A question an agent puts to the owner: two or more options, the agent's lean and why, and where it came from. Ids are unique in

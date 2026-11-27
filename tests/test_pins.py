@@ -88,6 +88,19 @@ class PinsTests(unittest.TestCase):
             self.assertEqual(pin["versions"], [{"version": "1.1.0", "heading": "2026-11-02",
                                                 "entries": ["Brighter lamps.", "Dimmer."]}])
 
+            # The version it pins (1.137.0): from the commit while nothing is checked out; then from its checkout, which a kit
+            # older than the pin can read though it does not know the pinned commit.
+            self.assertEqual("1.0.0", pins.repository_kit(game, kit_root=kit))
+            write(game / "external/kit" / pins.VERSION_FILE, '__version__ = "1.2.0"\n')
+            write(game / "external/kit/python/phobos_modkit/pins.py", "")
+            self.assertEqual("1.2.0", pins.repository_kit(game, kit_root=kit))
+
+    def test_a_repository_that_pins_no_kit_has_no_version(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plain = Path(tmp) / "plain"
+            new_repository(plain)
+            self.assertIsNone(pins.repository_kit(plain))
+
 
 if __name__ == "__main__":
     unittest.main()

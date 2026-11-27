@@ -106,6 +106,7 @@ recorders are out of scope) are in `AGENTS.md`, "What belongs here".
 | `testpass.py`, `testpass_code.py`, `artaudit.py` | The in-game test list with its evidence and verdicts; every shipped image with its record |
 | `checks.py`, `checks_live.py` | Rules written as data that say when a game's saved or running state is wrong: a small safe language, judging and the report; save adapters read the values, and live checks ask the heap reader for every check at once from one snapshot ([checks](checks.md)) |
 | `claims.py`, `decisions.py`, `picks.py`, `screen_notes.py` | The boards agent sessions and the owner share: claims, questions, picture and sound picks, notes on the Companion |
+| `reviews.py` | What the owner marked as read, per repository and build, kept in the Companion's folder; a check reads its own kind ([reviews](reviews.md)) |
 | `safe_copies.py`, `safe_copies_daily.py`, `records.py`, `cleanup.py`, `programs.py`, `feeds.py`, `issue_links.py`, `game_files.py`, `rules.py`, `source_clones.py` | Copies of what cannot be made again; leftovers; other programs; published feeds; where a fault is reported; what a game writes; the shared rules; lean clones of other authors' source |
 | `games_list.py`, `mcp.py` | The owner's games list as D'thorga Companion keeps it; the reports that read, offered to AI programs over the Model Context Protocol |
 

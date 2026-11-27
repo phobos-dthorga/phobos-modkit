@@ -94,6 +94,18 @@ class TemporaryTests(unittest.TestCase):
         self.assertEqual(f"{2:064x}"[:uc.BUILD_PREFIX], rows[0]["build"])
         self.assertEqual([], self.asked)              # nothing compared
 
+    def test_the_owners_mark_reviews_a_row_and_the_repositorys_own_note_comes_first(self):
+        marks = {"2": {"build": f"{2:064x}"[:12], "on": "2026-11-27", "note": "read in the Companion"}}
+        rows = uc.temporary_rows([self.entry()], self.versions, SINCE, self.compare(([], [], [])), marks)
+        self.assertEqual(("reviewed", "owner"), (rows[0]["status"], rows[0]["reviewedBy"]))
+        self.assertIn("read in the Companion", rows[0]["detail"])
+        own = {**self.entry(), "reviewed": {"build": f"{2:064x}", "on": "2026-11-26", "note": "the repository's"}}
+        rows = uc.temporary_rows([own], self.versions, SINCE, self.compare(([], [], [])), marks)
+        self.assertEqual("repository", rows[0]["reviewedBy"])
+        stale = {"2": {**marks["2"], "build": f"{1:064x}"}}     # a mark for the build before: asked again
+        self.assertEqual("unchanged", uc.temporary_rows([self.entry()], self.versions, SINCE, self.compare(([], [], [])),
+                                                        stale)[0]["status"])
+
     def test_a_review_of_an_older_build_does_not_cover_a_newer_one(self):
         entry = {**self.entry(), "reviewed": {"build": f"{1:064x}", "on": "2026-11-10"}}
         rows = uc.temporary_rows([entry], self.versions, SINCE, self.compare(([], [item("Vehicles.VehiclePawn.DeSpawn")], [])))
@@ -255,6 +267,22 @@ class AddingPatchTests(XmlFixture):
                           "Wrong_Thing": "node-missing"}, {name: r["status"] for name, r in rows.items()})
         self.assertEqual("Patches/Ours.xml", rows["Cargo_Plane"]["addedBy"])
         self.assertNotIn("addedBy", rows["Quiet_Thing"])
+
+
+class XmlSectionTests(unittest.TestCase):
+    def lead(self, **result):
+        report = uc.Report("x")
+        uc.xml_section(report, {}, {"checked": 3, "skipped": {}, "rows": [], **result}, 10)
+        return uc.render_markdown(report, lambda text: text)
+
+    def test_an_old_patched_defs_file_says_so_and_how_to_write_it_again(self):
+        how = "Tick the setting, then start the game."
+        text = self.lead(patchedDefs="2026-11-19 18:51", patchedDefsStale=True, patchedDefsHow=how)
+        self.assertIn("written before the window began", text)
+        self.assertIn(f"To write it again: {how}", text)
+        fresh = self.lead(patchedDefs="2026-11-27 08:00", patchedDefsStale=False, patchedDefsHow=how)
+        self.assertNotIn("To write it again", fresh)
+        self.assertIn("To write it again", self.lead(patchedDefsHow=how))     # none at all
 
 
 class CommandTests(unittest.TestCase):

@@ -52,6 +52,28 @@ def pinned_version(kit_root, commit):
     return found.group(1) if found else None
 
 
+def repository_kit(root, kit_root=KIT_ROOT):
+    """The version of this kit a repository pins, or None when it pins none (1.137.0): read from its checkout of the kit first,
+    since a kit older than the pin may not know the pinned commit, then from the commit its HEAD records."""
+    root = Path(root).resolve()
+    for path, _ in submodules(root):
+        found = VERSION.search(_read(root / path / VERSION_FILE))
+        if found and (root / path / "python" / "phobos_modkit" / "pins.py").is_file():
+            return found.group(1)
+        commit = _git(root, "rev-parse", f"HEAD:{path}")
+        version = pinned_version(kit_root, commit) if commit else None
+        if version:
+            return version
+    return None
+
+
+def _read(path):
+    try:
+        return Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
 def versions_between(changelog, older, newer):
     """[{version, heading, entries: [lead]}] of the changelog's versions above older, up to and including newer, newest first."""
     low, high = version_tuple(older), version_tuple(newer)
