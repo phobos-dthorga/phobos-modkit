@@ -56,6 +56,7 @@ Generated from the manifest by `python -m phobos_modkit command-docs --write`. E
 | Command | Game | What it is for |
 | --- | --- | --- |
 | [`art-audit`](docs/art-audit.md) | any | every shipped image with its record and how it was made, and every borrowed picture |
+| [`bundle`](docs/bundle.md) | any | a script and the kit modules it imports as one file that runs with Python alone, for people without the kit |
 | [`changes`](docs/changes.md) | any | what the changelogs say changed lately, and the code behind any one entry |
 | [`claims`](docs/claims.md) | any | who is working on what: agent sessions take and release version numbers, test rows and files |
 | [`cleanup`](docs/cleanup.md) | any | what the tools, builds and tests left behind; deletes only with `--apply` |

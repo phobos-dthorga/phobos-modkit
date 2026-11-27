@@ -6,7 +6,7 @@ phobos-ostranauts (`scripts/`). Which names are a promise is an **agent choice, 
 when a consumer's own work (an install, an art tool) depends on it and no command gives the same answer; it is internal when a
 command already does, or when only a consumer's test reaches in.
 
-**Answer first.** 52 names are a promise: the `main` of 30 command modules, and 22 library functions and constants. 20 more names
+**Answer first.** 66 names are a promise: the `main` of 31 command modules, and 35 library functions, classes and constants. 20 more names
 are imported today but are internal: they may change in any release, and each has a way out below. **Changing or removing a stable
 name, or a keyword argument a consumer passes to it, raises the major version** (`AGENTS.md`: "An incompatible change raises the
 major version and says what consumers must change"). `tests/test_library_api.py` fails when a stable name disappears.
@@ -46,6 +46,7 @@ Every command module's `main(argv=None, ..., out=None)` returns an exit code (0 
 | `steam.publish.cli.main` | `steam-publish` | `root` | rimworld and ostranauts `scripts/workshop.py` |
 | `testpass_cli.main` | `test-pass` | `out` | rimworld `scripts/test-pass.py` |
 | `windows_dumps.main` | `windows-dumps` | `out` | rimworld `scripts/crash-dump.py` |
+| `bundle_cli.main` | `bundle` | `out` | rimworld `tests/test_check_vehicle_schemas.py` (the one file for modders still bundles, and runs alone) |
 | `games.rimworld.archive_cli.main` | `rimworld-archive` | `settings_file`, `out` | rimworld `scripts/assembly-archive.py` |
 | `games.rimworld.cli.main` | `rimworld-log` | `settings_file`, `out` | rimworld `scripts/triage-log.py` |
 | `games.rimworld.defs_cli.main` | `rimworld-defs` | `settings_file`, `out` | rimworld `scripts/query-defs.py` |
@@ -91,10 +92,24 @@ Every other command's `main` follows the same pattern, but is not listed until a
 | `doc_tables.settings_reader` | `(game)` | The game adapter's `mod_settings(root, options)`, which reads one mod's settings from its code (key, label, description, default, page, section), or `None` when the game has no reader (1.114.0) | rimworld `scripts/mod-settings.py` (the labels in the settings history) |
 | `artaudit.mirrors_of` | `(root)` | The `records.mirrors` of the repository's `config/art-audit.json`; none without a config; a broken config raises | rimworld `scripts/art/art_paths.py` |
 | `picks.offer` | `(root, item, grounds=None)` | Adds one waiting pick to `config/picks.json`, or replaces the one with its id; refuses a pick of the other kind under the same id | rimworld `scripts/art/art_picks.py` |
+| `dotnet_metadata.read_assembly_types` | `(path)` | `{full name: {base, fields, members, custom, enum, abstract}}` read from an assembly's metadata in pure Python; `{}` for a file it cannot read | rimworld `scripts/check-vehicle-schemas.py`, through `TypeIndex` |
+| `dotnet_metadata.TypeIndex` | class, `(types, assemblies=())`; `from_assemblies(paths)`, `fields(name)`, `ours(class_name)`; subclasses set `KNOWN_BASES` and `OWN_PREFIXES` | Types from a set of assemblies, each type's fields with its bases', and which namespaces are the reader's own | rimworld `scripts/check-vehicle-schemas.py` |
+| `games.rimworld.loading.load_folders_by_version` | `(mod_folder)` | `{game version: [load folders]}` for every version a mod provides for, whatever mods a folder waits for | rimworld `scripts/check-vehicle-schemas.py` |
+| `games.rimworld.loading.version_key` | `(text)` | A version's numbers as a tuple, for sorting; `()` for none | rimworld `scripts/check-vehicle-schemas.py` |
+| `games.rimworld.mod_xml.FROM` | constant, an attribute name | Marks each element a patch put in, with its patch file | rimworld `scripts/check-vehicle-schemas.py` |
+| `games.rimworld.mod_xml.DefTypeIndex` | class, a `TypeIndex` | Knows the base types every Def is built on (`Verse.Def`'s fields) | rimworld `scripts/check-vehicle-schemas.py` |
+| `games.rimworld.mod_xml.ModXml` | class, `(folder, label, folders)` | One mod's `defs`, `patches` and `keys` from a set of load folders, each element with its line; `broken` lists files that are not well-formed | rimworld `scripts/check-vehicle-schemas.py` |
+| `games.rimworld.mod_xml.text` | `(element, tag, default=None)` | A child's stripped text | rimworld `scripts/check-vehicle-schemas.py` |
+| `games.rimworld.mod_xml.items` | `(element, tag)` | A child list's `<li>` items | rimworld `scripts/check-vehicle-schemas.py` |
+| `games.rimworld.mod_xml.line_of` | `(element)` | The line an element starts on, or `None` | rimworld `scripts/check-vehicle-schemas.py` |
+| `games.rimworld.mod_xml.package_id` | `(folder)` | A mod's packageId as written, or `''` | rimworld `scripts/check-vehicle-schemas.py` |
+| `games.rimworld.mod_xml.resolve_defs` | `(nodes, owner_of, tags=())` | XML inheritance over several mods' Defs: `(resolved by tag, Defs whose parent was found nowhere, each resolved Def's node as written)` | rimworld `scripts/check-vehicle-schemas.py` |
+| `games.rimworld.xml_patches.Patcher` | class, `(document, mentions=None)`; `apply(patch, source)`, `findings`, `touched` | A mod's XML patches applied to combined Defs as the game applies them, so far as ElementTree's XPath follows | rimworld `scripts/check-vehicle-schemas.py` |
 
 Why these are stable (agent choice): each writes or finds something another program reads back the same way (an install record,
 an encoded texture, a record's place, a pick, a setting), and calling a command for it would mean a process per file or per mod
-inside an install. `progress.run_streaming(command, cwd=None, env=None, timeout=None, progress=None, popen=None)` is offered to
+inside an install. The XML and metadata readers (1.148.0) are stable because a consumer's own checker is built on them and is
+bundled with them into one file for modders ([bundle](bundle.md)): no command could stand in for a library a script carries. `progress.run_streaming(command, cwd=None, env=None, timeout=None, progress=None, popen=None)` is offered to
 repositories in [manifest](manifest.md) but nobody imports it yet; it is not listed.
 
 ## Internal: imported today, not promised

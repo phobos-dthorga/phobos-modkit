@@ -4,6 +4,18 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.148.0] - 2026-11-28
+
+### Added
+
+- **bundle: a script and the kit modules it imports as one file that runs with Python alone** (the owner's choice of 28 Nov 2026,
+  "Kit, bundled to one file", for phobos-rimworld's vehicle schema checker, which modders download). Game-free; the same script
+  and kit give the same bytes, and `--check` says whether a file is still what bundling gives. How: [bundle](docs/bundle.md).
+- **The vehicle schema checker's readers, moved here from phobos-rimworld for every game's tools**: an assembly's types and
+  fields read in pure Python (`dotnet_metadata`), and one RimWorld mod's XML read without the game (`games/rimworld/mod_xml`,
+  `xml_patches`, `loading.load_folders_by_version`: lines, inheritance across mods, patches applied). Stable names:
+  [library API](docs/library-api.md).
+
 ## [1.147.3] - 2026-11-28
 
 ### Fixed

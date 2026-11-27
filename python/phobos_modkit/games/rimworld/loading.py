@@ -126,6 +126,32 @@ def load_folders(mod_folder, version, active):
     return folders
 
 
+def version_key(text):
+    """A game version's numbers, for sorting ("1.10" after "1.9"); () for text with none, such as the "" of a mod without versions."""
+    return tuple(int(part) for part in re.findall(r"\d+", text))
+
+
+def load_folders_by_version(mod_folder):
+    """{game version: [load folders]} for every game version a mod provides for, as a check of the mod's own files needs it
+    rather than as one game loads it (load_folders): every block of its LoadFolders.xml with every folder listed, whatever mods
+    it waits for and whether or not the folder exists; without a readable one, the mod's root, Common if present and each version
+    folder, or {"": [root, Common]} when it has no version folders."""
+    mod_folder, sets = Path(mod_folder), {}
+    load_file = _child_file(mod_folder, "loadfolders.xml")
+    if load_file is not None:
+        try:
+            for block in ET.parse(load_file).getroot():
+                paths = [(li.text or "").strip().strip("/\\") for li in block.findall("li")]
+                sets[block.tag.lstrip("vV")] = [mod_folder / path if path else mod_folder for path in paths]
+        except ET.ParseError:
+            sets = {}
+    if not sets:
+        base = [mod_folder] + ([mod_folder / "Common"] if (mod_folder / "Common").is_dir() else [])
+        versions = sorted((d.name for d in mod_folder.iterdir() if d.is_dir() and VERSION_FOLDER.match(d.name)), key=version_key)
+        sets = {version: base + [mod_folder / version] for version in versions} or {"": base}
+    return sets
+
+
 CONDITIONS = (("IfModActive", "any"), ("IfModActiveAll", "all"), ("IfModNotActive", "none"))
 
 

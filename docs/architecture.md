@@ -98,6 +98,8 @@ recorders are out of scope) are in `AGENTS.md`, "What belongs here".
 | `release/` | Changelogs in the Phobos form, version constants kept in step, the history screen before going public |
 | `steam/` | Workshop research (`workshop.py`, cached and paced), a game's reviews (`reviews.py`, 1.143.0), the Steam client (`client.py`), BBCode, VDF; `publish/` for notes, staging, the owner's uploader and the per-game publishing data |
 | `assemblies.py`, `assembly_refs.py`, `assembly_archive.py`, `targets.py` | Assembly metadata through the C# reader; every kept version of a project's dependencies; members named by string checked against metadata |
+| `dotnet_metadata.py` | An assembly's types, fields and enums read from its metadata in pure Python, for a tool that must run without .NET (a bundled one); a type index that follows base types |
+| `bundle.py`, `bundle_cli.py` | A script and the kit modules it imports written as one file that runs with Python alone ([bundle](bundle.md)) |
 | `heap_reader.py`, `dotnet_diagnostics.py`, `dotnet_snapshots.py`, `sampling.py`, `process_memory.py` | Looking at a running .NET program from outside: heap snapshots, Microsoft's diagnostics tools, sampled stacks, memory over time |
 | `crashdump.py`, `windows_dumps.py`, `zeroed.py` | Windows crash dumps; Windows' dump setting; files a crash left full of zeros |
 | `mod_list.py`, `mod_lists.py`, `mod_runs.py`, `mod_sort.py`, `mod_settings.py`, `mod_databases.py`, `workshop_updates.py` | A game's active-mod list checked, kept, compared and sorted; a mod's settings read from its source, through the adapter; the community lists a mod manager downloads, fetched by the kit (1.144.0); `workshop_updates.py`, the Workshop items Steam has not brought up to date (1.147.0) |
@@ -117,7 +119,7 @@ be tested and reused without the parser.
 
 | Game | Folder holds | What reads it |
 | --- | --- | --- |
-| RimWorld | 54 Python modules and three data files: log layouts, the save schema (`save-schema.toml`) and its reports, Defs and patches, mods and load rules, settings, Harmony patches, startup, readiness, textures, perf, the atlas, the mod list, mod settings from source, publishing data; and the 16 `rimworld-*` commands | Most of the kit |
+| RimWorld | 56 Python modules and three data files: log layouts, the save schema (`save-schema.toml`) and its reports, Defs and patches, one mod's own XML read without the game (`mod_xml.py`: lines, inheritance, Verse.Def's fields; `xml_patches.py`: patches applied), mods and load rules, settings, Harmony patches, startup, readiness, textures, perf, the atlas, the mod list, mod settings from source, publishing data; and the 16 `rimworld-*` commands | Most of the kit |
 | Project Zomboid (`zomboid`) | `mod_list.py` (its lists and `mod.info`), `workshop.json` | `mod-list`, `steam-publish` |
 | Ostranauts | `workshop.json` (and a package marker) | `steam-publish` |
 | Kenshi | `workshop.json` | `steam-publish` |
@@ -263,7 +265,7 @@ Agreed with the owner on 7 November 2026, after two tools had shown what repeats
 
 | Language | Used for | Why |
 | --- | --- | --- |
-| Python, standard library, 3.10 or newer | The default: every command, every report | Small inputs; every Phobos repository already runs Python; nothing to install |
+| Python, standard library, 3.10 or newer | The default: every command, every report. Modules a bundled tool carries keep to 3.9 (`bundle --python 3.9`), among them a small assembly metadata reader (`dotnet_metadata.py`) | Small inputs; every Phobos repository already runs Python; nothing to install. A modder given one file has Python but maybe not .NET |
 | Rust | The XML indexer behind the save index | A save of about 300 MB took 7.6 s a pass in Python; index once, query many needs a fast reader; one self-contained program |
 | C# | The assembly metadata reader and the heap reader | .NET's `System.Reflection.Metadata` reads assemblies without loading them, which keeps the rule against running other authors' code; ClrMD reads a .NET heap from outside |
 

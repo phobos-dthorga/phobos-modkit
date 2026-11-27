@@ -13,7 +13,8 @@ them is made up.
 
 ## A made-up mod assembly
 
-`dotnet/PatchFixture/` is C# source the assembly reader's tests build (into the kit's build folder) and then read. Its
+`dotnet/PatchFixture/` is C# source the assembly reader's tests build (into the kit's build folder) and then read; the pure-Python
+metadata reader's tests (`test_dotnet_metadata.py`) read the same build for its types, fields and enums. Its
 `HarmonyLib` is a stand-in with only the names Harmony's documentation publishes (the patch attributes, `Harmony.Patch`,
 `HarmonyMethod`, `AccessTools`), no code of Harmony's. It holds one of each patch form the reader handles: a class target
 with a bool prefix and a priority, a getter, an overload with a generic argument type, marked patch methods, a

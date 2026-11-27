@@ -161,3 +161,4 @@ The game's files are only read. The index lives in the kit's cache, under the sy
 ## Limits
 
 - Checked against an install of RimWorld 1.7.5000 with 336 active mods (November 2026).
+- **One mod's own files, read without an install** (a modder's check of their mod, not this index), are the library modules `games/rimworld/mod_xml.py` (Defs, patches and keys with each element's line, XML inheritance across mods, Verse.Def's fields), `xml_patches.py` (a mod's patches applied to combined Defs, so far as ElementTree's XPath follows them) and `loading.load_folders_by_version` (every game version's load folders). phobos-rimworld's vehicle schema checker uses them, bundled into one file for modders ([bundle](bundle.md)); [library API](library-api.md) lists the names.

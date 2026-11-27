@@ -58,6 +58,7 @@
     "test-pass": "docs/test-pass.md",
     "art-audit": "docs/art-audit.md",
     "command-docs": "docs/command-docs.md",
+    "bundle": "docs/bundle.md",
     "doc-tables": "docs/doc-tables.md",
     "gate": "docs/gate.md",
     "mcp": "docs/mcp.md",

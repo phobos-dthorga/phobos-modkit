@@ -28,6 +28,7 @@ ENTRY_POINTS = {
     "steam.publish.cli": ("root",),
     "testpass_cli": ("out",),
     "windows_dumps": ("out",),
+    "bundle_cli": ("out",),
     "games.rimworld.archive_cli": ("settings_file", "out"),
     "games.rimworld.cli": ("settings_file", "out"),
     "games.rimworld.defs_cli": ("settings_file", "out"),
@@ -57,6 +58,10 @@ STABLE = {
     "artaudit": ("record_home", "mirrors_of"),
     "picks": ("offer",),
     "doc_tables": ("settings_reader",),
+    "dotnet_metadata": ("read_assembly_types", "TypeIndex"),
+    "games.rimworld.loading": ("load_folders_by_version", "version_key"),
+    "games.rimworld.mod_xml": ("FROM", "DefTypeIndex", "ModXml", "text", "items", "line_of", "package_id", "resolve_defs"),
+    "games.rimworld.xml_patches": ("Patcher",),
 }
 
 
@@ -82,7 +87,7 @@ class LibraryApiTest(unittest.TestCase):
         listed = [f"{m}.main" for m in ENTRY_POINTS] + [f"{m}.{n}" for m, names in STABLE.items() for n in names]
         missing = [name for name in listed if f"`{name}`" not in text]
         self.assertEqual([], missing, "docs/library-api.md does not list these stable names")
-        self.assertEqual(52, len(listed), "the doc's count of stable names")
+        self.assertEqual(66, len(listed), "the doc's count of stable names")
 
 
 if __name__ == "__main__":
