@@ -3,8 +3,13 @@ Game-free.
 
 Step 3 of D'thorga Companion's own mod manager (the owner, 22 Nov 2026). The owner's choices on question cards: **both ways, chosen
 at the press**: the fewest moves (the list keeps its order and only what a rule says is out of place moves) or a full re-sort (the
-order rebuilt from the rules, alphabetical where no rule decides, as RimSort's sorts do); and **the owner's rules from RimSort read as
-they are, plus new ones kept here** (`rules.json` in the game's mod-list folder).
+order rebuilt from the rules and groups); and **the owner's rules from RimSort read as they are, plus new ones kept here**
+(`rules.json` in the game's mod-list folder).
+
+**Where no rule decides, a full re-sort keeps the order the list already has** (1.141.0; the owner's choice of 27 Nov 2026, "Sort
+first", after a full re-sort left a game unable to make a map). It used to put such mods in order of their names, as RimSort does
+within a level, which on the owner's RimSort-sorted list of 387 moved 135 mods, ten UI Rethemed parts among them from about place
+258 to 28, ahead of the mods they restyle: a name says nothing about what a mod needs to follow. Only rules and groups move mods now.
 
 Where a rule comes from, strongest first (agent's order, used only to choose which rule of a loop to set aside):
 
@@ -394,7 +399,7 @@ def arrange(adapter, mod_list, installed, rule_sets, how=FEWEST):
         edges.pop((gone["rule"].first, gone["rule"].then), None)
     old_place = {k: n for n, k in enumerate(keys)}
     if how == FULL:
-        priority = {k: (group[k], 0 if k in game_keys else 1, _name(mods, k).lower(), k) for k in keys}
+        priority = {k: (group[k], 0 if k in game_keys else 1, old_place[k]) for k in keys}
         order = _kahn(keys, edges, priority)
     else:
         priority = {k: (group[k], old_place[k]) for k in keys}
@@ -520,7 +525,8 @@ def _explain(key, old_place, new_place, edges, placed_by, mods, kept, how=FEWEST
     placing = placed_by.get(key)
     if reasons and placing is not None:
         sources.append(placing.source)
-    if not reasons and how == FEWEST:
+    # A group's own reason comes first in a full re-sort: a framework moved into its group says so, not which neighbour it moved with.
+    if not reasons and (how == FEWEST or not group_reason):
         for (first, then), rule in edges.items():
             if key in (first, then) and (then if first == key else first) not in kept:
                 reasons.append(f"Moved with {_name(mods, then if first == key else first)}: " + _said(rule, mods))
@@ -536,7 +542,7 @@ def _explain(key, old_place, new_place, edges, placed_by, mods, kept, how=FEWEST
         reasons.append(group_reason)
     elif not reasons and how == FULL:
         kind = ORDER_MOVE
-        reasons.append("No rule places it: a full re-sort puts such mods in order of their names.")
+        reasons.append("No rule places it: it keeps its order among the mods around it, some of which moved.")
     if not reasons:
         reasons.append("Moved to make room for the mods around it.")
     return {"key": key, "name": _name(mods, key), "from": old_place[key] + 1, "to": new_place[key] + 1,

@@ -120,24 +120,32 @@ class Fewest(unittest.TestCase):
 
 
 class Full(unittest.TestCase):
-    def test_a_full_resort_puts_the_game_first_then_names_in_order(self):
+    def test_a_full_resort_puts_the_game_first_then_keeps_the_order_the_list_had(self):
         mods = [mod("zed", name="Zed"), mod("core", source="game", name="Core"), mod("apple", name="Apple")]
         found = sort(["zed", "core", "apple"], mods, how=mod_sort.FULL)
-        self.assertEqual(found["ids"], ["core", "apple", "zed"])
+        self.assertEqual(found["ids"], ["core", "zed", "apple"])
         self.assertTrue(any("game's own first" in w for m in found["moves"] for w in m["why"]))
 
     def test_a_mod_whose_place_number_stays_is_not_listed(self):
         # Zed and Apple swap round Mid, whose place stays second: Mid is not listed, though it is outside the kept run.
-        mods = [mod("zed", name="Zed"), mod("mid", name="Mid"), mod("apple", name="Apple")]
+        mods = [mod("zed", after=["mid"], name="Zed"), mod("mid", name="Mid"), mod("apple", before=["mid"], name="Apple")]
         found = sort(["zed", "mid", "apple"], mods, how=mod_sort.FULL)
         self.assertEqual(found["ids"], ["apple", "mid", "zed"])
         self.assertIn("apple", [m["key"] for m in found["moves"]])
         self.assertNotIn("mid", [m["key"] for m in found["moves"]])
 
-    def test_mods_no_rule_places_go_in_order_of_their_names_and_say_so(self):
+    def test_mods_no_rule_places_keep_the_order_the_list_had(self):
+        # 1.141.0, the owner's choice "Sort first": a name says nothing about what a mod must follow, so names never move a mod.
         found = sort(["zed", "apple"], [mod("zed", name="Zed"), mod("apple", name="Apple")], how=mod_sort.FULL)
-        self.assertEqual(found["ids"], ["apple", "zed"])
-        self.assertIn("order of their names", found["moves"][0]["why"][0])
+        self.assertEqual(found["ids"], ["zed", "apple"])
+        self.assertEqual([], found["moves"])
+
+    def test_only_a_mod_a_rule_moves_is_listed(self):
+        # B must follow A: only B moves, with its rule; X, which no rule places, keeps its order and is not listed.
+        found = sort(["b", "x", "a"], [mod("b", after=["a"]), mod("x"), mod("a")], how=mod_sort.FULL)
+        self.assertEqual(found["ids"], ["x", "a", "b"])
+        self.assertEqual(["b"], [m["key"] for m in found["moves"]])
+        self.assertEqual("rule", found["moves"][0]["kind"])
 
 
 class OwnRules(unittest.TestCase):

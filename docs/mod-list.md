@@ -185,8 +185,11 @@ the bottom**: that is membership of the top or bottom group, as RimSort means it
 - **Fewest moves** (the default): Kahn's sort, choosing among the mods whose rules are met the one highest on the list now; done
   forwards and backwards (building from the end), keeping whichever moves fewer. A **moved** mod is one outside the longest run of
   mods whose order is kept, so a list that keeps every rule comes back unchanged.
-- **Full re-sort** (`--full`): the same sort with every mod below the game's own unless a rule puts it above; a mod others load
-  after comes next, the most used first (libraries first), then the rest by name.
+- **Full re-sort** (`--full`): the same sort with every mod below the game's own unless a rule puts it above, each group in turn,
+  and **where no rule decides, the order the list already has** (1.141.0; the owner's choice of 27 Nov 2026, "Sort first"). Before,
+  such mods went in order of their names: on the owner's RimSort-sorted list that moved 135 of 387, ten UI Rethemed parts from
+  about place 258 to 28, and a full re-sort had left a game unable to make a map. Now only rules and groups move a mod; the same
+  list re-sorts with none moved.
 - Each move lists the rules it broke where it stood, with whose they are and any note the rule carries; a mod moved only to keep a
   rule with another moved mod says so.
 - **Refused**: a mod listed twice (take the extra off first). A list changed between the sort and `--apply` is refused too, since

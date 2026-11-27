@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.141.0] - 2026-11-27
+
+### Fixed
+
+- **A full re-sort keeps the order the list has where no rule decides** (the owner's choice of 27 Nov 2026, "Sort first", after a
+  full re-sort from D'thorga Companion left a game unable to make a map). It put such mods in order of their names: on the owner's
+  RimSort-sorted list it moved 135 of 387 mods, ten UI Rethemed parts from about place 258 to 28, ahead of what they restyle. Now
+  only rules and groups move a mod, and the same list re-sorts with none moved. How: [mod-list](docs/mod-list.md).
+
 ## [1.140.0] - 2026-11-27
 
 ### Added

@@ -201,15 +201,15 @@ class Groups(unittest.TestCase):
         self.assertIn("Deserters: Combat Extended loads after it, and Vanilla Expanded Framework after Combat Extended "
                       "(Vanilla Expanded Framework: it is a known framework)", why["des"])
 
-    def test_mods_already_in_their_group_that_only_change_places_inside_it_are_a_names_move(self):
+    def test_mods_already_in_their_group_keep_their_order_inside_it(self):
+        # 1.141.0: they used to change places by name; now nothing moves a mod no rule places.
         from test_mod_sort import Plain
         Plain.known_frameworks = ("vef", "hugs")
         mods = [mod("core", source="game", name="Core"), mod("vef", name="Vanilla Expanded Framework"),
                 mod("hugs", name="HugsLib"), mod("apple", name="Apple")]
         found = sort(["core", "vef", "hugs", "apple"], mods, how=mod_sort.FULL)
-        self.assertEqual(found["ids"], ["core", "hugs", "vef", "apple"])
-        self.assertTrue(found["moves"])
-        self.assertEqual({m["kind"] for m in found["moves"]}, {mod_sort.ORDER_MOVE})
+        self.assertEqual(found["ids"], ["core", "vef", "hugs", "apple"])
+        self.assertEqual([], found["moves"])
 
     def test_a_mod_others_code_builds_on_is_not_pulled_up_with_the_frameworks(self):
         code = mod_sort.RuleSet(mod_sort.CODE, "Code", "here",
