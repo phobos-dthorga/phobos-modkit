@@ -13,7 +13,7 @@ from phobos_modkit import zeroed
 
 
 def git(repository, *arguments):
-    subprocess.run(["git", "-C", str(repository), *arguments], check=True, capture_output=True)
+    subprocess.run(["git", "-c", "core.fsmonitor=false", "-C", str(repository), *arguments], check=True, capture_output=True)
 
 
 class Zeroed(unittest.TestCase):
@@ -23,6 +23,9 @@ class Zeroed(unittest.TestCase):
         self.repo = base / "repo"
         self.repo.mkdir()
         git(self.repo, "init", "-q")
+        # In the repository too, as the code under test runs plain git: a system-wide fsmonitor started a daemon per test
+        # repository, and once hung the gate's `git add` (28 Nov 2026).
+        git(self.repo, "config", "core.fsmonitor", "false")
         git(self.repo, "config", "user.email", "test@example.invalid")
         git(self.repo, "config", "user.name", "Test")
         (self.repo / "good.txt").write_text("hello", encoding="utf-8")
