@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.135.0] - 2026-11-27
+
+### Added
+
+- **`look --json` gives the overview as data**, in the shape look-serve's overview answer has (totals, who each kind belongs to, the
+  largest kinds), and `look` and `look-kind` say how long a frozen read held the game (`frozenMs`). So a program's page can browse
+  the game read frozen (the owner's choice of 27 Nov 2026, for D'thorga Companion's Explorer on a machine with no room for a
+  snapshot).
+
 ## [1.134.0] - 2026-11-27
 
 ### Added

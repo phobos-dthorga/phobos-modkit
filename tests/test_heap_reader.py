@@ -182,6 +182,26 @@ class Relay(unittest.TestCase):
         self.assertEqual(len(lines), 4, "nothing is answered after the snapshot is let go")
         self.assertEqual((meta["method"], meta["label"], heap.total_bytes), ("snapshot", "day 4", 3000))
 
+    def test_look_gives_the_overview_as_data_and_says_how_long_it_froze(self):
+        """1.135.0: look --json gives the overview in look-serve's shape, so a page can browse a game read frozen."""
+        import argparse
+        from unittest import mock
+        seen = {}
+
+        def run_requests(pid, folder, requests, describe=(), environ=None, freeze=False):
+            seen["freeze"] = freeze
+            return {"ready": True, "pid": pid, "frozenMs": 9000}, [{"ok": True, "data": OVERVIEW}]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            args = argparse.Namespace(report="look", freeze=True, label="", top=5, cache=tmp, game=None, workshop=None,
+                                      config=None, pid=5)
+            with mock.patch.object(perf_cli.hreader, "run_requests", run_requests),                     mock.patch.object(perf_cli, "_pid", lambda *a: 5),                     mock.patch.object(perf_cli.look, "runtime_folder", lambda *a: tmp),                     mock.patch.object(perf_cli, "_owners", lambda *a: ({"MyMod": Owner(MOD, "My Mod")}, [])):
+                report, data = perf_cli._look(args, {}, None, None, None)
+        self.assertTrue(seen["freeze"])
+        self.assertEqual((data["totalObjects"], data["frozenMs"]), (30, 9000))
+        self.assertEqual(data["owners"][0], {"name": "My Mod", "kind": MOD, "bytes": 2000, "count": 10})
+        self.assertIn("frozen for 9,000 ms", render_markdown(report))
+
     def test_a_snapshot_heap_report_says_what_a_snapshot_is(self):
         with tempfile.TemporaryDirectory() as tmp:
             kept, heap = look.save_overview(tmp, {"pid": 5, "snapshotMs": 431}, OVERVIEW, "x")

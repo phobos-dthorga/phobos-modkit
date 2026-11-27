@@ -47,6 +47,9 @@ def save_overview(heaps_root, ready, overview, label="", now=None):
     return folder, heap
 
 
+OVERVIEW_TOP = 200     # the largest types a program's overview lists, as look-serve's top
+
+
 def owners_data(heap, owner_map, top):
     """Who the heap belongs to and its largest types, as data for a program's page."""
     owners = heap_owners(heap, lambda module: owner_map.get(module) or Owner(UNKNOWN, module or "?"))
@@ -74,7 +77,7 @@ def refuse(message, stdout=None):
     return 1
 
 
-def serve(pid, folder, heaps_root, owners_for, label="", limit_seconds=hr.LIMIT_SECONDS, top=200, stdin=None, stdout=None,
+def serve(pid, folder, heaps_root, owners_for, label="", limit_seconds=hr.LIMIT_SECONDS, top=OVERVIEW_TOP, stdin=None, stdout=None,
           session_class=hr.Session, now=None, checks_answer=None):
     """Hold a snapshot and answer one JSON request a line from stdin, one answer a line on stdout (the reader's requests). An
     overview's answer gains who each type belongs to, and is kept as a heap for heap-compare. `{"op": "checks"}` (1.123.0) runs

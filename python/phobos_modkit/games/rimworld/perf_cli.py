@@ -554,15 +554,22 @@ def _look(args, environ, settings_file, run, now):
     if args.report == "look":
         _, heaps_root = snap.roots(args.cache, environ, settings_file)
         ready, answers = _requests(pid, folder, [{"op": "overview"}], environ, args)
-        kept, heap = look.save_overview(heaps_root, ready, hreader.answer_data(answers[0]), args.label, now)
+        overview = hreader.answer_data(answers[0])
+        kept, heap = look.save_overview(heaps_root, ready, overview, args.label, now)
         meta = snap.meta_of(kept)
         owners, notes = _owners(sorted({t.module for t in heap.types}), args, environ, settings_file)
-        return snap.heap_report(kept, meta, heap, owners, notes, args.top), None
+        report = snap.heap_report(kept, meta, heap, owners, notes, args.top)
+        _say_frozen(report, ready)
+        # 1.135.0: the overview as data, in the shape look-serve's overview answer has, for a program's page that read it frozen.
+        data = {key: overview.get(key) for key in ("totalObjects", "totalBytes", "freeBytes", "untyped", "seconds")}
+        data.update(look.owners_data(heap, owners, look.OVERVIEW_TOP), kept=Path(kept).name, notes=notes,
+                    frozenMs=ready.get("frozenMs"))
+        return report, data
     if args.report == "look-kind":
         request = {"op": "kind", "type": args.type, "take": max(1, args.top), "match": args.match or "",
                    "sort": "size" if args.largest else "", "open": bool(args.open)}
         ready, answers = _requests(pid, folder, [request], environ, args)
-        data = dict(hreader.answer_data(answers[0]), sorted=args.largest)
+        data = dict(hreader.answer_data(answers[0]), sorted=args.largest, frozenMs=ready.get("frozenMs"))
         report = hreader.kind_report(f"rimworld-perf: look-kind {args.type}", data)
         if data.get("opened"):
             opened = hreader.object_report("", data["opened"])
