@@ -178,6 +178,13 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
   mods above it, and where its time went below it. A name without wildcards matches the end of a method's name after a dot
   (`GenTypes.IsSealedWithCache`); `*` and `?` are the only wildcards, since generic names hold brackets. `--all-threads` looks
   at every thread, with a table by thread.
+- **Thread names** (1.151.0) say what each thread is from what its stacks hold: the data file `games/rimworld/perf-threads.json`
+  names the game's and its engine's (the main loop, the render thread, audio, the engine's job workers, the loading thread), and
+  the kit's core names .NET's own (`sampling.DOTNET_THREADS`): the JIT compiling through Harmony's hook, the runtime's counters
+  read for the recording, the finalizer, the thread pool. A thread takes the name whose methods hold the most of its time, at least
+  30%. **Of one core** is a thread's time running managed code against the recording's length. In the owner's recordings of 17
+  and 18 November 2026 the engine's audio thread kept 47% to 88% of a core busy in its own memory allocator, and the JIT's threads,
+  through Harmony's hook, 13 to 45 s of processor time a minute; both had shown only as "the engine" and "Harmony".
 - **Running managed code** against **in native code or waiting**: the runtime marks each sample. Native time is the engine,
   the operating system, garbage collection or a wait; it is still time the frame took.
 - **Patched game methods** are methods Harmony rewrote, with everything they call. Harmony 2 names them

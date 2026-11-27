@@ -252,6 +252,21 @@ class Share:
 PASS_OVER = (RUNTIME, LIBRARY)
 NO_MOD = Owner(MOD, "")             # the key for "no mod on the stack" in the tables below
 
+# What .NET's own threads do, for any .NET program (1.151.0): a game adapter lists its engine's threads first. Each is (name,
+# patterns over Namespace.Type.Method); a thread takes the name whose methods hold most of its sampled time, at least ROLE_SHARE.
+# Read from the owner's RimWorld recordings of 17 and 18 November 2026: Harmony's MonoMod puts its own hook round every compile,
+# and the hook's thread showed as "Harmony" until named.
+DOTNET_THREADS = [
+    ("compiling code (the JIT), through Harmony's hook", ["MonoMod.Core.Interop.CoreCLR*.InvokeCompileMethod",
+                                                         "*JitHookDelegateHolder.CompileMethodHook"]),
+    ("the runtime's counters, read for this recording", ["System.Diagnostics.Tracing.CounterGroup.PollForValues",
+                                                         "System.Diagnostics.Metrics.AggregationManager.CollectWorker"]),
+    ("the finalizer", ["System.GC.RunFinalizers"]),
+    (".NET's thread pool", ["System.Threading.PortableThreadPool*", "System.Threading.ThreadPoolWorkQueue.Dispatch",
+                            "System.Threading.TimerQueue*"]),
+]
+ROLE_SHARE = 0.3
+
 
 class Callers:
     """How the stacks running one method reach it, totalled (Recording.callers): each table is {key: Share}."""
@@ -313,6 +328,24 @@ class Recording:
         name = self.threads[thread][0]
         found = _THREAD_ID.search(name)
         return f"thread {found.group(1)}" if found else name
+
+    def thread_role(self, thread, roles):
+        """The name in roles [(name, [patterns])] whose methods hold the most of a thread's sampled time, at least ROLE_SHARE of it;
+        the first listed wins a tie. None when no name holds that much."""
+        tests = [(name, [method_matcher(p) for p in patterns]) for name, patterns in roles]
+        held, whole, memo = defaultdict(float), 0.0, {}
+        for node, _, ms in self.thread_samples(thread):
+            whole += ms
+            if node not in memo:
+                methods = [self.frames[f][2] for f in self.path(node)]
+                memo[node] = [name for name, matchers in tests if any(m(method) for method in methods for m in matchers)]
+            for name in memo[node]:
+                held[name] += ms
+        if not whole or not held:
+            return None
+        order = {name: i for i, (name, _) in enumerate(roles)}
+        best = min(held, key=lambda name: (-held[name], order[name]))
+        return best if held[best] >= ROLE_SHARE * whole else None
 
     # Owners
 

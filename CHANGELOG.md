@@ -12,6 +12,10 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
   after a read of their recordings found 35% of the main thread in one vanilla method that no table named). `callers METHOD` says
   what calls a method, the mods above it and where its time goes; the report's hot spots put back together time in one game or
   engine method that caused by spreads over many mods. Game-free in `sampling`. How: [rimworld-perf](docs/rimworld-perf.md).
+- **rimworld-perf names the game's threads, and how much of a core each keeps busy**: the main loop, the render thread, audio and
+  the engine's job workers from a RimWorld data file, and .NET's own (the JIT compiling through Harmony's hook among them) from the
+  core. The owner's recordings showed the audio thread at up to 88% of a core, listed till now as "the engine". A next game lists
+  its engine's threads in its own data file. How: [rimworld-perf](docs/rimworld-perf.md).
 
 ## [1.150.0] - 2026-11-28
 

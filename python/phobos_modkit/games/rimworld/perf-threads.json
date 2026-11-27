@@ -1,0 +1,10 @@
+{
+  "description": "What RimWorld 1.7's own threads do, for rimworld-perf's thread names: a thread takes the first-listed name whose methods hold the most of its sampled time, at least 30%. * and ? are wildcards over Namespace.Type.Method. Read from the owner's three recordings of 17 and 18 November 2026 (RimWorld 1.7.5011 on Waylith, Ludeon's engine); .NET's own threads are named in the kit's core (sampling.DOTNET_THREADS).",
+  "threads": [
+    ["the game's main loop", ["Waylith.EngineApplication.RunFrames", "Verse.Root*.Update"]],
+    ["the render thread (the engine drawing frames)", ["Waylith.Rendering.RenderThread.*"]],
+    ["audio (the engine's sound mixer)", ["Waylith.Audio.*"]],
+    ["the engine's job workers", ["Waylith.Jobs.WaylithJobRuntime.*"]],
+    ["the game's loading thread (long events)", ["Verse.LongEventHandler.*"]]
+  ]
+}

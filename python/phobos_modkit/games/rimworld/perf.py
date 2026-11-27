@@ -11,7 +11,7 @@ import fnmatch
 import json
 from pathlib import Path
 
-from ...sampling import ENGINE, GAME, LIBRARY, MOD, RUNTIME, UNKNOWN, Owner
+from ...sampling import DOTNET_THREADS, ENGINE, GAME, LIBRARY, MOD, RUNTIME, UNKNOWN, Owner
 from . import loading, paths
 from .mods import ModIndex, default_roots
 from .patches import mod_assemblies
@@ -25,12 +25,19 @@ LIBRARIES = {"0harmony": "Harmony", "harmony": "Harmony", "prepatcher": "Prepatc
 LIBRARY_PREFIXES = {"monomod": "Harmony"}
 ENGINE_NAME = "the engine and Ludeon's libraries"
 PHASES_FILE = Path(__file__).with_name("perf-phases.json")
+THREADS_FILE = Path(__file__).with_name("perf-threads.json")
 
 
 def phases():
     """([(label, [patterns])], the ticking phase's label) from the data file."""
     data = json.loads(PHASES_FILE.read_text(encoding="utf-8"))
     return [(label, list(patterns)) for label, patterns in data["phases"]], data["ticking"]
+
+
+def thread_roles():
+    """[(name, [patterns])]: RimWorld's and its engine's threads from the data file, then .NET's own (sampling.DOTNET_THREADS)."""
+    data = json.loads(THREADS_FILE.read_text(encoding="utf-8"))
+    return [(name, list(patterns)) for name, patterns in data["threads"]] + DOTNET_THREADS
 
 
 def install_assemblies(game):

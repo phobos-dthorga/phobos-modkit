@@ -434,8 +434,10 @@ def summary_report(rec, folder, top):
     meta = rec.meta
     report = Report(f"rimworld-perf: {folder.name}")
     label = f' ("{meta["label"]}")' if meta.get("label") else ""
+    roles = perf.thread_roles()
     report.lines.append(f"Recorded {float(meta.get('seconds') or whole / 1000):.0f} s{label} at {meta.get('recorded_at', '?')}: "
-                        f"{len(rec.threads)} threads; the main thread is {rec.thread_label(main)}, the busiest running managed code.")
+                        f"{len(rec.threads)} threads; the main thread is {rec.thread_label(main)}"
+                        f"{' (' + role + ')' if (role := rec.thread_role(main, roles)) else ''}, the busiest running managed code.")
     report.lines.append(CAVEAT)
     by_phase = rec.by_phase(samples, phases)
     tick_share = by_phase.get(ticking)
@@ -484,9 +486,13 @@ def summary_report(rec, folder, top):
             continue
         shares = rec.by_owner(rec.thread_samples(thread))
         busiest = max(shares.items(), key=lambda kv: (kv[1].cpu, kv[0].name))[0].name if shares else "-"
-        rows.append((rec.thread_label(thread), ms(cpu_ms), busiest))
+        rows.append((rec.thread_label(thread), rec.thread_role(thread, roles) or "-", ms(cpu_ms),
+                     pct(cpu_ms, whole), busiest))
     if rows:
-        report.section("Other threads running managed code", Table(["Thread", "Running managed code (ms)", "Mostly caused by"], rows))
+        report.section("Other threads running managed code",
+                       "**Of one core** is the thread's time running managed code against the recording's length: near 100% keeps a "
+                       "whole processor core busy. Names come from what a thread's stacks hold (perf-threads.json, then .NET's own).",
+                       Table(["Thread", "What it is", "Running managed code (ms)", "Of one core", "Mostly caused by"], rows))
     outside = rec.in_phase(samples, phases, None)
     if outside:
         firsts = {}

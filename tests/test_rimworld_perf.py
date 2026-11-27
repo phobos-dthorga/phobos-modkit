@@ -173,6 +173,16 @@ class RecordingTests(unittest.TestCase):
                           "Verse.Pawn.Tick": (10, {"none": 10}), "Waylith.Rendering.Submit": (30, {"none": 30}),
                           "Verse.Root_Play.Update": (10, {"none": 10})}, spots)
 
+    def test_threads_are_named_by_what_their_stacks_hold(self):
+        self.assertEqual("the game's main loop", self.rec.thread_role(self.main, perf.thread_roles()))
+        waiting = next(t for t in self.rec.threads if t != self.main)
+        self.assertIsNone(self.rec.thread_role(waiting, perf.thread_roles()))
+        self.assertEqual("waiting", self.rec.thread_role(waiting, [("waiting", ["System.Threading.WaitHandle.*"])]))
+        # A name needs 30% of the thread's time: drawing holds 30 of the main thread's 110 ms, ticking 70.
+        self.assertIsNone(self.rec.thread_role(self.main, [("drawing", ["Verse.Map.MapUpdate"])]))
+        self.assertEqual("ticking", self.rec.thread_role(self.main, [("drawing", ["Verse.Map.MapUpdate"]),
+                                                                     ("ticking", ["Verse.TickManager.DoSingleTick"])]))
+
     def test_a_file_that_is_not_a_trace(self):
         bad = Path(self.tmp) / "bad.json"
         bad.write_text('{"profiles": []}', encoding="utf-8")
@@ -241,6 +251,7 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(perf_cli.EXIT_OK, code, text)
         self.assertIn("rimworld-perf: 20261117-180000-many-wounded", text)
         self.assertIn("| Example Medical | mod | 40 | 57.1% |", text)
+        self.assertIn("the main thread is thread 100 (the game's main loop)", text)
         self.assertIn("Time paused for garbage collection | 3.0% of the time", text)
         self.assertIn("300.0 MB a second", text)
         folder = self.tmp / "cache" / perf_cli.CACHE_FOLDER / "20261117-180000-many-wounded"
