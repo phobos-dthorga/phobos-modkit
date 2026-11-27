@@ -363,6 +363,47 @@ class Command(unittest.TestCase):
         code, answer = self.run_cli("undo", "--name", "rimworld", "--list", "active", "--apply")
         self.assertEqual((code, path.read_bytes()), (0, before))
 
+    def write(self, ids, was, *more, running=None):
+        out = io.StringIO()
+        code = cli.main(["write", "--name", "rimworld", "--list", "active", *more, "--json"], self.environ, out,
+                        running=running or (lambda names: []), stdin=io.StringIO(json.dumps({"ids": ids, "was": was})))
+        return code, json.loads(out.getvalue())
+
+    def test_save_writes_a_whole_new_list_at_once_after_a_backup(self):
+        # 1.142.0, the owner's choice "Hold until Save": moves and switches made freely, written as one change.
+        path = self.fake.config / "ModsConfig.xml"
+        before = path.read_bytes()
+        was = ["ludeon.rimworld", "example.hostel", "example.gone"]
+        new = ["ludeon.rimworld", "example.library", "example.gone", "example.hostel"]
+        code, answer = self.write(new, was)
+        self.assertEqual((code, answer["data"]["applied"], path.read_bytes()), (0, False, before))
+        self.assertEqual((answer["data"]["on"], answer["data"]["off"]), (["example.library"], []))
+        code, answer = self.write(new, was, "--apply")
+        self.assertEqual((code, answer["data"]["applied"]), (0, True))
+        code, answer = self.run_cli("mods", "--name", "rimworld")
+        self.assertEqual([e["key"] for e in answer["data"]["lists"][0]["entries"]], new)
+        code, answer = self.run_cli("undo", "--name", "rimworld", "--list", "active", "--apply")
+        self.assertEqual((code, path.read_bytes()), (0, before))
+
+    def test_save_refuses_a_list_changed_since_the_editing_began_and_what_cannot_be(self):
+        path = self.fake.config / "ModsConfig.xml"
+        before = path.read_bytes()
+        stale = ["ludeon.rimworld", "example.gone"]
+        cases = [(["ludeon.rimworld", "example.hostel"], stale, "changed since you began"),
+                 (["ludeon.rimworld", "example.hostel", "example.hostel"], ["ludeon.rimworld", "example.hostel", "example.gone"],
+                  "twice"),
+                 (["ludeon.rimworld", "example.nowhere"], ["ludeon.rimworld", "example.hostel", "example.gone"], "not on this PC"),
+                 (["ludeon.rimworld", "example.hostel", "example.gone"], ["ludeon.rimworld", "example.hostel", "example.gone"],
+                  "nothing to save")]
+        for ids, was, said in cases:
+            code, answer = self.write(ids, was, "--apply")
+            self.assertEqual((code, answer["data"]["ok"]), (cli.EXIT_REFUSED, False), said)
+            self.assertIn(said, answer["data"]["refusal"])
+        code, answer = self.write(["ludeon.rimworld"], ["ludeon.rimworld", "example.hostel", "example.gone"], "--apply",
+                                  running=lambda names: ["RimWorld.exe"])
+        self.assertIn("RimWorld.exe is running", answer["data"]["refusal"])
+        self.assertEqual(path.read_bytes(), before)
+
     def test_a_refused_change_says_why_and_changes_nothing(self):
         code, answer = self.run_cli("fix", "--name", "rimworld", "--list", "active", "--remove", "example.gone", "--apply",
                                     running=lambda names: ["RimWorld.exe"])
@@ -374,6 +415,11 @@ class Command(unittest.TestCase):
         data = answer["data"]
         self.assertEqual(code, 0)
         self.assertIn("example.library", [m["key"] for m in data["mods"]])
+        market = next(m for m in data["mods"] if m["key"] == "example.market")
+        self.assertEqual((market["load_after"], market["incompatible"]), (["example.hostel"], ["example.rival"]))
+        self.assertTrue(market["folder"].endswith("1000000001"))
+        needy = next(m for m in data["mods"] if m["key"] == "example.needy")
+        self.assertIn(["example.library"], needy["need_ids"])
         self.assertEqual([e["key"] for e in data["lists"][0]["entries"]], ["ludeon.rimworld", "example.hostel", "example.gone"])
         self.assertEqual(data["changes"], {"active": 0})
 
@@ -403,7 +449,7 @@ class Command(unittest.TestCase):
                       "lists": ("reads", None), "compare": ("reads", None), "load": ("writes", "--apply"),
                       "since": ("reads", None),
                       "save": ("writes", "--apply"), "forget": ("writes", "--apply"), "export": ("writes", "--apply"),
-                      "subscribe": ("writes", "--apply"), "unsubscribe": ("writes", "--apply"),
+                      "subscribe": ("writes", "--apply"), "unsubscribe": ("writes", "--apply"), "write": ("writes", "--apply"),
                           "mods": ("reads", None), "backups": ("reads", None), "games": ("reads", None)})
         self.assertEqual(reports["check"]["surface"], "mod-list")
 

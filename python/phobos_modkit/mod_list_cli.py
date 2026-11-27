@@ -30,6 +30,7 @@ Backups and the memory of every mod seen live in D'thorga Companion's folder (se
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 import sys
@@ -84,6 +85,9 @@ def _parser():
                         help="move this mod to the place --to names (again for several, moved as one block)")
     fix.add_argument("--to", type=int, metavar="PLACE", help="the place a mod moved or switched on goes to, 1 first (1.73.0)")
     fix.add_argument("--apply", action="store_true", help="make the change; without it, only say what it would be")
+    write = sub.add_parser("write", help="write a whole new list, read as JSON from standard input, after a backup; only with --apply")
+    _common(write)
+    write.add_argument("--apply", action="store_true", help="write it; without it, only say what it would do")
     undo = sub.add_parser("undo", help="put a list back as it was before the last change made here; only with --apply")
     _common(undo)
     undo.add_argument("--backup", help="this backup (its file name), instead of the latest")
@@ -238,7 +242,12 @@ def mods_data(adapter, environ=None, settings=None, now=None, progress=None):
         seen.add(key)
         rows.append({"key": key, "id": mod.id, "name": mod.name, "source": mod.source, "workshop_id": mod.workshop_id,
                      "authors": mod.authors, "versions": list(mod.versions), "needs": [n.name or n.ids[0] for n in mod.needs],
-                     "preview": mod.preview or None})
+                     "preview": mod.preview or None,
+                     # 1.142.0, for D'thorga Companion's info panel: where it is, and what its own files say of the others.
+                     "folder": str(mod.folder or ""), "load_after": list(mod.load_after), "load_before": list(mod.load_before),
+                     "incompatible": list(mod.incompatible),
+                     # Each need's ids, any one of which meets it, so a list being edited can say a need is off.
+                     "need_ids": [list(n.ids) for n in mod.needs]})
     lists = []
     for mod_list in adapter.lists():
         lists.append({"key": mod_list.key, "label": mod_list.label, "writable": mod_list.writable, "count": len(mod_list.ids),
@@ -344,6 +353,41 @@ def fix(adapter, args, environ=None, running=game_running, now=None):
     report = Report(f"Mod list: {words}" + ("" if args.apply else " (preview)"))
     report.lines.append(f"{mod_list.label}: {len(mod_list.ids)} mods now, {len(ids)} after.")
     report.lines.append(f"Kept a backup first: {data['backup']}." if args.apply else "**Preview only. Add --apply to make it.**")
+    return report, data
+
+
+MAX_WRITTEN = 5000       # the most mods one write may name (a guard against a mistaken input, far above any real list)
+
+
+def _read_whole(stdin):
+    """The new list and the one the editing began from, from standard input: {"ids": [...], "was": [...]}."""
+    try:
+        given = json.loads(stdin.read() or "{}")
+    except ValueError as error:
+        raise core.FixError(f"The new list could not be read: {error}") from None
+    ids, was = given.get("ids") if isinstance(given, dict) else None, given.get("was") if isinstance(given, dict) else None
+    for name, value in (("ids", ids), ("was", was)):
+        if not isinstance(value, list) or len(value) > MAX_WRITTEN or not all(isinstance(i, str) and i.strip() for i in value):
+            raise core.FixError(f"The new list needs {name!r}: a list of at most {MAX_WRITTEN} mod ids.")
+    return [i.strip() for i in ids], [i.strip() for i in was]
+
+
+def write_report(adapter, args, stdin, environ=None, running=game_running, now=None):
+    """A whole new list at once (1.142.0): D'thorga Companion's Save, after the owner moved and switched mods freely."""
+    mod_list = _the_list(adapter, args.list_key)
+    ids, was = _read_whole(stdin)
+    on, off, moved = core.whole_change(adapter, mod_list.ids, ids)
+    words = f"save {len(on)} switched on, {len(off)} switched off, {moved} moved"
+    data = {"list": mod_list.key, "label": mod_list.label, "change": words, "on": on, "off": off, "moved": moved,
+            "applied": False, "backup": "", "ids": ids}
+    if args.apply:
+        installed = core.Installed(adapter, adapter.installed())
+        backup = core.apply_whole(adapter, mod_list, ids, was, installed, words, running, environ, args.settings, now)
+        data.update(applied=True, backup=backup.name)
+        history.record(adapter.game, "mod-list-change", environ, args.settings, now, list=mod_list.key, change=words,
+                       backup=backup.name)
+    report = Report(f"Mod list: {words}" + ("" if args.apply else " (preview)"))
+    report.lines.append(f"Kept a backup first: {data['backup']}." if args.apply else "**Preview only. Add --apply to write it.**")
     return report, data
 
 
@@ -694,7 +738,7 @@ def undo(adapter, args, environ=None, running=game_running, now=None):
                     "keys": [adapter.key(i) for i in ids]}
 
 
-def main(argv=None, environ=None, out=None, post=None, running=None, now=None, steam=None):
+def main(argv=None, environ=None, out=None, post=None, running=None, now=None, steam=None, stdin=None):
     out = out or sys.stdout
     environ = os.environ if environ is None else environ
     try:
@@ -759,6 +803,8 @@ def main(argv=None, environ=None, out=None, post=None, running=None, now=None, s
             report, data = unsubscribe_report(adapter, args, environ, running or game_running, steam, now)
         elif args.report == "fix":
             report, data = fix(adapter, args, environ, running or game_running, now)
+        elif args.report == "write":
+            report, data = write_report(adapter, args, stdin or sys.stdin, environ, running or game_running, now)
         else:
             report, data = undo(adapter, args, environ, running or game_running, now)
     except (core.FixError, steam_client.SteamError, ValueError, OSError) as error:
@@ -777,6 +823,8 @@ MANIFEST = {"game": None, "parser": _parser, "effect": READS, "surface": "mod-li
             "question": "Is anything wrong with my list of active mods, and why?",
             "reports": {"check": {"effect": ONLINE, "when": "--online"},
                         "fix": {"effect": WRITES, "when": "--apply", "question": None},
+                        "write": {"effect": WRITES, "when": "--apply", "question": None,
+                                  "note": "reads the new list as JSON on standard input: {\"ids\": [...], \"was\": [...]}"},
                         "undo": {"effect": WRITES, "when": "--apply", "question": None},
                         "sort": {"effect": WRITES, "when": "--apply",
                                  "question": "How would my mods be sorted from their rules, and why?"},

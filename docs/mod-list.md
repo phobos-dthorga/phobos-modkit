@@ -29,6 +29,7 @@ Workshop). The Companion's Mod list page shows it.
 | `mod-list check --name GAME [--online] [--known] [--list KEY]` | Every problem, warning and note with each list, with the changes offered; `--known` adds the known problems the kit's feeds last gave (no network) | reads (online with `--online`) |
 | `mod-list fix --name GAME --list KEY --remove ID [--apply]` | Takes a mod off a list; `--remove-extra ID` keeps its first entry; `--enable ID` switches it on just before the first mod that needs it | writes with `--apply` |
 | `mod-list fix --name GAME --list KEY --move ID --to PLACE [--apply]` | Moves a mod to a place (1 is first); `--enable ID --to PLACE` switches one on there | writes with `--apply` |
+| `mod-list write --name GAME --list KEY [--apply]` | A whole new list at once, read as JSON on standard input, `{"ids": [...], "was": [...]}`: D'thorga Companion's **Save** (1.142.0). Refused when the list changed since `was`, a mod would be listed twice, a mod switched on is not on this PC, or nothing changed; a backup first, as every change | writes with `--apply` |
 | `mod-list sort --name GAME --list KEY [--full] [--apply]` | The list sorted from every rule, each move explained; `--full` rebuilds the whole order | writes with `--apply` |
 | `mod-list rules --name GAME [--mod ID --after OTHER \| --before OTHER \| --top \| --bottom \| --drop N] [--apply]` | Your own rules, your RimSort rules (read only), and every rule set the sorter reads; adds or takes away one of yours | writes with `--apply` |
 | `mod-list since --name GAME [--list KEY]` | What the first game run after the last change made here showed: new errors, clean, or why it cannot tell | reads |
@@ -56,6 +57,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | --- | --- | --- |
 | `check` | Every problem with the game's lists of active mods, why, and the changes offered. | reads public pages online, with `--online` |
 | `fix` | One change to a list, after a backup; only with `--apply`. | writes, with `--apply` |
+| `write` | Write a whole new list, read as JSON from standard input, after a backup; only with `--apply`. Reads the new list as JSON on standard input: {"ids": [...], "was": [...]}. | writes, with `--apply` |
 | `undo` | Put a list back as it was before the last change made here; only with `--apply`. | writes, with `--apply` |
 | `sort` | The list sorted from every rule, each move explained; written only with `--apply`. | writes, with `--apply` |
 | `rules` | Your own load-order rules, and every rule set the sorter reads. | writes, with `--apply` |
@@ -78,7 +80,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--app-id N` | all but `games` | the game's Steam app ID, instead of its name |  |
 | `--data VALUE` | all but `games` | the game's own data folder, where the tools would not find it |  |
 | `--settings VALUE` | all but `games` | a JSON settings file with the games' paths |  |
-| `--list KEY` | `check`, `fix`, `undo`, `sort`, `since`, `compare`, `load`, `save`, `export`, `unsubscribe` | only this list, by the key a check names |  |
+| `--list KEY` | `check`, `fix`, `write`, `undo`, `sort`, `since`, `compare`, `load`, `save`, `export`, `unsubscribe` | only this list, by the key a check names |  |
 | `--online` | `check` | ask Steam which Workshop items still exist |  |
 | `--known` | `check` | also warn of known problems, from the known-problems feeds the kit last read (no network) |  |
 | `--remove ID` | `fix` | take this mod off the list (again for several). Repeatable. |  |
@@ -87,6 +89,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--move ID` | `fix` | move this mod to the place `--to` names (again for several, moved as one block). Repeatable. |  |
 | `--to PLACE` | `fix` | the place a mod moved or switched on goes to, 1 first (1.73.0) |  |
 | `--apply` | `fix` | make the change; without it, only say what it would be |  |
+| `--apply` | `write`, `load`, `export` | write it; without it, only say what it would do |  |
 | `--backup VALUE` | `undo` | this backup (its file name), instead of the latest |  |
 | `--apply` | `undo` | go back; without it, only say what it would do |  |
 | `--full` | `sort` | rebuild the whole order (else move only what a rule says is out of place) |  |
@@ -101,7 +104,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--from SOURCE:REF` | `compare`, `load` | a list as `lists` names it: saved:NAME, kept:TIME, save:FILE, manager:FILE |  |
 | `--last-clean` | `compare`, `load` | the newest list kept at a game start that then ran clean (1.85.0) |  |
 | `--file PATH` | `compare`, `load` | a list file (the game's .rml, a save, an exported RimSort list) |  |
-| `--apply` | `load`, `export` | write it; without it, only say what it would do |  |
 | `--as NAME` | `save` | the name to keep it by. Required. |  |
 | `--replace` | `save` | replace a list kept by that name |  |
 | `--apply` | `save` | keep it; without it, only say what it would do |  |

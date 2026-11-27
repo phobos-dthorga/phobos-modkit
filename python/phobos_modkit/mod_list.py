@@ -732,6 +732,40 @@ def apply_order(adapter, mod_list, ids, words, running, environ=None, settings=N
     return _commit(adapter, mod_list, list(ids), words, environ, settings, now)
 
 
+def whole_change(adapter, before, after):
+    """(switched on, switched off, moved) between two orders, by key: what a Save would do, in counts a person reads. Moved counts
+    the mods on both lists whose place among the kept ones changed."""
+    old, new = [adapter.key(i) for i in before], [adapter.key(i) for i in after]
+    old_set, new_set = set(old), set(new)
+    on, off = [k for k in new if k not in old_set], [k for k in old if k not in new_set]
+    kept_old, kept_new = [k for k in old if k in new_set], [k for k in new if k in old_set]
+    moved = sum(1 for a, b in zip(kept_old, kept_new) if a != b)
+    return on, off, moved
+
+
+def apply_whole(adapter, mod_list, ids, was, installed, words, running, environ=None, settings=None, now=None):
+    """Writes a whole new list, after a backup (1.142.0; D'thorga Companion's Save, the owner's choice of 27 Nov 2026 "Hold until
+    Save"). Refuses a list changed since the editing began (`was`, the order it began from), a mod listed twice, a mod switched on
+    that is not on this PC, and the same order again."""
+    if not mod_list.writable:
+        raise FixError(f"{mod_list.label} is not a list this tool changes.")
+    _refuse_while_running(adapter, running)
+    if [adapter.key(i) for i in was] != [adapter.key(i) for i in mod_list.ids]:
+        raise FixError(f"{mod_list.label} has changed since you began (the game, a save or another manager wrote it): read it "
+                       "again; your changes were not written.")
+    keys = [adapter.key(i) for i in ids]
+    twice = sorted({k for k in keys if keys.count(k) > 1})
+    if twice:
+        raise FixError(f"{', '.join(twice)} would be on the list twice.")
+    listed = {adapter.key(i) for i in mod_list.ids}
+    missing = [i for i in ids if adapter.key(i) not in listed and installed.find(i) is None]
+    if missing:
+        raise FixError(f"{', '.join(missing)} {'is' if len(missing) == 1 else 'are'} not on this PC, so cannot be switched on.")
+    if list(ids) == list(mod_list.ids):
+        raise FixError(f"{mod_list.label} is like that already: nothing to save.")
+    return _commit(adapter, mod_list, list(ids), words, environ, settings, now)
+
+
 def backups(game, environ=None, settings=None):
     """Every backup of a list, newest first: (record, the backup file)."""
     found = []

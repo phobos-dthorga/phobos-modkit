@@ -4,6 +4,17 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.142.0] - 2026-11-27
+
+### Added
+
+- **mod-list write: a whole new list at once** (the owner's choice of 27 Nov 2026, "Hold until Save", for D'thorga Companion's
+  rebuilt Mod list). The new order comes as JSON on standard input, so no list is too long for a command line and nothing typed
+  becomes an option. It keeps a backup first, as every change, and refuses a list changed since the editing began (the game, a
+  save or RimSort wrote it), a mod listed twice, a mod switched on that is not on this PC, or no change. `mods` now gives each mod's
+  folder, what its own files say it loads after, before and refuses, and each need's ids, for the Companion's info panel and warnings. How:
+  [mod-list](docs/mod-list.md).
+
 ## [1.141.1] - 2026-11-27
 
 ### Fixed
