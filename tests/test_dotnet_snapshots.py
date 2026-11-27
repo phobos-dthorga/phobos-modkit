@@ -207,7 +207,7 @@ class CommandTests(unittest.TestCase):
 
     def test_heap_report_compare_and_list(self):
         with mock.patch.object(dd, "find_processes", return_value=[(4242, "RimWorld")]):
-            code, text = self.run_cli("heap", "--label", "day 40", *self.common, run=FakeTools([]))
+            code, text = self.run_cli("heap", "--gcdump", "--label", "day 40", *self.common, run=FakeTools([]))
             self.assertEqual(perf_cli.EXIT_OK, code, text)
             self.assertIn("**21.7 MB in 44,028 objects**", text)
             self.assertIn("**This snapshot holds only part of the heap: 21.7 MB of the 50.0 MB the runtime itself counted on its heap (43%).**", text)
@@ -219,7 +219,7 @@ class CommandTests(unittest.TestCase):
             self.assertFalse((folder / snap.HEAP_FILE).exists())                # packed once read (1.149.0)
             self.assertTrue(packed.packed_of(folder / snap.HEAP_FILE).is_file())
             self.assertIn(f"rimworld-perf unpack {folder.name}", text)
-            code, text = self.run_cli("heap", *self.common, run=FakeTools([]), now=datetime(2026, 11, 18, 22, 0, 0))
+            code, text = self.run_cli("heap", "--gcdump", *self.common, run=FakeTools([]), now=datetime(2026, 11, 18, 22, 0, 0))
         self.assertEqual(perf_cli.EXIT_OK, code, text)
         code, text = self.run_cli("heap-compare", *self.common, run=FakeTools([]))
         self.assertEqual(perf_cli.EXIT_OK, code, text)

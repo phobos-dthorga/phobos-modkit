@@ -14,7 +14,7 @@
     rimworld-perf index FILE.speedscope.json [--counters FILE.json]   a trace recorded by hand
     rimworld-perf stack --label "frozen"     a frozen or stuck game: every thread's stack, 3 times, 2 s apart
     rimworld-perf stack-report               the newest stack snapshots again
-    rimworld-perf heap --label "day 40"      what holds the game's memory, by type and by mod
+    rimworld-perf heap --label "day 40"      what holds the game's memory, by type and by mod (a snapshot; --gcdump the old way)
     rimworld-perf heap-report                the newest heap again
     rimworld-perf heap-compare               the last two heaps: who grew
     rimworld-perf watch --minutes 120 --label "reloads"   the game's memory over time: average or bursts, .NET's or not
@@ -159,9 +159,12 @@ def _parser():
     sr = sub.add_parser("stack-report", parents=[common], help="stack snapshots taken earlier")
     sr.add_argument("snapshot", nargs="?", help="its ID (its start is enough) or label; the newest when left out")
     sr.add_argument("--frames", type=int, default=snap.DEFAULT_FRAMES, help=f"frames of the main thread shown (default {snap.DEFAULT_FRAMES})")
-    h = sub.add_parser("heap", parents=[common], help="what holds the game's memory, by type and by mod (pauses the game)")
+    h = sub.add_parser("heap", parents=[common], help="what holds the game's memory, by type and by mod (a snapshot, as look)")
     h.add_argument("--label", help="a few words to find the heap by, such as the in-game day")
     h.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
+    h.add_argument("--gcdump", action="store_true",
+                   help="the heap as dotnet-gcdump takes it instead: a full garbage collection first, which pauses the game until done")
+    h.add_argument("--freeze", action="store_true", help=FREEZE_HELP)
     hr = sub.add_parser("heap-report", parents=[common], help="a heap taken earlier")
     hr.add_argument("snapshot", nargs="?", help="its ID (its start is enough) or label; the newest when left out")
     hc = sub.add_parser("heap-compare", parents=[common], help="two heaps: who grew")
@@ -1272,7 +1275,7 @@ def _look(args, environ, settings_file, run, now):
     """(report, data) for look, look-kind and look-why: one snapshot, one request, then let go."""
     pid = _pid(args, run, "RimWorld is not running. Load the save you want to look inside first.")
     folder = look.runtime_folder(args.game, environ, settings_file)
-    if args.report == "look":
+    if args.report in ("look", "heap"):
         _, heaps_root = snap.roots(args.cache, environ, settings_file)
         ready, answers = _requests(pid, folder, [{"op": "overview"}], environ, args)
         overview = hreader.answer_data(answers[0])
@@ -1301,6 +1304,12 @@ def _look(args, environ, settings_file, run, now):
                                  look.DESCRIBE, environ)
     data = hreader.answer_data(answers[0])
     return hreader.why_report(f"rimworld-perf: look-why {args.type}", data), data
+
+
+HEAP_BY_SNAPSHOT = ("Taken as a Windows snapshot, as `look` takes one (1.151.0): the game paused only while it was copied, nothing was "
+                    "forced and there is no limit on how many objects are read, but garbage not yet collected is counted, so "
+                    "answer \"is it a leak?\" with `look-why`. `heap --gcdump` takes the heap after a full garbage collection, "
+                    "as before, which pauses the game until it is done.")
 
 
 def _requests(pid, folder, requests, environ, args):
@@ -1469,6 +1478,9 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
             report, data = pack_report(args, environ, settings_file)
         elif args.report == "unpack":
             report, data = unpack_report(args, environ, settings_file)
+        elif args.report == "heap" and not args.gcdump:
+            report, data = _look(args, environ, settings_file, run, now or datetime.now())
+            report.lines.insert(1, HEAP_BY_SNAPSHOT)
         elif args.report in ("stack", "stack-report", "heap", "heap-report", "heap-compare"):
             report = _snapshots(args, environ, settings_file, run, now or datetime.now(), sleep)
         elif args.report == "look-serve":
@@ -1561,8 +1573,8 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
               "note": "Attaches Microsoft's dotnet-stack to the running game a few times; it changes nothing in it."},
     "stack-report": {"question": "What did the stack snapshots show?"},
     "heap": {"effect": RUNS, "question": "What is holding my game's memory, and which mods?",
-             "note": "Attaches Microsoft's dotnet-gcdump to the running game, which forces a full garbage collection: the game "
-                     "pauses until it is done."},
+             "note": LOOK_NOTE + " With --gcdump it attaches Microsoft's dotnet-gcdump instead, which forces a full garbage "
+                     "collection: the game pauses until it is done."},
     "heap-report": {"question": "What did a heap snapshot show?"},
     "heap-compare": {"question": "Is my game's memory growing, and whose?"},
     "watch": {"effect": RUNS, "question": "Does my game's memory climb steadily or in bursts, and is it .NET's or the engine's?",

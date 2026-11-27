@@ -41,7 +41,8 @@ Snapshots of a frozen game, and of memory:
 ```text
 python -m phobos_modkit rimworld-perf stack --label "frozen"   3 snapshots of every thread's stack, 2 s apart (--times, --every)
 python -m phobos_modkit rimworld-perf stack-report             the newest again (or name one)
-python -m phobos_modkit rimworld-perf heap --label "day 40"    the managed heap by type and by mod
+python -m phobos_modkit rimworld-perf heap --label "day 40"    the managed heap by type and by mod, from a snapshot (as look)
+python -m phobos_modkit rimworld-perf heap --gcdump            the same after a full garbage collection, as before 1.151.0
 python -m phobos_modkit rimworld-perf heap-report              the newest again
 python -m phobos_modkit rimworld-perf heap-compare             the last two heaps (or name two): who grew
 ```
@@ -77,7 +78,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `unpack` | Write a recording's trace or a heap's .gcdump out plain, for PerfView. Writes one recording's trace or one heap's .gcdump out plain beside its packed copy, in the kit's cache; never writes over a file. | writes |
 | `stack` | A frozen or stuck game: every thread's stack, a few times. Attaches Microsoft's dotnet-stack to the running game a few times; it changes nothing in it. | runs other programs |
 | `stack-report` | Stack snapshots taken earlier. | reads only |
-| `heap` | What holds the game's memory, by type and by mod (pauses the game). Attaches Microsoft's dotnet-gcdump to the running game, which forces a full garbage collection: the game pauses until it is done. | runs other programs |
+| `heap` | What holds the game's memory, by type and by mod (a snapshot, as look). Takes a Windows snapshot of the running game (a pause of about half a second) and reads it with the game's own memory-reading library from its install folder; nothing is written to the game. With `--gcdump` it attaches Microsoft's dotnet-gcdump instead, which forces a full garbage collection: the game pauses until it is done. | runs other programs |
 | `heap-report` | A heap taken earlier. | reads only |
 | `heap-compare` | Two heaps: who grew. | reads only |
 | `watch` | The game's memory over time, without pausing it; Ctrl+C ends it early. Reads Windows' memory figures without pausing the game; attaches dotnet-counters once unless `--no-counters`. Ends early when watch-stop asks. | runs other programs |
@@ -125,6 +126,8 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--frames N` | `stack`, `stack-report` | frames of the main thread shown (default 40) | `40` |
 | `SNAPSHOT` | `stack-report`, `heap-report` | (optional) its ID (its start is enough) or label; the newest when left out |  |
 | `--label VALUE` | `heap` | a few words to find the heap by, such as the in-game day |  |
+| `--gcdump` | `heap` | the heap as dotnet-gcdump takes it instead: a full garbage collection first, which pauses the game until done |  |
+| `--freeze` | `heap`, `look`, `look-kind`, `look-check` | freeze the game and read it in place instead of a snapshot, when Windows has no room to copy it (error 1450); it stands still while it is read, 120 s at most |  |
 | `FIRST` | `heap-compare` | (optional) the earlier heap; the second newest when both are left out |  |
 | `SECOND` | `heap-compare` | (optional) the later heap; the newest when both are left out |  |
 | `--minutes N` | `watch` | how long to watch (default 60) | `60` |
@@ -140,7 +143,6 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--watch VALUE` | `watch-mark` | its ID or label; the one running, else the newest, when left out |  |
 | `--at N` | `watch-mark` | the moment it names, in seconds since 1970; now when left out |  |
 | `--label VALUE` | `look` | a few words to find it by, such as the in-game day |  |
-| `--freeze` | `look`, `look-kind`, `look-check` | freeze the game and read it in place instead of a snapshot, when Windows has no room to copy it (error 1450); it stands still while it is read, 120 s at most |  |
 | `TYPE` | `look-kind` | the type's full name, as look lists it (Verse.Pawn) |  |
 | `--match VALUE` | `look-kind` | only objects whose description holds this text (a pawn's name, a defName) |  |
 | `--largest` | `look-kind` | largest first |  |
@@ -268,8 +270,12 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
   the place to look for a loop that never ends or the same slow work again and again. Then the part of the loop, the innermost mod
   on its stack (as **Caused by** above), its frames innermost first, and other threads with game or mod code on them. Each snapshot
   stops the game for a moment; on a small test program one took half a second.
-- **heap** runs `dotnet-gcdump collect`, **which forces a full garbage collection, so the game pauses until it is done**, then its
-  report: one row per type, with its count and the average size of one object, read here as totals. Each type belongs to its
+- **heap takes a Windows snapshot from 1.151.0**, as `look` does (the [heap reader](heap-reader.md)): the game pauses only while
+  it is copied (about half a second), nothing is forced, and every object is read, with no limit on how many; garbage not yet
+  collected is counted, so answer "is it a leak?" with `look-why`. `--freeze` reads the game in place when Windows has no room to
+  copy it. The heaps before it, from dotnet-gcdump, stopped near ten million objects on the owner's game (below). **`heap
+  --gcdump`** takes the heap the old way: `dotnet-gcdump collect`, **which forces a full garbage collection, so the game pauses
+  until it is done**, then its report: one row per type, with its count and the average size of one object, read here as totals. Each type belongs to its
   module's owner, as frames do. A .NET collection whose generic arguments name a mod's type (`List<Example.Dose>`) counts for that
   mod, "through" that type. **Memory counts under the type that is it**: the arrays and strings a mod's objects hold count as
   .NET's. What holds what is in the `.gcdump` file kept beside the report, packed, for PerfView or Visual Studio (`unpack` first).

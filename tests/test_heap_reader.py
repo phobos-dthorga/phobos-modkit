@@ -202,6 +202,29 @@ class Relay(unittest.TestCase):
         self.assertEqual(data["owners"][0], {"name": "My Mod", "kind": MOD, "bytes": 2000, "count": 10})
         self.assertIn("frozen for 9,000 ms", render_markdown(report))
 
+    def test_heap_takes_a_snapshot_unless_asked_for_a_gcdump(self):
+        """1.151.0: heap is look's snapshot by default: no forced collection, no ten-million-object limit."""
+        from unittest import mock
+        asked = []
+
+        def run_requests(pid, folder, requests, describe=(), environ=None, freeze=False):
+            asked.append((requests, freeze))
+            return {"ready": True, "pid": pid, "snapshotMs": 431}, [{"ok": True, "data": OVERVIEW}]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = io.StringIO()
+            with mock.patch.object(perf_cli.hreader, "run_requests", run_requests), \
+                    mock.patch.object(perf_cli, "_pid", lambda *a: 5), \
+                    mock.patch.object(perf_cli.look, "runtime_folder", lambda *a: tmp), \
+                    mock.patch.object(perf_cli, "_owners", lambda *a: ({"MyMod": Owner(MOD, "My Mod")}, [])):
+                code = perf_cli.main(["heap", "--label", "day 4", "--cache", tmp], environ={}, out=out)
+            text = out.getvalue()
+        self.assertEqual(perf_cli.EXIT_OK, code, text)
+        self.assertEqual([([{"op": "overview"}], False)], asked)
+        self.assertIn("Taken as a Windows snapshot, as `look` takes one", text)
+        self.assertIn("The game paused for 431 ms", text)
+        self.assertNotIn("forced a full garbage collection", text)
+
     def test_a_snapshot_heap_report_says_what_a_snapshot_is(self):
         with tempfile.TemporaryDirectory() as tmp:
             kept, heap = look.save_overview(tmp, {"pid": 5, "snapshotMs": 431}, OVERVIEW, "x")

@@ -36,6 +36,12 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
   marked where it moved 2 points from the earlier recordings' middle, and each mod in the newest against that middle. On the
   owner's recordings ours caused 0.1% to 2.6% of ticking. How: [rimworld-perf](docs/rimworld-perf.md).
 
+### Changed
+
+- **rimworld-perf heap takes a Windows snapshot, as look does**: a pause of about half a second instead of a forced full garbage
+  collection (20 to 30 s on the owner's game), and every object instead of the first ten million or so. `heap --gcdump` keeps
+  the old way. How: [rimworld-perf](docs/rimworld-perf.md).
+
 ## [1.150.0] - 2026-11-28
 
 ### Added
