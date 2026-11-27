@@ -27,6 +27,7 @@
     "rimworld-textures": "docs/rimworld-textures.md",
     "rimworld-workshop": "docs/workshop.md",
     "steam-workshop": "docs/workshop.md",
+    "steam-reviews": "docs/steam-reviews.md",
     "steam-publish": "docs/workshop-publishing.md",
     "release": "docs/release.md",
     "code": "docs/code.md",

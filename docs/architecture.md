@@ -96,7 +96,7 @@ recorders are out of scope) are in `AGENTS.md`, "What belongs here".
 | `effects.py`, `effects_cli.py` | What a repository's data declares a thing does, and whether anything reads it, by the repository's own `config/effects.json` ([effects](effects.md)) |
 | `gate/` | A repository's checks from `config/gate.json`: runner, output parsers, the passing-run stamp the commit guard checks |
 | `release/` | Changelogs in the Phobos form, version constants kept in step, the history screen before going public |
-| `steam/` | Workshop research (`workshop.py`, cached and paced), the Steam client (`client.py`), BBCode, VDF; `publish/` for notes, staging, the owner's uploader and the per-game publishing data |
+| `steam/` | Workshop research (`workshop.py`, cached and paced), a game's reviews (`reviews.py`, 1.143.0), the Steam client (`client.py`), BBCode, VDF; `publish/` for notes, staging, the owner's uploader and the per-game publishing data |
 | `assemblies.py`, `assembly_refs.py`, `assembly_archive.py`, `targets.py` | Assembly metadata through the C# reader; every kept version of a project's dependencies; members named by string checked against metadata |
 | `heap_reader.py`, `dotnet_diagnostics.py`, `dotnet_snapshots.py`, `sampling.py`, `process_memory.py` | Looking at a running .NET program from outside: heap snapshots, Microsoft's diagnostics tools, sampled stacks, memory over time |
 | `crashdump.py`, `windows_dumps.py`, `zeroed.py` | Windows crash dumps; Windows' dump setting; files a crash left full of zeros |

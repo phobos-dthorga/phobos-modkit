@@ -4,6 +4,17 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.143.0] - 2026-11-28
+
+### Added
+
+- **steam-reviews: what players say about a game or one of its DLCs** (the owner, 27 Nov 2026: "what players say for the actual
+  vanilla game itself and the DLCs, it'll just be reviews instead"). How many recommend it, all time and in the last 30 days, from
+  the store's review histogram; for the game, the newest reviews from its community page, those that do not recommend it first,
+  reviewers' names left out. A DLC, found by name with `--match`, gives its own counts alone, since Steam keeps no review cards on
+  a DLC's page. Steam's JSON reviews feed now sends every request to its front page, so this reads the public pages, keyless. How:
+  [steam-reviews](docs/steam-reviews.md).
+
 ## [1.142.0] - 2026-11-27
 
 ### Added

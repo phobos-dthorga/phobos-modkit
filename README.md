@@ -104,6 +104,7 @@ Generated from the manifest by `python -m phobos_modkit command-docs --write`. E
 | [`screen-notes`](docs/screen-notes.md) | any | what the owner flagged as looking wrong in D'thorga Companion; marks a note dealt with |
 | [`settings`](docs/settings.md) | any | the settings the tools read, where each value comes from, and the central settings file |
 | [`steam-publish`](docs/workshop-publishing.md) | any | release notes, staging and the owner-run Workshop uploader |
+| [`steam-reviews`](docs/steam-reviews.md) | any | what players say about a game or one of its DLCs on Steam: how many recommend it, and the newest reviews |
 | [`steam-workshop`](docs/workshop.md) | any | what players report about Workshop items lately, by ID or URL |
 | [`test-pass`](docs/test-pass.md) | any | what a repository's in-game test list is waiting for, from the game's notes and the owner's verdicts |
 | [`windows-dumps`](docs/crash-dump.md) | any | whether Windows keeps full crash dumps of a program, and asking it to |
