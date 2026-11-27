@@ -1,18 +1,23 @@
-"""RimWorld's own programs, for `programs status`: RimSort's texture encoder."""
+"""RimWorld's own programs, for `programs status`: the texture encoder, todds."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from ...programs import Found, Program
-from .textures import todds_path
+from .textures import DEFAULT_TODDS, TODDS_RELEASE, standalone_todds, todds_path
 
 
 def _todds(environ):
     found = todds_path(environ=environ)
-    return (Found(True, str(found), "found") if found
-            else Found(False, None, "not at RimSort's usual place, RIMSORT_TODDS or toddsPath in the settings"))
+    if not found:
+        return Found(False, None, f"not found: put todds.exe from the release's Windows zip in {standalone_todds(environ).parent}, "
+                                  "or name it with toddsPath in the settings")
+    return Found(True, str(found), "RimSort's copy: keep a copy of your own before RimSort goes"
+                 if Path(found) == DEFAULT_TODDS else "found")
 
 
 PROGRAMS = [
-    Program("todds", "RimSort's texture encoder (todds)", "Encoding mods' textures, on the Mods page",
-            "Comes with RimSort, https://github.com/RimSort/RimSort", _todds,
-            url="https://github.com/RimSort/RimSort"),
+    Program("todds", "The texture encoder (todds)", "Encoding mods' textures, on the Mods page",
+            "todds 0.4.1 (MPL-2.0): unzip todds.exe from todds_Windows_0.4.1.zip into %LOCALAPPDATA%\\Programs\\todds. "
+            "RimSort ships the same file", _todds, url=TODDS_RELEASE),
 ]

@@ -8,8 +8,12 @@ the same name beside it is skipped, and the .dds is loaded instead, without comp
 - **left over**: a .dds whose .png is gone: still loaded under its name; usually harmless, and never touched here.
 
 Only paths containing "Textures" are read, as RimSort's own todds preset does. Dates are file modification times; a .png counts as
-newer only by more than SLACK_SECONDS, so files a download wrote moments apart are not flagged (agent default). Encoding runs RimSort's
-todds with RimSort's "optimized" preset on one mod folder at a time, which re-encodes only what is newer than its .dds.
+newer only by more than SLACK_SECONDS, so files a download wrote moments apart are not flagged (agent default). Encoding runs todds
+with RimSort's "optimized" preset on one mod folder at a time, which re-encodes only what is newer than its .dds.
+
+todds without RimSort (1.145.0; the owner's choice of 28 Nov 2026, "todds without RimSort"): with no setting naming it, todds is looked
+for on the PATH, then on its own (todds.exe in Programs/todds under the local application data folder), then in RimSort's install, so
+RimSort can go.
 """
 from __future__ import annotations
 
@@ -17,6 +21,7 @@ from contextlib import closing
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
+import shutil
 import sqlite3
 import subprocess
 import threading
@@ -30,7 +35,11 @@ from ...paths import resolve
 # deploy.py in kit 1.21.0, so both use one copy.
 RIMSORT_OPTIMIZED = ("-f", "BC1", "-af", "BC7", "-on", "-vf", "-fs", "-ss", "Textures", "-t", "-p")
 TODDS = ("toddsPath", "RIMSORT_TODDS")
-DEFAULT_TODDS = Path(r"C:\Program Files (x86)\RimSort\todds\todds.exe")
+DEFAULT_TODDS = Path(r"C:\Program Files (x86)\RimSort\todds\todds.exe")   # RimSort's own copy
+# todds on its own (1.145.0): todds_Windows_0.4.1.zip holds one todds.exe, kept per user, no installer. MPL-2.0; the project is
+# archived, and 0.4.1 is byte for byte the copy RimSort ships (SHA-256 below, checked 28 Nov 2026).
+TODDS_RELEASE = "https://github.com/joseasoler/todds/releases/tag/0.4.1"
+TODDS_SHA256 = "9b27def75de93190117ac326135e7a7ee1b9b2c8bbfd7c68675817239336748f"
 PATH_SEGMENT = "Textures"
 SOURCE_SUFFIX = ".png"
 DDS_SUFFIX = ".dds"
@@ -39,9 +48,26 @@ SAMPLE_PATHS = 5
 ENCODE_TIMEOUT = 60 * 60
 
 
+def standalone_todds(environ=None):
+    """Where todds on its own is kept (1.145.0): todds.exe in Programs\\todds under the local application data folder."""
+    environ = os.environ if environ is None else environ
+    return Path(environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "Programs" / "todds" / "todds.exe"
+
+
+def default_todds(environ=None):
+    """Where todds is when no setting names it (1.145.0): on the PATH, then on its own, then RimSort's copy; where todds on its own
+    belongs when none is there."""
+    environ = os.environ if environ is None else environ
+    on_path = shutil.which("todds", path=environ["PATH"]) if environ.get("PATH") else None
+    for candidate in ([Path(on_path)] if on_path else []) + [standalone_todds(environ), DEFAULT_TODDS]:
+        if candidate.is_file():
+            return candidate
+    return standalone_todds(environ)
+
+
 def todds_path(explicit=None, environ=None, settings=None):
-    """RimSort's todds: argument, RIMSORT_TODDS, a settings file's toddsPath, or RimSort's default install; None if absent."""
-    path = resolve(*TODDS, DEFAULT_TODDS, explicit, environ, settings)
+    """todds: argument, RIMSORT_TODDS, a settings file's toddsPath, else `default_todds`; None if absent."""
+    path = resolve(*TODDS, default_todds(environ), explicit, environ, settings)
     return path if path is not None and Path(path).is_file() else None
 
 

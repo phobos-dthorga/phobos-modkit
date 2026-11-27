@@ -132,7 +132,8 @@ def _declared_by_kit():
         Setting(*rimworld.PATCHED_DEFS, "The patched-Defs file D'thorga Framework writes on request", "file", "rimworld"),
         Setting(*rimworld.COLONY_MOOD, "The colony mood file D'thorga Framework writes at each save", "folder", "rimworld"),
         Setting(*rimworld.SEEN_IN_PLAY, "The seen-in-play notes D'thorga Framework writes", "file", "rimworld"),
-        Setting(*textures.TODDS, "RimSort's texture encoder (todds.exe)", "file", "rimworld", lambda environ: textures.DEFAULT_TODDS),
+        Setting(*textures.TODDS, "The texture encoder (todds.exe)", "file", "rimworld",
+                lambda environ: textures.default_todds(environ)),
         *[Setting(key, env, description, "folder", game, default) for key, env, game, description, default in game_folders.FOLDERS],
         Setting(*safe_copies_daily.GAMES, "Your games list, as D'thorga Companion keeps it: the daily safe "
                 "copies run every list of every repository on it", "file",

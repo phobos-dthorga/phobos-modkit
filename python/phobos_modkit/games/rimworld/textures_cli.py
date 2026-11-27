@@ -45,7 +45,7 @@ def _parser():
         s = sub.add_parser(name, help=helptext)
         s.add_argument("--settings", help="a JSON settings file naming the game, Workshop, Config and todds paths")
         s.add_argument("--game", help="the RimWorld folder")
-        s.add_argument("--todds", help="RimSort's todds.exe")
+        s.add_argument("--todds", help="todds.exe (else the PATH, todds on its own, then RimSort's copy)")
         if name == "status":
             s.add_argument("--all", action="store_true", help="list every active mod, not only those needing attention")
             s.add_argument("--top", type=int, default=40, help="mods per table (default 40)")

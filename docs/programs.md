@@ -55,7 +55,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | Microsoft's .NET diagnostics tools | Watching a running game's memory and time | The kit's own install (`dotnet_diagnostics.tool_path`) |
 | ilspycmd | Another author's code from a `.dll`; comparing builds | `ilspycmdPath` or `PHOBOS_MODKIT_ILSPYCMD`, else the PATH |
 | Steam | Game files, adding a game, Workshop reports | Its usual install, or `steamPath` |
-| A game's own | Whatever its adapter says | `games/<game>/programs.py`, a `PROGRAMS` list of `programs.Program` (RimWorld: RimSort's todds) |
+| A game's own | Whatever its adapter says | `games/<game>/programs.py`, a `PROGRAMS` list of `programs.Program` (RimWorld: todds, on its own or RimSort's copy) |
 
 `--json` gives `data.python`, `data.system` (`windows`, `linux` or `macos`), `data.family` (on Linux, `apt`, `dnf`, `pacman` or
 null; 1.124.0), `data.missing` and `data.programs`, each with `key`,

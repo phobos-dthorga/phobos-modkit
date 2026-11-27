@@ -47,7 +47,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | --- | --- | --- | --- |
 | `--settings VALUE` | all | a JSON settings file naming the game, Workshop, Config and todds paths |  |
 | `--game VALUE` | all | the RimWorld folder |  |
-| `--todds VALUE` | all | RimSort's todds.exe |  |
+| `--todds VALUE` | all | todds.exe (else the PATH, todds on its own, then RimSort's copy) |  |
 | `--all` | `status` | list every active mod, not only those needing attention |  |
 | `--top N` | `status` | mods per table (default 40) | `40` |
 | `--mod VALUE` | `encode` | a package ID or folder name (repeatable). Required. |  |

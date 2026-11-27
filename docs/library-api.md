@@ -84,6 +84,7 @@ Every other command's `main` follows the same pattern, but is not listed until a
 | `games.rimworld.installs.identity` | `(folder)` | `(name, version)` from a mod's `About/About.xml`; empty strings for what it does not say | rimworld `scripts/deploy.py` |
 | `games.rimworld.paths.config_path` | `(explicit=None, environ=None, settings_file=None)` | The folder holding `ModsConfig.xml` (setting `rimworldConfigPath`) | rimworld `scripts/query-defs.py`, `scripts/vehicle-bindings.py` |
 | `games.rimworld.textures.DEFAULT_TODDS` | constant, a `Path` | RimSort's todds encoder where RimSort installs it on Windows | rimworld `scripts/deploy.py` |
+| `games.rimworld.textures.default_todds(environ=None)` | function, a `Path` | Where todds is with no setting naming it (1.145.0): the PATH, then on its own, then RimSort's copy | rimworld `scripts/deploy.py` |
 | `games.rimworld.textures.RIMSORT_OPTIMIZED` | constant, a tuple of arguments | RimSort's own todds preset, so our encoding matches RimSort's | rimworld `scripts/deploy.py` |
 | `games.rimworld.textures.trim_folder` | `(folder, min_kept=4)` | Shortens the mip chain of every encoded texture under a `Textures` folder in a mod folder | rimworld `scripts/deploy.py` |
 | `artaudit.record_home` | `(path, mirrors=None)` | Where a new record for a repository-relative file is written: under the first mirror that matches, else beside it | rimworld `scripts/art/art_paths.py` |

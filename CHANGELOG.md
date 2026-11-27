@@ -4,6 +4,16 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.145.0] - 2026-11-28
+
+### Changed
+
+- **todds without RimSort** (the owner's choice of 28 Nov 2026, the second piece of retiring RimSort). With no setting naming it,
+  todds is now looked for on the PATH, then **on its own** (`todds.exe` in `%LOCALAPPDATA%\Programs\todds`), then in RimSort's
+  install, so texture encoding keeps working once RimSort goes. `programs status` says when RimSort's copy is the one found and
+  where a copy of your own goes, with the release to take it from (todds 0.4.1, MPL-2.0, byte for byte RimSort's; the project is
+  archived). The `toddsPath` setting's default follows the same order.
+
 ## [1.144.0] - 2026-11-28
 
 ### Added
