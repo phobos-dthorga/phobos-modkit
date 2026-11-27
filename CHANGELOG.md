@@ -4,6 +4,19 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.134.0] - 2026-11-27
+
+### Added
+
+- **A live check can note figures for the test list** (the owner, 27 Nov 2026: "build what is still remaining"). As a save check's
+  `note` does, but a snapshot is not kept: each figure is kept as a line in the kit's cache (`live-notes/<game>.jsonl`), with the
+  time the game was read and the version of its mod as installed, and test-pass reads it beside the game's own notes. Both
+  `look-check` and a held snapshot's checks (`look-serve`) keep them. How: [checks](docs/checks.md).
+- **`look` and `look-kind` can read the game frozen** (`--freeze`), as `look-check` can since 1.132.0, for a machine with no room for
+  a snapshot. `look-why` never freezes: its paths may take longer than a frozen game's limit.
+- **`rimworld-perf look-thaw`** lets a game run on that a look inside left standing still, by hand: only when every thread of it is
+  suspended; otherwise it changes nothing.
+
 ## [1.133.1] - 2026-11-27
 
 ### Fixed

@@ -23,7 +23,7 @@ import os
 from pathlib import Path
 import sys
 
-from . import checks as check_engine, connections, testpass, testpass_code
+from . import checks as check_engine, checks_live, connections, testpass, testpass_code
 from .progress import Progress
 from .manifest import READS, WRITES
 from .paths import COMPANION_ID, companion_data, resolve  # noqa: F401  (COMPANION_ID: read by callers)
@@ -60,7 +60,10 @@ def seen_paths(config, explicit, environ=None, settings=None):
     except ImportError:
         return []
     finder = getattr(paths, "seen_in_play_path", None)
-    return [Path(finder(None, environ, settings))] if finder else []
+    found = [Path(finder(None, environ, settings))] if finder else []
+    # Live checks' figures (1.134.0), kept in the kit's cache because a snapshot is not kept.
+    live = checks_live.live_notes_path(game, environ, settings)
+    return found + ([live] if live.is_file() else [])
 
 
 def _parser():

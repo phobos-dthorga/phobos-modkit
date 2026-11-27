@@ -133,7 +133,11 @@ that misses lands in "Seen, but not with the figures the row expects". A rule ma
 | `detail` | Optional: the note's sentence, as a template; else the figures, named |
 
 **Each save gives its own notes**: a figure is a state at a moment, so the same thing in four saves is four readings, each with its
-save's time. Live checks cannot take a `note` yet: a snapshot is not kept, and its version would need the running game's own ledger.
+save's time. **A live check may take a `note` too** (1.134.0): a snapshot is not kept, so each figure it notes is kept as a line in
+the kit's cache (`live-notes/<game>.jsonl`), marked `"live": true`, with the time the game was read and the version of the note's mod
+as installed (RimWorld: its About.xml in the game's Mods folder, which is what the running game loaded, since our mods are installed
+only with the game closed; "0", stale for any row, when it is not found). `test-pass` reads that file beside the game's own notes.
+`look-check` and a held snapshot's checks both keep them, and the report says how many.
 `rimworld-save checks` lists what each figure check noted, under "Figures noted for the test list".
 
 ### A saved series (1.130.0)

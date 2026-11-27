@@ -213,12 +213,29 @@ class FigureNotes(unittest.TestCase):
                               ({"note": {"key": "k", "figures": {"a": "x"}}}, "mod"),
                               ({"note": dict(self.NOTE, colour="red")}, "not colour"),
                               ({"note": {"key": "k", "mod": "m", "figures": {"a": "nothing_read"}}}, "nothing_read"),
-                              ({"note": {"key": "k.{gone}", "mod": "m", "figures": {"a": "x"}}}, "gone"),
-                              ({"note": {"key": "k", "mod": "m", "figures": {"a": "x"}}, "source": "live",
-                                "select": {"type": "T"}}, "saves only")):
+                              ({"note": {"key": "k.{gone}", "mod": "m", "figures": {"a": "x"}}}, "gone")):
             with self.assertRaises(checks.CheckError, msg=broken) as raised:
                 rule(**dict({"fault": None}, **broken))
             self.assertIn(words, str(raised.exception))
+        # 1.134.0: a live check may note figures too; they are kept in the kit's cache, since a snapshot is not
+        live = rule(fault=None, source="live", select={"type": "T"}, read={"x": "X"},
+                    note={"key": "k", "mod": "m", "figures": {"a": "x"}})
+        self.assertEqual(live.source, "live")
+
+    def test_a_live_checks_figures_are_kept_for_test_pass(self):
+        """1.134.0: each noted figure becomes one seen-in-play line, with its mod's version and marked live."""
+        check = rule(fault=None, source="live", select={"type": "T"}, read={"watts": "leadWatts"},
+                     note={"key": "check.lead", "mod": "Example Widgets", "figures": {"watts": "watts"}})
+        result = checks.judge(check, [checks.Row("0x10", "Truck1", {"watts": "300"}, "")])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "live-notes" / "game.jsonl"
+            kept = checks_live.keep_notes([result], path, lambda mod: {"Example Widgets": "1.2.0"}.get(mod, ""),
+                                          "2026-11-27T00:00:00+00:00")
+            self.assertEqual(kept, 1)
+            checks_live.keep_notes([result], path, lambda mod: "", "2026-11-27T01:00:00+00:00")
+            lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([(n["key"], n["version"], n["values"], n["live"]) for n in lines],
+                         [("check.lead", "1.2.0", {"watts": 300}, True), ("check.lead", "0", {"watts": 300}, True)])
 
     def test_each_thing_it_applies_to_gives_a_note_with_its_figures(self):
         check = rule(fault="level > 9", read={"level": "l", "kind": "k"}, when="kind != 'Rock'", note=self.NOTE, row="12")

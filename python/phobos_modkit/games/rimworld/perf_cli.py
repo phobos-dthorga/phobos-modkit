@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timezone
 import fnmatch
 from pathlib import Path
 import re
@@ -58,6 +58,7 @@ from ...sampling import CPU, MOD, UNKNOWN, Recording, SamplingError, index_speed
 from ... import heap_reader as hreader
 from ... import checks as check_engine
 from ... import checks_live
+from . import installs
 from . import look
 from . import perf
 from . import perf_snapshots as snap
@@ -66,7 +67,9 @@ from . import perf_watch as pw
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
 REPORTS = ("report", "record", "index", "mod", "compare", "list", "stack", "stack-report", "heap", "heap-report", "heap-compare",
            "watch", "watch-report", "watch-status", "watch-stop", "watch-mark", "look", "look-kind", "look-why", "look-serve",
-           "look-check")
+           "look-check", "look-thaw")
+FREEZE_HELP = ("freeze the game and read it in place instead of a snapshot, when Windows has no room to copy it (error 1450); it "
+               f"stands still while it is read, {hreader.FREEZE_SECONDS} s at most")
 MEMORY_SURFACE = "memory-watch"     # D'thorga Companion's Memory page finds the watch's commands by this, never by the game's name
 CACHE_FOLDER = "rimworld-perf"
 INDEX_NAME = "index.sqlite"
@@ -157,12 +160,14 @@ def _parser():
     lk = sub.add_parser("look", parents=[common], help="inside the running game from a snapshot: every object by type and by mod")
     lk.add_argument("--label", help="a few words to find it by, such as the in-game day")
     lk.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
+    lk.add_argument("--freeze", action="store_true", help=FREEZE_HELP)
     lt = sub.add_parser("look-kind", parents=[common], help="one kind's objects in the running game, each described")
     lt.add_argument("type", help="the type's full name, as look lists it (Verse.Pawn)")
     lt.add_argument("--match", help="only objects whose description holds this text (a pawn's name, a defName)")
     lt.add_argument("--largest", action="store_true", help="largest first")
     lt.add_argument("--open", action="store_true", help="also show the first one with every value it holds")
     lt.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
+    lt.add_argument("--freeze", action="store_true", help=FREEZE_HELP)
     lw = sub.add_parser("look-why", parents=[common], help="why a kind is still in memory: paths from a root to its largest objects")
     lw.add_argument("type", help="the type's full name, as look lists it (System.Xml.XmlDocument)")
     lw.add_argument("--sample", type=int, default=hreader.WHY_SAMPLE,
@@ -174,9 +179,10 @@ def _parser():
                     help="the check file (default: config/checks.json here, else in RimWorld's repositories on the games list)")
     lc.add_argument("--check", help="only checks whose id matches; * and ? are wildcards")
     lc.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
-    lc.add_argument("--freeze", action="store_true",
-                    help="freeze the game and read it in place instead of a snapshot, when Windows has no room to copy it (error "
-                         f"1450); it stands still while it is read, {hreader.FREEZE_SECONDS} s at most")
+    lc.add_argument("--freeze", action="store_true", help=FREEZE_HELP)
+    lh = sub.add_parser("look-thaw", parents=[common], help="let the game run on if a look inside left it frozen (it stopped "
+                                                            "before it could); changes nothing when the game is running")
+    lh.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
     lv = sub.add_parser("look-serve", parents=[common], help="hold a snapshot and answer JSON requests a line at a time, for a program")
     lv.add_argument("--label", help="a few words to keep its overview by")
     lv.add_argument("--pid", type=int, help="the game's process ID, when more than one RimWorld runs")
@@ -547,7 +553,7 @@ def _look(args, environ, settings_file, run, now):
     folder = look.runtime_folder(args.game, environ, settings_file)
     if args.report == "look":
         _, heaps_root = snap.roots(args.cache, environ, settings_file)
-        ready, answers = hreader.run_requests(pid, folder, [{"op": "overview"}], look.DESCRIBE, environ)
+        ready, answers = _requests(pid, folder, [{"op": "overview"}], environ, args)
         kept, heap = look.save_overview(heaps_root, ready, hreader.answer_data(answers[0]), args.label, now)
         meta = snap.meta_of(kept)
         owners, notes = _owners(sorted({t.module for t in heap.types}), args, environ, settings_file)
@@ -555,17 +561,62 @@ def _look(args, environ, settings_file, run, now):
     if args.report == "look-kind":
         request = {"op": "kind", "type": args.type, "take": max(1, args.top), "match": args.match or "",
                    "sort": "size" if args.largest else "", "open": bool(args.open)}
-        _, answers = hreader.run_requests(pid, folder, [request], look.DESCRIBE, environ)
+        ready, answers = _requests(pid, folder, [request], environ, args)
         data = dict(hreader.answer_data(answers[0]), sorted=args.largest)
         report = hreader.kind_report(f"rimworld-perf: look-kind {args.type}", data)
         if data.get("opened"):
             opened = hreader.object_report("", data["opened"])
             report.section("The first one, in full", *[block for section in opened.sections for block in section.blocks])
+        _say_frozen(report, ready)
         return report, data
     _, answers = hreader.run_requests(pid, folder, [{"op": "why", "type": args.type, "sample": max(1, args.sample)}],
                                  look.DESCRIBE, environ)
     data = hreader.answer_data(answers[0])
     return hreader.why_report(f"rimworld-perf: look-why {args.type}", data), data
+
+
+def _requests(pid, folder, requests, environ, args):
+    """The heap reader's run for look and look-kind: frozen with --freeze (1.134.0), else from a snapshot."""
+    if getattr(args, "freeze", False):
+        return hreader.run_requests(pid, folder, requests, look.DESCRIBE, environ, freeze=True)
+    return hreader.run_requests(pid, folder, requests, look.DESCRIBE, environ)
+
+
+def _say_frozen(report, ready):
+    if ready.get("frozenMs") is not None:
+        report.lines.insert(1, f"The game was frozen for {ready['frozenMs']:,} ms while it was read, then let go.")
+
+
+def _installed_version(mod, environ, settings_file):
+    """The installed version of the mod named (1.134.0), from its About.xml in the game's Mods folder: what the running game
+    loaded, since our mods are installed only with the game closed. Empty when it is not found."""
+    try:
+        folder = installs.installed_mods(settings_file, environ)
+        for about in sorted(folder.glob("*/About/About.xml")):
+            name, version = installs.identity(about.parent.parent)
+            if name == mod:
+                return version
+    except OSError:
+        pass
+    return ""
+
+
+def _keep_live_notes(results, environ, settings_file, now):
+    """Keeps the figures live checks noted (1.134.0); a line for the report saying how many, or None."""
+    kept = checks_live.keep_notes(results, checks_live.live_notes_path("rimworld", environ, settings_file),
+                                  lambda mod: _installed_version(mod, environ, settings_file),
+                                  now.astimezone(timezone.utc).isoformat())
+    return f"Noted {kept:,} figures for the test list (test-pass reads them)." if kept else None
+
+
+def _look_thaw(args, run):
+    """(report, data) for look-thaw (1.134.0): the reader's thaw, by hand."""
+    pid = _pid(args, run, "RimWorld is not running, so nothing is frozen.")
+    found = hreader.thaw(pid)
+    if found.get("error"):
+        raise PerfError(found["error"])
+    report = Report("rimworld-perf: look-thaw", [found.get("says", "")])
+    return report, found
 
 
 def _look_check(args, environ, settings_file, run, run_requests=None):
@@ -586,16 +637,21 @@ def _look_check(args, environ, settings_file, run, run_requests=None):
         report.lines.insert(1, f"The game was frozen for {ready['frozenMs']:,} ms while it was read, then let go.")
     elif ready.get("snapshotMs") is not None:
         report.lines.insert(1, f"The snapshot paused the game for {ready['snapshotMs']:,} ms.")
+    kept = _keep_live_notes(results, environ, settings_file, datetime.now(timezone.utc))
+    if kept:
+        report.lines.insert(1, kept)
     return report, check_engine.data(results)
 
 
-def _held_checks(environ, redact):
+def _held_checks(environ, redact, settings_file=None):
     """look-serve's checks request (1.123.0): every live check, answered from the snapshot already held, as data for a program's
     page: the check data, and the report under "report" as render_json gives it. A check file that cannot be used is a ValueError,
     which serve answers in words."""
     def answer(ask):
         chosen, files = check_engine.load_files(check_engine.check_files("rimworld", None, environ), "live")
-        return checks_live.held_answer(chosen, files, ask, redact)
+        return checks_live.held_answer(chosen, files, ask, redact,
+                                       keep=lambda results: _keep_live_notes(results, environ, settings_file,
+                                                                             datetime.now(timezone.utc)))
     return answer
 
 
@@ -691,11 +747,13 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
             _, heaps_root = snap.roots(args.cache, environ, settings_file)
             return look.serve(pid, look.runtime_folder(args.game, environ, settings_file), heaps_root,
                               lambda names: _owners(names, args, environ, settings_file), args.label or "", args.limit_seconds,
-                              stdout=out, checks_answer=_held_checks(environ, redact))
+                              stdout=out, checks_answer=_held_checks(environ, redact, settings_file))
         elif args.report in ("look", "look-kind", "look-why"):
             report, data = _look(args, environ, settings_file, run, now or datetime.now())
         elif args.report == "look-check":
             report, data = _look_check(args, environ, settings_file, run)
+        elif args.report == "look-thaw":
+            report, data = _look_thaw(args, run)
         elif args.report in ("watch", "watch-report"):
             report, data = _watch(args, environ, settings_file, run, popen, now or datetime.now(), sleep, clock)
         elif args.report == "compare":
@@ -777,7 +835,12 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
                  "note": LOOK_NOTE},
     "look-check": {"effect": RUNS, "surface": look.SURFACE,
                    "question": "Is anything in my running game in a state it should never be?",
-                   "note": LOOK_NOTE + " One snapshot answers every live check in the file (docs/checks.md)."},
+                   "note": LOOK_NOTE + " One snapshot answers every live check in the file (docs/checks.md). Figures a "
+                           "check notes are kept in the kit's cache for test-pass."},
+    "look-thaw": {"effect": RUNS, "surface": look.SURFACE,
+                  "question": "My game stands still after a look inside: can it run on?",
+                  "note": "Resumes each of the game's threads once, only when every one of them is suspended (as a freezing "
+                          "reader stopped early leaves it); changes nothing when any thread runs."},
     "look-serve": {"effect": RUNS, "surface": look.SURFACE,
                    "note": LOOK_NOTE + " Holds the snapshot and answers one JSON request a line on standard input until it closes "
                            "or the time limit passes; for a program's page, not a person's console."},

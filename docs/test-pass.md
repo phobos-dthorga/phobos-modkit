@@ -67,7 +67,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `shared` | Keys with nothing narrowing them that stand for more than one row on purpose, with why |
 | `unrowed` | Keys that need no row, with why |
 | `versionNames` | How each mod is written in rows (`{"D'thorga Framework": "Framework"}`, or a list), for sightings older than the row |
-| `saved` | Optional (1.121.0): lists a mod keeps in its saves to read as notes too. See [Saved histories](#saved-histories) |
+| `saved` | Optional (1.121.0): lists a mod keeps in its saves to read as notes too. See [Saved histories](#saved-histories). Live checks' figures (1.134.0) are read too, from the kit's cache (`live-notes/<game>.jsonl`), whenever that file exists |
 
 **A piece of evidence** is a key, or an object narrowing it:
 

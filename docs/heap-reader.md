@@ -17,13 +17,14 @@ something is still in memory, without forcing a collection. RimWorld's commands 
 - **Windows only**, and only for a game on .NET (CoreCLR) whose install ships its memory-reading library (`mscordaccore.dll`).
 - **A snapshot needs room** (1.132.0): Windows copies the game for it, which takes about the game's own private memory in free
   commit (RAM plus page file). When there is less, Windows refuses with error 1450 ("Could not create snapshot to process"), and the
-  reader says so. **`--freeze`** (on `look-check`) reads the game in place instead, with no copy: the game **stands still for the
+  reader says so. **`--freeze`** (on `look-check`, and from 1.134.0 on `look` and `look-kind`) reads the game in place instead, with no copy: the game **stands still for the
   whole read** (28.6 s for the owner's game, 21.3 GB private, 27 November 2026), at most 120 s, then runs on. Only a command line's
   one run may freeze; `serve`, which holds its game while a page waits, never does.
 - **A frozen game is always let go**: when the read is done, at its time limit, on Ctrl+C and when the reader ends. If the reader is
   stopped before it can (killed, or the machine's own trouble), the kit runs the reader's **`thaw`** at once: when every thread of
   the game is suspended, it resumes each once; when any thread runs, it changes nothing. If even that fails, the report says to close
-  the game; the last save is safe.
+  the game; the last save is safe. **`look-thaw`** (1.134.0) runs the same thaw by hand, for a game that still stands still.
+- `look-why` never freezes: its paths may take five minutes, more than a frozen game's limit.
 
 ## Examples
 
@@ -34,6 +35,8 @@ python -m phobos_modkit rimworld-perf look-why System.Xml.XmlDocument   why a ki
 python -m phobos_modkit rimworld-perf look-serve                    hold a snapshot; one JSON request a line on standard input
 python -m phobos_modkit rimworld-perf look-check                    a repository's live checks, all from one snapshot
 python -m phobos_modkit rimworld-perf look-check --freeze           the same, the game frozen and read in place (no room for a copy)
+python -m phobos_modkit rimworld-perf look --freeze                 every object by type and by mod, read with the game frozen
+python -m phobos_modkit rimworld-perf look-thaw                     a game a look inside left standing still runs on (only if it is)
 ```
 
 ## Outputs

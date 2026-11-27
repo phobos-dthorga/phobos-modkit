@@ -391,8 +391,6 @@ def parse_check(entry, where, kinds=()):
                   _parse_note(entry, where))
     if check.note and kind != "rule":
         raise CheckError(f"{where}: only a rule takes \"note\"; {kind} has no figures of its own.")
-    if check.note and source != "save":
-        raise CheckError(f"{where}: figures are noted from saves only, so far; a live check cannot take \"note\".")
     if kind == "rule":
         if check.fault is None and not check.note:
             raise CheckError(f"{where}: a rule needs \"fault\", the condition that makes it one, or \"note\", the figures it "

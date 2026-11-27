@@ -7,9 +7,17 @@ process, the install it trusts and how its objects are described; RimWorld's is 
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from . import heap_reader as hr
-from .checks import Result, Row, data, judge, report
+from .checks import Result, Row, data, judge, notes_of, report
+from .paths import cache_root
 from .report import Fact, render_json
+
+# Figures a live check notes (1.134.0): a snapshot is not kept, so its notes are kept here, one file a game, in the kit's cache,
+# and test-pass reads them beside the game's own seen-in-play notes.
+LIVE_NOTES_FOLDER = "live-notes"
 
 SELECT_KEYS = ("type", "subclasses", "take", "items")
 CAVEAT = ("Read from one snapshot of the running game: it paused for the moment the snapshot took, then ran on, and nothing was "
@@ -78,6 +86,27 @@ def run(pid, runtime_folder, checks, describe=(), environ=None, run_requests=hr.
     return ready, _judged(checks, asked, answers, results)
 
 
+def live_notes_path(game, environ=None, settings_file=None):
+    """Where a game's live figure notes are kept (1.134.0): one JSON line a note, in the kit's cache."""
+    return Path(cache_root(None, environ, settings_file)) / LIVE_NOTES_FOLDER / f"{game}.jsonl"
+
+
+def keep_notes(results, path, version_of, time):
+    """Adds every figure the live checks noted to the game's live notes (1.134.0), each as a seen-in-play note at <time> (when
+    the game was read) with its mod's version from version_of(mod name), "0" when unknown. How many were kept."""
+    notes = []
+    for result in results:
+        if result.check.note and not result.problem:
+            notes.extend(notes_of(result, time, version_of(result.check.note["mod"]) or "0", "check", {"live": True}))
+    if notes:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8", newline="\n") as fh:
+            for note in notes:
+                fh.write(json.dumps(note, ensure_ascii=False) + "\n")
+    return len(notes)
+
+
 def run_held(checks, ask):
     """A Result for each live check, asked of a snapshot already held (1.123.0, look-serve's checks request): ask(request) gives the
     reader's answer. Raises heap_reader.LookError when the snapshot is let go meanwhile."""
@@ -85,11 +114,15 @@ def run_held(checks, ask):
     return _judged(checks, asked, [ask(request) for _, request in asked], results)
 
 
-def held_answer(checks, files, ask, redact=None):
+def held_answer(checks, files, ask, redact=None, keep=None):
     """look-serve's checks answer (1.123.0): every live check asked of the snapshot held, as data for a program's page: the check
-    data, and the report under "report" as a program reads any report."""
+    data, and the report under "report" as a program reads any report. keep(results) (1.134.0) keeps the figures noted, and may
+    give a line for the report."""
     results = run_held(checks, ask)
     report = checks_report(results, files)
+    said = keep(results) if keep else None
+    if said:
+        report.lines.insert(1, said)
     return dict(data(results), report=render_json(report, redact))
 
 
