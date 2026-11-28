@@ -43,6 +43,8 @@ from ...report import Bullets, Chart, ChartSeries, Report, Table
 from ...sampling import UNKNOWN
 from . import log as rimworld_log
 from . import paths
+from .perf import COUNTER_SETS
+from .perf import SPEEDS
 
 WATCH_FOLDER = "rimworld-memory"
 DATABASE, COUNTERS_FILE, COUNTERS_LOG = "watch.sqlite", "counters.json", "counters.log"
@@ -286,7 +288,8 @@ def watch(pid, folder, minutes, every, map_every, counters_tool, label="", progr
         counting = None
         with open(folder / COUNTERS_LOG, "w", encoding="utf-8") as counters_log, process(pid) as target:
             if counters_tool:
-                counting = dd.start_counters(pid, folder / COUNTERS_FILE, counters_tool, seconds, every, counters_log, popen)
+                counting = dd.start_counters(pid, folder / COUNTERS_FILE, counters_tool, seconds, every, counters_log, popen,
+                                             counters=COUNTER_SETS)
             samples = maps = 0
             next_map = start
             try:
@@ -392,6 +395,10 @@ class Watch:
 
     def has_counters(self):
         return any(name == dd.HEAP_COMMITTED for name, _ in self.series)
+
+    def has_pace(self):
+        """Whether the game's own meter (D'thorga Framework 0.380.0) was read: its ticks a second (1.152.0)."""
+        return any(name == TICKS for name, _ in self.series)
 
     def rows(self, which, t):
         return [r[1:] for r in self._conn_rows[which] if r[0] == t]
@@ -544,6 +551,7 @@ def watch_report(watch, owner_map, top=15):
                        Table(["When", "Claimed", ".NET's collector", "Outside .NET", "What the log and your marks say"], rows))
 
     report.section("Over time", _chart(samples, committed, outside, counters, TIMELINE_POINTS, "Memory over the watch"))
+    _pace_section(report, watch, times, TIMELINE_POINTS, "The game's pace over the watch")
     if watch.map_times:
         _map_sections(report, watch, committed, times, owner_map, top)
     report.section("What a watch cannot say", Bullets(LIMITS))
@@ -564,6 +572,53 @@ def _chart(samples, committed, outside, counters, points, title):
     series.append(ChartSeries("In RAM", [round(samples[i][2] / GB, 2) for i in picks], "neutral"))
     return Chart(title, "What the game claimed, split into .NET's collector and the rest, with what sat in RAM, in GB.",
                  [clock(samples[i][0]) for i in picks], series, kind="line", unit=" GB", value_label="GB")
+
+
+TICKS, FRAMES, WORST, SPEED = "rimworld.ticks", "rimworld.frames", "rimworld.frame.worst", "rimworld.speed"
+NO_PACE = ("The game's own pace (ticks and frames a second) was not read: it needs D'thorga Framework 0.380.0 or newer running, "
+           "and a watch from phobos-modkit 1.152.0 or newer.")
+
+
+def _rounded(value, places=1):
+    return None if value is None else round(value, places)
+
+
+def _pace(watch, times):
+    """{counter: [its latest value at each time, or None]} for the game's own meter."""
+    return {name: [watch.counter_at(name, t) for t in times] for name in (TICKS, FRAMES, WORST, SPEED)}
+
+
+def _low_high(values):
+    found = [v for v in values if v is not None]
+    return (min(found), sum(found) / len(found), max(found)) if found else None
+
+
+def _pace_section(report, watch, times, points, title):
+    """The game's pace beside its memory: ticks and frames a second and each interval's longest frame, from D'thorga
+    Framework's meter (1.152.0). Says why it is missing when the meter was not read."""
+    if not watch.has_pace():
+        if watch.has_counters():
+            report.lines.append(NO_PACE)
+        return
+    pace = _pace(watch, times)
+    rows = []
+    for label, name, unit in (("Ticks a second", TICKS, ""), ("Frames a second", FRAMES, ""), ("Longest frame", WORST, " ms")):
+        found = _low_high(pace[name])
+        if found:
+            rows.append((label, f"{found[0]:,.0f}{unit}", f"{found[1]:,.0f}{unit}", f"{found[2]:,.0f}{unit}"))
+    speeds = {SPEEDS.get(round(v), f"{v:.0f}") for v in pace[SPEED] if v is not None}
+    step = max(1, -(-len(times) // points))
+    picks = list(range(0, len(times), step))
+    if picks and picks[-1] != len(times) - 1:
+        picks.append(len(times) - 1)
+    chart = Chart(title, "Ticks and frames a second through the watch, from the game's own meter: a dip is the game slowing.",
+                  [clock(times[i]) for i in picks],
+                  [ChartSeries("Ticks a second", [_rounded(pace[TICKS][i], 0) for i in picks], "accent"),
+                   ChartSeries("Frames a second", [_rounded(pace[FRAMES][i], 0) for i in picks], "comparison")],
+                  kind="line", value_label="A second")
+    report.section(title, "From D'thorga Framework's own meter, read with .NET's figures"
+                   + (f"; the game ran at {', '.join(sorted(speeds))}." if speeds else "."),
+                   chart, Table(["Measure", "Lowest", "Average", "Highest"], rows))
 
 
 def _figures(watch):
@@ -637,6 +692,11 @@ def status(where, text=None, now=None):
     report.lines.append(f"Latest at {clock(last)}.")
     report.section("Now", Table(["Measure", "Now", "Since the start"], rows))
     report.section("So far", _chart(samples, committed, outside, has_counted, LIVE_POINTS, "Memory so far"))
+    pace = _pace(watched, [s[0] for s in samples])
+    if any(v is not None for v in pace[TICKS]):
+        latest.update({"ticks_a_second": _rounded(pace[TICKS][-1]), "frames_a_second": _rounded(pace[FRAMES][-1]),
+                       "longest_frame_ms": _rounded(pace[WORST][-1]), "speed": _rounded(pace[SPEED][-1])})
+        _pace_section(report, watched, [s[0] for s in samples], LIVE_POINTS, "The game's pace so far")
     report.lines += _happened(watched.events, found == ENDED)
     return report, data
 

@@ -6,6 +6,7 @@ in native code; 100-110 the frame update itself. A second thread waits for its w
 """
 from contextlib import closing
 import io
+import json
 from datetime import datetime
 from pathlib import Path
 import shutil
@@ -360,6 +361,9 @@ class CommandTests(unittest.TestCase):
             self.run_cli("index", str(TRACE), "--counters", str(COUNTERS), "--label", label, *self.common, now=datetime(2026, 11, 17, hour, 0, 0))
         code, text = self.run_cli("trend", "example*", *self.common)
         self.assertEqual(perf_cli.EXIT_OK, code, text)
+        found = json.loads(self.run_cli("trend", "example*", "--json", *self.common)[1])["report"]["sections"][0]["blocks"]
+        self.assertEqual(["before", "after"], found[0]["categories"])
+        self.assertEqual({"kind": "recording", "id": "20261117-180000-before", "column": 0}, found[1]["refs"][0][0])
         self.assertIn("| 20261117-180000-before | before | 63.6% | 57.1% | 0.638 | Example Medical |  |", text)
         self.assertIn("| Example Medical | 57.1% | 57.1% | +0.0 |", text)
         code, text = self.run_cli("trend", *self.common)                  # our own by default: none in the fixture
@@ -368,6 +372,62 @@ class CommandTests(unittest.TestCase):
         self.assertEqual("down 2.5 points on the earlier middle (4.5%)", perf_cli.trend_note(2.0, [4.0, 5.0]))
         self.assertEqual("", perf_cli.trend_note(5.0, []))
         self.assertEqual("", perf_cli.trend_note(5.0, [4.0]))
+
+    def test_a_report_leads_with_findings_and_facts_and_links_its_rows(self):
+        with mock.patch.object(perf, "mod_packages", return_value={"Example Medical": "example.medical", "Unused": "x.y"}):
+            self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--counters", str(COUNTERS), "--label", "one",
+                                                             *self.common)[0])
+        code, text = self.run_cli("report", "--json", *self.common)
+        self.assertEqual(perf_cli.EXIT_OK, code, text)
+        found = json.loads(text)
+        facts = {f["label"]: f["value"] for f in found["report"]["facts"]}
+        self.assertEqual({"Recorded": "2026-11-17 18:00:00", "Length": "0.1 s", "Label": "one", "Ticks a second": "570",
+                          "Frames a second": "55", "Ticking, a tick": "1.12 ms", "Longest frame": "40 ms", "Speed": "superfast",
+                          "Pawns": "120", "Maps": "2"}, facts)
+        findings = found["report"]["blocks"][0]
+        self.assertEqual("findings", findings["type"])
+        self.assertEqual("Example Medical caused 57% of ticking, the most of any mod.", findings["items"][0]["text"])
+        self.assertEqual([{"kind": "mod", "id": "Example Medical", "package": "example.medical"}], findings["items"][0]["refs"])
+        self.assertEqual({"kind": "method", "id": "Verse.PawnCapacityUtility.CalculateCapacityLevel", "of": "RimWorld",
+                          "of_kind": "game"}, findings["items"][1]["refs"][0])
+        self.assertIn("Garbage collection paused the game 3.0% of the time", findings["items"][2]["text"])
+        tables = {s["heading"]: [b for b in s["blocks"] if b["type"] == "table"][0] for s in found["report"]["sections"]
+                  if any(b["type"] == "table" for b in s["blocks"])}
+        spots = tables["Ticking: hot spots in the game's and the engine's code, and the mods that lead to them"]
+        self.assertEqual([{"kind": "method", "id": "Verse.PawnCapacityUtility.CalculateCapacityLevel", "column": 0, "of": "RimWorld",
+                           "of_kind": "game"},
+                          {"kind": "mod", "id": "Example Medical", "column": 6, "package": "example.medical"}], spots["refs"][0])
+        self.assertEqual(len(spots["rows"]), len(spots["refs"]))
+        charts = [b for s in found["report"]["sections"] for b in s["blocks"] if b["type"] == "chart"]
+        self.assertEqual(["Example Medical", "Other Mod", "RimWorld"], charts[0]["categories"])
+        # The summary file: what a list, a mod's cost and a home panel read without the index.
+        summary = found["data"]["summary"]
+        self.assertEqual({"Example Medical": 0.57143, "Other Mod": 0.28571}, summary["mods"])
+        self.assertEqual({"Example Medical": "example.medical"}, summary["packages"])
+        self.assertEqual(570.0, summary["game"]["ticks_a_second"])
+        self.assertEqual(findings["items"], summary["findings"])
+        folder = next((self.tmp / "cache" / perf_cli.CACHE_FOLDER).glob("*-one"))
+        self.assertEqual(summary, perf_cli.read_summary(folder))
+        code, text = self.run_cli("list", "--json", *self.common)
+        listed = json.loads(text)["data"]["recordings"]
+        self.assertEqual(["20261117-180000-one"], [r["recording"] for r in listed])
+        self.assertEqual(summary["findings"], listed[0]["findings"])
+        code, text = self.run_cli("list", *self.common)
+        self.assertIn("| 20261117-180000-one | 2026-11-17 18:00:00 | 0.11 | one | 570 | Example Medical caused 57% of ticking, "
+                      "the most of any mod. |", text)
+
+    def test_a_listed_recording_without_a_summary_gets_one(self):
+        self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--label", "one", *self.common)[0])
+        folder = next((self.tmp / "cache" / perf_cli.CACHE_FOLDER).glob("*-one"))
+        (folder / perf_cli.SUMMARY_NAME).unlink()
+        code, text = self.run_cli("list", "--json", *self.common)
+        self.assertEqual(perf_cli.EXIT_OK, code, text)
+        self.assertEqual("20261117-180000-one", json.loads(text)["data"]["recordings"][0]["recording"])
+        self.assertIsNotNone(perf_cli.read_summary(folder))
+
+    def test_the_performance_page_finds_its_reports(self):
+        surfaced = {name for name, report in perf_cli.MANIFEST["reports"].items() if report.get("surface") == perf_cli.PERFORMANCE_SURFACE}
+        self.assertEqual({"report", "record", "list", "callers", "mod", "compare", "trend", "reindex"}, surfaced)
 
     def test_record_without_the_game(self):
         with mock.patch.object(dd, "find_processes", return_value=[]):
@@ -426,7 +486,8 @@ class CommandTests(unittest.TestCase):
             code, text = self.run_cli("reindex", "--all", *self.common, run=run)
         self.assertEqual(perf_cli.EXIT_OK, code, text)
         self.assertIn("| 20261117-180000-old | rebuilt: 2 threads, with its timeline |", text)
-        self.assertEqual(["index.sqlite", "trace.nettrace.zst"], sorted(p.name for p in folder.iterdir()))
+        self.assertEqual(["index.sqlite", "summary.json", "trace.nettrace.zst"], sorted(p.name for p in folder.iterdir()))
+        self.assertIsNone(perf_cli.read_summary(folder))     # made from the index before it was rebuilt, so made again when read
         code, text = self.run_cli("report", "old", *self.common)
         self.assertIn("## Over time: the main thread, window by window", text)
         self.assertIn("| Example Medical | mod | 40 | 57.1% |", text)                 # the day's owners, kept

@@ -96,6 +96,30 @@ def active_mod_assemblies(game, workshop, config):
     return owners, shared
 
 
+def active_mod_packages(game, workshop, config):
+    """{mod name: package ID} for the active mods, so a report can name a mod by the ID a program links it by (1.152.0)."""
+    mods_config = Path(config) / "ModsConfig.xml"
+    if not mods_config.is_file():
+        return {}
+    _, _, ids = loading.read_mods_config(mods_config)
+    index = ModIndex.scan(default_roots(game, workshop))
+    found = {}
+    for entry in loading.resolve_active(index.mods, ids):
+        if entry.mod is not None:
+            found.setdefault(entry.mod.name, entry.mod.package_id)
+    return found
+
+
+def mod_packages(game=None, workshop=None, config=None, environ=None, settings_file=None):
+    """active_mod_packages from the settings' paths; {} when the mod list cannot be read (best effort, as module_owners)."""
+    try:
+        game_folder = paths.game_path(game, environ, settings_file)
+        return active_mod_packages(game_folder, paths.workshop_path(game_folder, workshop, environ, settings_file),
+                                   paths.config_path(config, environ, settings_file))
+    except Exception:  # noqa: BLE001 - links without package IDs beat no report
+        return {}
+
+
 def classify(modules, install, mod_owners):
     """{module: Owner} for every module in a trace."""
     result = {}

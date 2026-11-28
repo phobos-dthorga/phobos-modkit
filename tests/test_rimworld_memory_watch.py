@@ -107,6 +107,12 @@ class CounterFileTests(unittest.TestCase):
         self.assertAlmostEqual(START + 5.1234567, t, places=5)
         self.assertEqual((dd.HEAP_SIZE, "gc.heap.generation=gen2", 3e9), (name, tags, value))
 
+    def test_a_rate_over_the_refresh_interval_is_given_a_second(self):
+        (self.tmp / "c.json").write_text(counters_json([(5, "rimworld.ticks ({tick} / 5 sec)", "", 3000),
+                                                        (5, "dotnet.gc.collections ({collection} / 1 sec)", "", 4)]), encoding="utf-8")
+        self.assertEqual([("rimworld.ticks", 600.0), ("dotnet.gc.collections", 4.0)],
+                         [(name, value) for _, name, _, value in dd.counter_events(self.tmp / "c.json")])
+
     def test_a_file_cut_off_keeps_its_whole_events(self):
         points = [(n, "dotnet.gc.last_collection.memory.committed_size (By)", "", n * 1e9) for n in range(1, 5)]
         (self.tmp / "c.json").write_text(counters_json(points, cut=True), encoding="utf-8")
@@ -200,6 +206,23 @@ def counters_popen(command, **_):
     return mock.Mock(wait=lambda timeout=None: 0)
 
 
+def pace_popen(command, **_):
+    """dotnet-counters collect asked for the game's meter too: the runtime's figures, with ticks and frames over each 5 s."""
+    assert command[command.index("--counters") + 1] == "System.Runtime,DThorga.RimWorld", command
+    counters_popen(command)
+    points = json.loads(Path(command[command.index("-o") + 1]).read_text(encoding="utf-8"))["Events"]
+    extra = []
+    for second in range(0, 61, 5):
+        slow = 25 <= second < 35
+        extra += [(second, "rimworld.ticks ({tick} / 5 sec)", "", 1500 if slow else 3000),
+                  (second, "rimworld.frames ({frame} / 5 sec)", "", 250 if slow else 300),
+                  (second, "rimworld.frame.worst (ms)", "", 120 if slow else 20), (second, "rimworld.speed ({speed})", "", 3)]
+    text = counters_json(extra)
+    events = json.loads(text)["Events"]
+    Path(command[command.index("-o") + 1]).write_text(json.dumps({"Events": points + events}), encoding="utf-8")
+    return mock.Mock(wait=lambda timeout=None: 0)
+
+
 class WatchTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -210,8 +233,29 @@ class WatchTests(unittest.TestCase):
     def watch(self, **kw):
         folder = pw.new_folder(self.tmp / "watches", "reload", datetime(2026, 11, 19, 20, 0, 0))
         notes = pw.watch(4242, folder, 1, 5, 30, kw.get("tool", "dotnet-counters"), "reload", None, self.clock, self.clock.sleep,
-                         counters_popen, FakeProcess(self.clock), self.tmp / "Player.log")
+                         kw.get("popen", counters_popen), FakeProcess(self.clock), self.tmp / "Player.log")
         return folder, notes
+
+    def test_the_games_pace_beside_its_memory(self):
+        folder, _ = self.watch(popen=pace_popen)
+        from phobos_modkit.report import render_json, render_markdown
+        watched = pw.Watch(folder)
+        text = render_markdown(pw.watch_report(watched, {}))
+        self.assertIn("## The game's pace over the watch", text)
+        self.assertIn("the game ran at superfast.", text)
+        self.assertIn("| Ticks a second | 300 | 545 | 600 |", text)        # 3,000 over 5 s is 600 a second
+        self.assertIn("| Frames a second | 50 | 58 | 60 |", text)
+        self.assertIn("| Longest frame | 20 ms | 38 ms | 120 ms |", text)
+        _, data = pw.status(folder.parent, folder.name, now=self.clock())
+        self.assertEqual((600.0, 60.0, 20.0, 3.0), tuple(data["latest"][k] for k in ("ticks_a_second", "frames_a_second",
+                                                                                    "longest_frame_ms", "speed")))
+
+    def test_without_the_games_meter_the_watch_says_why(self):
+        folder, _ = self.watch()
+        from phobos_modkit.report import render_markdown
+        text = render_markdown(pw.watch_report(pw.Watch(folder), {}))
+        self.assertIn("needs D'thorga Framework 0.380.0 or newer running", text)
+        self.assertNotIn("The game's pace", text)
 
     def test_a_jump_its_cause_and_dotnets_share(self):
         folder, notes = self.watch()

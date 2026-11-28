@@ -4,6 +4,26 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.152.0] - 2026-11-28
+
+### Added
+
+- **Reports can say what each row is about, and lead with what matters** (the owner's ask of 28 Nov 2026 for "relevant,
+  compiled, condensed information and how it relates to everything else", for D'thorga Companion's Performance page): a table's
+  rows may carry refs (a mod, a method, a type, a thread, a recording or a day, by column), and a new findings block holds the few
+  things that matter most, ranked, each with its refs. Game-free in `report`; a program links them without reading the words. How:
+  [manifest](docs/manifest.md).
+- **rimworld-perf opens on its findings and the game's own figures, with every row linked**: at most five findings (lock waits,
+  hot spots, the busiest mod, the longest stall with the mods inside it, a busy thread that is not the main one, garbage
+  collection), a strip of figures, charts of who caused the ticking and of ticking over time, and refs on every table (with the
+  mods' package IDs from now on). Each recording keeps a `summary.json`, and `list --json` gives every recording's summary. On
+  the owner's recordings the findings put first a 2,445 ms stall in Smart Medicine's medicine search and the vanilla lock in
+  `GenTypes.IsSealedWithCache`. Its reports carry the new `performance` surface. How: [rimworld-perf](docs/rimworld-perf.md).
+- **The memory watch shows the game's pace beside its memory**: it reads D'thorga Framework's meter with the runtime's counters,
+  so a watch with the framework running gives ticks and frames a second and the longest frame over time, and `watch-status` the
+  latest. Rates dotnet-counters writes over its refresh interval are now given a second. How:
+  [rimworld-perf](docs/rimworld-perf.md).
+
 ## [1.151.0] - 2026-11-28
 
 ### Added

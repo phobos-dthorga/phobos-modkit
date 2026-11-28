@@ -3,8 +3,8 @@ import json
 import unittest
 
 import support  # noqa: F401
-from phobos_modkit.report import (Bullets, Chart, ChartLine, ChartSeries, Code, Fact, Report, Table, home_redactor,
-                                  render_json, render_markdown)
+from phobos_modkit.report import (Bullets, Chart, ChartLine, ChartSeries, Code, Fact, Finding, Findings, Ref, Report, Table,
+                                  finding_json, home_redactor, render_json, render_markdown)
 
 HOME = r"C:\Users\tester"
 
@@ -166,6 +166,39 @@ class Charts(unittest.TestCase):
             self.chart(series=[ChartSeries("A", [1, 2, 3], "#ff0000")])
         with self.assertRaisesRegex(ValueError, "2 values for 3 categories"):
             self.chart(series=[ChartSeries("A", [1, 2])])
+
+
+
+class RefsAndFindingsTests(unittest.TestCase):
+    """What a row or a finding is about, for a program to link (1.152.0)."""
+
+    def test_a_table_carries_its_rows_refs_by_column(self):
+        table = Table(["Method", "Mod"], [["A.B", "Ann"], ["C.D", "-"]],
+                      refs=[{1: Ref("mod", "Ann", package="ann.mod"), 0: Ref("method", "A.B", of="Ann", of_kind="mod")}, {}])
+        block = render_json(Report("t", blocks=[table]))["blocks"][0]
+        self.assertEqual([[{"kind": "method", "id": "A.B", "column": 0, "of": "Ann", "of_kind": "mod"},
+                           {"kind": "mod", "id": "Ann", "column": 1, "package": "ann.mod"}], []], block["refs"])
+        self.assertNotIn("refs", render_json(Report("t", blocks=[Table(["A"], [[1]])]))["blocks"][0])
+        self.assertNotIn("ann.mod", render_markdown(Report("t", blocks=[table])))
+
+    def test_refs_must_match_the_rows_and_name_a_known_kind(self):
+        with self.assertRaisesRegex(ValueError, "2 rows but refs for 1"):
+            render_json(Report("t", blocks=[Table(["A"], [[1], [2]], refs=[{}])]))
+        with self.assertRaisesRegex(ValueError, "kind"):
+            Ref("colour", "red")
+
+    def test_findings_are_bullets_in_markdown_and_items_in_json(self):
+        found = Findings([Finding("Ann's lock in " + HOME + r"\save", "risk", 12.5, "%", [Ref("method", "A.B")]),
+                          Finding("Calm")])
+        self.assertIn("- Ann's lock in ~\\save\n- Calm", render_markdown(Report("t", blocks=[found]), home_redactor(HOME)))
+        block = render_json(Report("t", blocks=[found]), home_redactor(HOME))["blocks"][0]
+        self.assertEqual({"type": "findings", "items": [
+            {"text": "Ann's lock in ~\\save", "role": "risk", "value": 12.5, "unit": "%", "refs": [{"kind": "method", "id": "A.B"}]},
+            {"text": "Calm", "role": "observed", "value": None, "unit": "", "refs": []}]}, block)
+        self.assertEqual(block["items"][1], finding_json(Finding("Calm")))
+        self.assertIn("None.", render_markdown(Report("t", blocks=[Findings([])])))
+        with self.assertRaisesRegex(ValueError, "role"):
+            Finding("x", "red")
 
 
 if __name__ == "__main__":

@@ -73,7 +73,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `callers` | How the stacks running one method reach it, and the mods above it. | reads only |
 | `compare` | Two recordings, as shares of the main thread and of ticking. | reads only |
 | `trend` | Some mods' share of ticking in every recording kept, and where it rose. | reads only |
-| `list` | Every recording and snapshot kept. | reads only |
+| `list` | Every recording and snapshot kept. Each recording with its summary file (its figures, findings and mods' shares), made in the kit's cache the first time a recording is listed after 1.152.0. | reads only |
 | `pack` | Pack the large files of recordings and heaps kept plain (before 1.149.0). With `--apply`, packs each recording's trace and each heap's own files with zstd in the kit's cache, removing a plain file only once its packed one reads back the same; without, only says. | writes |
 | `unpack` | Write a recording's trace or a heap's .gcdump out plain, for PerfView. Writes one recording's trace or one heap's .gcdump out plain beside its packed copy, in the kit's cache; never writes over a file. | writes |
 | `stack` | A frozen or stuck game: every thread's stack, a few times. Attaches Microsoft's dotnet-stack to the running game a few times; it changes nothing in it. | runs other programs |
@@ -164,6 +164,29 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 
 ### Reading the report
 
+- **What matters comes first** (1.152.0; the owner's ask for "relevant, compiled, condensed information", for D'thorga
+  Companion's Performance page): the report opens with a strip of figures (when it was recorded, its length and label; with
+  D'thorga Framework's meter, ticks and frames a second, milliseconds a tick, the longest frame, the speed, pawns and maps; the
+  save, the game's version and the mods active) and **at most five findings, most important first**. A finding is one sentence
+  about something past a mark, each also in a table below:
+
+  | Finding | From | Ranked by |
+  | --- | --- | --- |
+  | The game hardly ticked | Ticking under 1% of the main thread | Always first |
+  | Lock waits | The main thread waited 2% of its time or more (a risk from 10%) | Its share of the main thread |
+  | A hot spot | A game or engine method at 5% of ticking or more (a risk from 25%) | Its share of the main thread |
+  | The busiest mod | A mod causing 5% of ticking or more | Its share of the main thread |
+  | The longest stall | One stall of 100 ms or more (a risk from 250 ms), with the mods inside it | 1 point a 10 ms |
+  | A busy thread that is not the main one | Half of one core or more (the first such thread only) | A quarter of its share of one core |
+  | Garbage collection | Paused 2% of the time or more, with the type allocated most when `--alloc` ran | Its share of the time |
+
+  The marks and the ranking are agent choices, owner to revise (D'thorga Companion's `docs/performance.md`). On the owner's
+  recordings of 17 and 18 November 2026 they put first a stall of 2,445 ms in Smart Medicine's `FindBestMedicine.Find` (the many
+  wounded), a stall of 363 ms in `JobGiver_Work.TryIssueJobPackage` caused 80% by DMS Legion, and the vanilla lock in
+  `GenTypes.IsSealedWithCache` at 45% and 49% of ticking.
+- **For programs, every row says what it is about** (1.152.0): with `--json`, a table's `refs` give each row's mods, methods,
+  types, threads or recordings by column, and each finding its own (`docs/manifest.md`), so a page links them without reading the
+  words. A mod carries its package ID where the recording knew it (recordings from 1.152.0).
 - **The main thread** is the thread that spent most time running managed code: RimWorld's game loop.
 - **Parts of the game loop** come from `games/rimworld/perf-phases.json`: ticking (`Verse.TickManager.DoSingleTick`, the
   simulation), map and world drawing, the alerts column, the interface, sound and music, the engine's own frame drawing, and
@@ -321,6 +344,10 @@ snapshot shows one instant and pauses the game; a watch follows the whole progra
   where it began); start, end, lowest, average and highest of each figure; the largest jumps (rises of 250 MB or more within a
   minute) with what Player.log says from a minute before to a minute after (saves loaded, errors counted, the engine holding
   allocations); the figures over time as a line chart; and the first and last memory maps side by side.
+- **The game's pace beside its memory** (1.152.0): the watch reads D'thorga Framework's meter with the runtime's counters, so a
+  watch with the framework running also shows ticks and frames a second and each interval's longest frame over time, with the
+  lowest, the average and the highest; `watch-status` gives the latest of them. Without the framework it says why they are missing.
+  dotnet-counters writes a rate over its refresh interval ("{tick} / 5 sec"); the kit gives every such rate a second.
 - **First reading of the owner's game** (19 November 2026, `--no-counters`, 2 minutes, not a test): 26 GB claimed; one 135 GB
   reservation with 12.9 GB committed (most likely .NET's heap, unconfirmed without the counters), and about 12 GB in some 2,400
   native blocks of 1 to 64 MB. Reloading a save dropped the claim 1.6 GB, then raised it 3.4 GB within a minute, mostly in 390
@@ -377,7 +404,10 @@ at most, and is always let go; see [the heap reader](heap-reader.md#read-this-fi
 
 The converted trace is indexed into SQLite (`index.sqlite`) with the owners of every module worked out against the mod list as
 it is then, and the counters' averages and worst seconds. The raw `trace.nettrace` stays beside it for PerfView or Visual Studio, packed as `trace.nettrace.zst` (`unpack` gives it back);
-the speedscope file is deleted unless `--keep-speedscope` is given, because it is large. Recordings live in the kit's cache
+the speedscope file is deleted unless `--keep-speedscope` is given, because it is large. Beside the index, `summary.json` (1.152.0) keeps what a list or another page needs without opening
+it: the figures, the findings, each mod's share of ticking and its package ID. It is written whenever the report is made, and
+`list` makes it for any recording that has none or whose index is newer; `list --json` gives every recording's summary under
+`data.recordings`. Recordings live in the kit's cache
 (`rimworld-perf/<date>-<time>-<label>/`), outside every repository; `cleanup` lists them once they are a fortnight old, saying they
 cannot be made again.
 

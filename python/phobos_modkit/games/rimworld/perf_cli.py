@@ -46,6 +46,7 @@ from collections import defaultdict
 from contextlib import closing
 from datetime import datetime, timezone
 import fnmatch
+import json
 from pathlib import Path
 import re
 import shutil
@@ -62,7 +63,8 @@ from ...dotnet_snapshots import SnapshotError
 from ... import process_memory as pm
 from ...manifest import READS, RUNS, WRITES
 from ...progress import Progress
-from ...report import Report, Table, envelope_text, home_redactor, keep, render_markdown
+from ...report import (Chart, ChartSeries, Fact, Finding, Findings, Ref, Report, Table, envelope_text, finding_json,
+                       home_redactor, keep, render_markdown)
 from ...sampling import (CPU, ENGINE, GAME, MOD, NATIVE, NO_MOD, UNKNOWN, Recording, SamplingError, Share, index_events,
                          index_speedscope, method_matcher, modules,
                          read_counters, write_counters, write_owners)
@@ -84,6 +86,9 @@ REPORTS = ("report", "record", "index", "reindex", "mod", "callers", "compare", 
 FREEZE_HELP = ("freeze the game and read it in place instead of a snapshot, when Windows has no room to copy it (error 1450); it "
                f"stands still while it is read, {hreader.FREEZE_SECONDS} s at most")
 MEMORY_SURFACE = "memory-watch"     # D'thorga Companion's Memory page finds the watch's commands by this, never by the game's name
+PERFORMANCE_SURFACE = "performance" # and its Performance page finds recordings' reports by this (1.152.0)
+SUMMARY_NAME = "summary.json"       # beside each recording's index: its figures, findings and mods' shares, for reading at once
+SUMMARY_FORMAT = 1
 CACHE_FOLDER = "rimworld-perf"
 INDEX_NAME = "index.sqlite"
 DEFAULT_SECONDS = 30
@@ -307,30 +312,64 @@ def build_index(folder, speedscope, counters_file, meta, args, environ, settings
     notes = event_notes + notes
     write_owners(index, owners)
     write_counters(index, read_counters(counters_file) if counters_file else {})
+    packages = perf.mod_packages(args.game, args.workshop, args.config, environ, settings_file)
+    used = {o.name for o in owners.values() if o.kind == MOD}
     with closing(sqlite3.connect(index)) as conn:
-        derived.write_meta(conn, {"notes": "\n".join(notes), "mods_matched": sum(1 for owner in owners.values() if owner.kind == MOD)})
+        derived.write_meta(conn, {"notes": "\n".join(notes), "mods_matched": sum(1 for owner in owners.values() if owner.kind == MOD),
+                                  "mod_packages": json.dumps({n: i for n, i in sorted(packages.items()) if n in used})})
         conn.commit()
     return notes
 
 
+# ---- What a row or a finding is about (1.152.0) ----
+
+def packages_of(rec):
+    """{mod name: package ID} kept when the recording was made; {} for one from before 1.152.0."""
+    try:
+        found = json.loads(rec.meta.get("mod_packages") or "{}")
+    except ValueError:
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
+def mod_ref(owner, packages=None):
+    """A Ref to a mod, or None for anything that is not one."""
+    if owner is None or owner == NO_MOD or owner.kind != MOD:
+        return None
+    return Ref("mod", owner.name, package=(packages or {}).get(owner.name, ""))
+
+
+def method_ref(method, owner=None):
+    """A Ref to a method, with who owns it; None for no method."""
+    if not method:
+        return None
+    return Ref("method", method, of=owner.name if owner else "", of_kind=owner.kind if owner else "")
+
+
+def row_refs(**columns):
+    """{column position: Ref} for one row, from c0=..., c3=...; Nones left out."""
+    return {int(key[1:]): ref for key, ref in columns.items() if ref is not None}
+
+
 # ---- Reports ----
 
-def _owner_rows(shares, whole, top):
+def _owner_rows(shares, whole, top, packages=None):
     ordered = sorted(shares.items(), key=lambda kv: (-kv[1].total, kv[0].name))
     rows = [(o.name, o.kind, ms(s.total), pct(s.total, whole), ms(s.cpu), ms(s.native)) for o, s in ordered[:top]]
-    return rows, len(ordered)
+    return rows, len(ordered), [row_refs(c0=mod_ref(o, packages)) for o, _ in ordered[:top]]
 
 
 OWNER_HEADERS = ["Caused by", "Kind", "ms", "Share", "Running managed code (ms)", "In native code or waiting (ms)"]
 
 
-def _method_rows(methods, whole, top, show_owner=True):
+def _method_rows(methods, whole, top, show_owner=True, packages=None):
     ordered = sorted(methods.items(), key=lambda kv: (-kv[1].total, kv[0][0]))
-    rows = []
+    rows, refs = [], []
     for (method, owner, patched), share in ordered[:top]:
         name = method + (" (patched)" if patched else "")
         rows.append((name, owner.name, ms(share.total), pct(share.total, whole)) if show_owner else (name, ms(share.total), pct(share.total, whole)))
-    return rows, len(ordered)
+        refs.append(row_refs(c0=method_ref(method, owner), c1=mod_ref(owner, packages) if show_owner else None))
+    return rows, len(ordered), refs
 
 
 def _counter_rows(rec):
@@ -388,26 +427,39 @@ def _mods_text(shares):
     return ", ".join(parts)
 
 
-def _hot_spot_rows(spots, whole, top):
-    listed = sorted(((key, spot) for key, spot in spots.items() if spot.total.total >= HOT_SPOT_SHARE * whole),
-                    key=lambda kv: (-kv[1].total.total, kv[0][0]))
-    rows = []
+def _top_mod(shares):
+    """The Owner with the most time in {Owner: Share}, leaving out "no mod"; None when there is none."""
+    mods = [(o, s) for o, s in shares.items() if o != NO_MOD and o.kind == MOD]
+    return max(mods, key=lambda kv: (kv[1].total, kv[0].name))[0] if mods else None
+
+
+def _listed_hot_spots(spots, whole):
+    return sorted(((key, spot) for key, spot in spots.items() if spot.total.total >= HOT_SPOT_SHARE * whole),
+                  key=lambda kv: (-kv[1].total.total, kv[0][0]))
+
+
+def _hot_spot_rows(spots, whole, top, packages=None):
+    listed = _listed_hot_spots(spots, whole)
+    rows, refs = [], []
     for (method, owner), spot in listed[:top]:
         total = spot.total.total
         rows.append((method, owner.name, ms(total), pct(total, whole), _largest(spot.leaf, total), _largest(spot.caller, total),
                      _mods_text(spot.mods)))
-    return rows, len(listed)
+        refs.append(row_refs(c0=method_ref(method, owner), c6=mod_ref(_top_mod(spot.mods), packages)))
+    return rows, len(listed), refs
 
 
-def _site_rows(shares, whole, top):
+def _site_rows(shares, whole, top, packages=None):
     ordered = sorted(shares.items(), key=lambda kv: (-kv[1].total, kv[0][0]))
-    return [(method or START_TEXT, owner.name if owner else "-", ms(s.total), pct(s.total, whole))
-            for (method, owner), s in ordered[:top]], len(ordered)
+    return ([(method or START_TEXT, owner.name if owner else "-", ms(s.total), pct(s.total, whole))
+             for (method, owner), s in ordered[:top]], len(ordered),
+            [row_refs(c0=method_ref(method, owner), c1=mod_ref(owner, packages)) for (method, owner), _ in ordered[:top]])
 
 
-def _mod_rows(shares, whole, top):
+def _mod_rows(shares, whole, top, packages=None):
     ordered = sorted(shares.items(), key=lambda kv: (-kv[1].total, kv[0].name))
-    return [(_who(o), ms(s.total), pct(s.total, whole)) for o, s in ordered[:top]], len(ordered)
+    return ([(_who(o), ms(s.total), pct(s.total, whole)) for o, s in ordered[:top]], len(ordered),
+            [row_refs(c0=mod_ref(o, packages)) for o, _ in ordered[:top]])
 
 
 def callers_report(rec, folder, pattern, top, all_threads=False):
@@ -422,12 +474,13 @@ def callers_report(rec, folder, pattern, top, all_threads=False):
         raise PerfError(f'No stack in {folder.name} ran a method matching "{pattern}"' +
                         (" on the main thread; add --all-threads to look at every thread." if not all_threads else "."))
     report = Report(f"rimworld-perf: callers of {pattern} in {folder.name}", [CAVEAT])
+    packages = packages_of(rec)
     where = "on all threads" if all_threads else f"on the main thread ({pct(total, rec.duration_ms(main))} of it)"
     report.lines.append(f"**{ms(total)} ms {where}**, {ms(found.total.cpu)} ms of it running managed code. A method on a stack "
                         "twice counts from its outermost call.")
     if len(found.targets) > 1:
-        rows, count = _site_rows(found.targets, total, top)
-        report.section("The methods the name matched", Table(["Method", "Owner", "ms", "Share"], rows, count))
+        rows, count, refs = _site_rows(found.targets, total, top, packages)
+        report.section("The methods the name matched", Table(["Method", "Owner", "ms", "Share"], rows, count, refs=refs))
     if not all_threads:
         phases, _ = perf.phases()
         cache, parts = {}, defaultdict(Share)
@@ -443,16 +496,17 @@ def callers_report(rec, folder, pattern, top, all_threads=False):
         report.section("By thread", Table(["Thread", "ms", "Share"], rows[:top], len(rows)))
     for title, shares in (("Called directly by", found.direct),
                           ("The first game, engine or mod method above it (passing over .NET and libraries)", found.owned)):
-        rows, count = _site_rows(shares, total, top)
-        report.section(title, Table(["Method", "Owner", "ms", "Share"], rows, count))
-    rows, count = _mod_rows(found.inner, total, top)
-    report.section("The mods that lead to it (the innermost mod above it)", Table(["Mod", "ms", "Share"], rows, count))
-    rows, count = _mod_rows(found.outer, total, top)
+        rows, count, refs = _site_rows(shares, total, top, packages)
+        report.section(title, Table(["Method", "Owner", "ms", "Share"], rows, count, refs=refs))
+    rows, count, refs = _mod_rows(found.inner, total, top, packages)
+    report.section("The mods that lead to it (the innermost mod above it)", Table(["Mod", "ms", "Share"], rows, count, refs=refs))
+    rows, count, refs = _mod_rows(found.outer, total, top, packages)
     report.section("The mods whose code it starts from (the outermost mod above it)",
                    "The first mod on the stack from the thread's start decides when and how often; the innermost does the work.",
-                   Table(["Mod", "ms", "Share"], rows, count))
-    rows, count = _site_rows(found.leaf, total, top)
-    report.section("Where its time goes (where the thread was, at or below it)", Table(["Method", "Owner", "ms", "Share"], rows, count))
+                   Table(["Mod", "ms", "Share"], rows, count, refs=refs))
+    rows, count, refs = _site_rows(found.leaf, total, top, packages)
+    report.section("Where its time goes (where the thread was, at or below it)",
+                   Table(["Method", "Owner", "ms", "Share"], rows, count, refs=refs))
     if rec.has_timeline and not all_threads:
         width = window_width(rec.duration_ms(main) / 1000)
         windows = rec.windows(main, width * 1000, lambda node: rec._call_site(node, matches) is not None)
@@ -536,8 +590,11 @@ def _window_text(start_ms, width_s):
     return f"{start_ms / 1000:g}-{start_ms / 1000 + width_s:g} s"
 
 
-def timeline_sections(rec, report, main, top):
-    """The tables over time: the main loop by window, and the longest unbroken stretches."""
+TIMELINE_MODS = 4                   # mods drawn by name in the chart over time; the rest are "other mods"
+
+
+def timeline_sections(rec, report, main, top, found=None, packages=None):
+    """The tables over time: the main loop by window, and the longest unbroken stretches. `found` gathers findings."""
     phases, ticking = perf.phases()
     whole = rec.duration_ms(main)
     width = window_width(whole / 1000)
@@ -551,7 +608,8 @@ def timeline_sections(rec, report, main, top):
                 tick_total += share.total
                 if owner.kind == MOD:
                     overall[owner] += share.total
-    rows = []
+    named = [o for o, _ in sorted(overall.items(), key=lambda kv: (-kv[1], kv[0].name))[:TIMELINE_MODS]]
+    rows, refs, categories, drawn = [], [], [], defaultdict(list)
     for start, shares in windows:
         span = sum(s.total for s in shares.values())
         if span < width * 1000 / 2:
@@ -561,37 +619,65 @@ def timeline_sections(rec, report, main, top):
         for (phase, owner), share in shares.items():
             if phase == ticking and owner.kind == MOD:
                 mods[owner] += share.total
-        busiest, note = "-", ""
+        busiest, note, top_owner = "-", "", None
         if mods and ticks:
             owner, value = max(mods.items(), key=lambda kv: (kv[1], kv[0].name))
             here, average = 100 * value / ticks, 100 * overall[owner] / tick_total if tick_total else 0.0
-            busiest = f"{owner.name} ({here:.0f}% of its ticking)"
+            busiest, top_owner = f"{owner.name} ({here:.0f}% of its ticking)", owner
             if here >= SPIKE_TIMES * average and here - average >= SPIKE_POINTS:
                 note = f"**{here / average:.1f} times its average**" if average else "**only here**"
         rows.append((_window_text(start, width), pct(ticks, span), busiest, note))
-    report.section("Over time: the main thread, window by window",
-                   f"Each row is {width} s of the main thread: its share spent ticking, and the mod that caused the most of that "
-                   "ticking. A mark means that mod took at least twice its usual share there: work it does now and then.",
-                   Table(["Window", "Ticking", "Busiest mod while ticking", "Note"], rows))
-    found = rec.stretches(main, lambda method, owner: owner.kind in (MOD, GAME, ENGINE))
-    listed = rec.innermost_stretches(found, STRETCH_MIN_MS)
+        refs.append(row_refs(c2=mod_ref(top_owner, packages)))
+        categories.append(_window_text(start, width))
+        for owner in named:
+            drawn[owner.name].append(round(100 * mods.get(owner, 0.0) / span, 1))
+        drawn["Other mods"].append(round(100 * sum(v for o, v in mods.items() if o not in named) / span, 1))
+        drawn["The game, the engine and .NET"].append(round(100 * (ticks - sum(mods.values())) / span, 1))
+    blocks = [f"Each row is {width} s of the main thread: its share spent ticking, and the mod that caused the most of that "
+              "ticking. A mark means that mod took at least twice its usual share there: work it does now and then."]
+    if categories:
+        roles = ["accent", "comparison", "observed", "risk"]
+        series = [ChartSeries(owner.name, drawn[owner.name], roles[i % len(roles)]) for i, owner in enumerate(named)]
+        series += [ChartSeries("Other mods", drawn["Other mods"], "success"),
+                   ChartSeries("The game, the engine and .NET", drawn["The game, the engine and .NET"], "neutral")]
+        blocks.append(Chart("Ticking over time, by who caused it",
+                            f"Each bar is {width} s of the main thread: the share of it spent ticking, split by the mod that "
+                            f"caused it (the {len(named)} busiest by name), the rest of the mods, and the game itself.",
+                            categories, series, unit="%", value_label="Share of the main thread", stacked=True))
+    blocks.append(Table(["Window", "Ticking", "Busiest mod while ticking", "Note"], rows, refs=refs))
+    report.section("Over time: the main thread, window by window", *blocks)
+    stretches = rec.stretches(main, lambda method, owner: owner.kind in (MOD, GAME, ENGINE))
+    listed = rec.innermost_stretches(stretches, STRETCH_MIN_MS)
     if listed:
+        rows, refs = [], []
+        for (method, owner), (longest, began, count, _), above in listed[:top]:
+            text, cause = _stall_text(rec, main, method, began, longest)
+            rows.append((method, owner.name, ms(longest), f"{began / 1000:.1f}", f"{count:,}", f"{above:,}", text))
+            refs.append(row_refs(c0=method_ref(method, owner), c1=mod_ref(owner, packages), c6=mod_ref(cause, packages)))
         report.section("The longest unbroken stretches on the main thread", STRETCH_NOTE.format(min=STRETCH_MIN_MS),
                        Table(["Method (the innermost of the stall)", "Owner", "Longest (ms)", "At (s into the recording)",
                               "Times on the stack", "Methods above it in the same stall", "Caused by, inside the stall"],
-                             [(method, owner.name, ms(longest), f"{began / 1000:.1f}", f"{count:,}", f"{above:,}",
-                               _stall_text(rec, main, method, began, longest))
-                              for (method, owner), (longest, began, count, _), above in listed[:top]], len(listed)))
+                             rows, len(listed), refs=refs))
+        (method, owner), (longest, began, _, _), _ = listed[0]
+        if found is not None and longest >= FINDING_STALL_MS:
+            cause = refs[0].get(6)
+            found.append((longest * STALL_POINTS_PER_MS, Finding(
+                f"The main thread stalled for {longest:,.0f} ms in {method}, {began / 1000:.1f} s in"
+                + (f"; caused by {rows[0][6]}" if rows[0][6] != "-" else "") + ".",
+                "risk" if longest >= FINDING_STALL_RISK_MS else "observed", longest, "ms",
+                [r for r in (method_ref(method, owner), cause) if r is not None])))
 
 
 def _stall_text(rec, thread, method, began, longest):
+    """(who caused a stall, in words; the Owner of the mod that caused most of it, or None)."""
     node = _node_of(rec, thread, method, began)
     if node is None:
-        return "-"
+        return "-", None
     shares = rec.stall_owners(thread, node, began, longest)
     whole = sum(shares.values())
     ordered = sorted(shares.items(), key=lambda kv: (-kv[1], kv[0].name))[:MODS_SHOWN]
-    return ", ".join(f"{o.name} {pct(v, whole)}" for o, v in ordered)
+    cause = next((o for o, _ in ordered if o.kind == MOD and o != NO_MOD), None)
+    return ", ".join(f"{o.name} {pct(v, whole)}" for o, v in ordered), cause
 
 
 def _node_of(rec, thread, method, at_ms):
@@ -626,8 +712,8 @@ def _held_by(rec, wait, roles, role_cache):
     return role_cache[owner_thread] + (f", in {method}" if method else "")
 
 
-def wait_sections(rec, report, main, top, roles):
-    """Lock waits, from the runtime's own events (recorded from 1.151.0)."""
+def wait_sections(rec, report, main, top, roles, found=None, packages=None):
+    """Lock waits, from the runtime's own events (recorded from 1.151.0). `found` gathers findings."""
     if not rec.waits:
         if rec.meta.get("lock_events") == "yes":
             report.section("Lock waits", "No thread waited on a lock while recording.")
@@ -651,16 +737,26 @@ def wait_sections(rec, report, main, top, roles):
         row[3][_held_by(rec, wait, roles, role_cache)] += 1
         mod = rec.label(wait[7]) if wait[7] >= 0 else NO_MOD
         row[4][mod if mod.kind == MOD else NO_MOD] += wait[3]
-    rows = []
+    rows, refs = [], []
     for (method, owner), (count, spent, longest, held, mods) in sorted(rows_by.items(), key=lambda kv: (-kv[1][1], kv[0][0])):
         holder, times = max(held.items(), key=lambda kv: (kv[1], kv[0]))
         ordered = sorted(mods.items(), key=lambda kv: (-kv[1], kv[0].name))[:MODS_SHOWN]
         rows.append((method or "(no game or mod code on its stack)", owner.name if owner else "-", f"{count:,}", ms(spent),
                      f"{longest:,.1f}", f"{holder} ({100 * times / count:.0f}% of its waits)",
                      ", ".join(f"{_who(o)} {ms(v)} ms" for o, v in ordered)))
+        lead = next((o for o, _ in ordered if o != NO_MOD and o.kind == MOD), None)
+        refs.append(row_refs(c0=method_ref(method, owner), c1=mod_ref(owner, packages), c6=mod_ref(lead, packages)))
     if rows:
         blocks.append(Table(["The main thread waited in", "Owner", "Waits", "ms", "Longest (ms)", "Mostly held by",
-                             "Mods that lead to it"], rows[:top], len(rows)))
+                             "Mods that lead to it"], rows[:top], len(rows), refs=refs[:top]))
+        share = main_ms / rec.duration_ms(main) if rec.duration_ms(main) else 0.0
+        if found is not None and share >= FINDING_WAIT_SHARE:
+            first = rows[0]
+            found.append((100 * share, Finding(
+                f"The main thread spent {pct(main_ms, rec.duration_ms(main))} of its time waiting on locks, most in {first[0]} "
+                f"(held mostly by {first[5].split(' (')[0]}).",
+                "risk" if share >= FINDING_WAIT_RISK else "observed", round(100 * share, 1), "%",
+                [r for r in (refs[0].get(0), refs[0].get(6)) if r is not None])))
     others = defaultdict(lambda: [0, 0.0])
     for wait in rec.waits:
         if wait[0] != main:
@@ -679,12 +775,12 @@ def _mb(value):
     return f"{value / 1e6:,.1f}"
 
 
-def allocation_sections(rec, report, main, top):
-    """Allocations sampled by the runtime (record --alloc, 1.151.0)."""
+def allocation_sections(rec, report, main, top, packages=None):
+    """Allocations sampled by the runtime (record --alloc, 1.151.0). Returns (the type allocated most, its MB a second), or None."""
     if not rec.allocations:
         if rec.meta.get("allocation_events") == "yes":
             report.section("Allocations, sampled", "The runtime reported no allocation samples while recording.")
-        return
+        return None
     seconds = rec.duration_ms(main) / 1000 or 1.0
     total = sum(a[4] for a in rec.allocations)
     main_bytes = sum(a[4] for a in rec.allocations if a[0] == main)
@@ -698,18 +794,25 @@ def allocation_sections(rec, report, main, top):
         by_type[type_name][0] += amount
         by_type[type_name][1][method] += amount
         by_method[(method, owner)] += amount
-    rows = [(_who(o), _mb(v), pct(v, total)) for o, v in sorted(by_mod.items(), key=lambda kv: (-kv[1], kv[0].name))]
-    blocks.append(Table(["Allocated by (the innermost mod on the stack)", "MB", "Share"], rows[:top], len(rows)))
-    rows = []
+    ordered = sorted(by_mod.items(), key=lambda kv: (-kv[1], kv[0].name))
+    rows = [(_who(o), _mb(v), pct(v, total)) for o, v in ordered]
+    blocks.append(Table(["Allocated by (the innermost mod on the stack)", "MB", "Share"], rows[:top], len(rows),
+                        refs=[row_refs(c0=mod_ref(o, packages)) for o, _ in ordered[:top]]))
+    rows, refs = [], []
     for type_name, (amount, methods) in sorted(by_type.items(), key=lambda kv: (-kv[1][0], kv[0])):
         method = max(methods.items(), key=lambda kv: (kv[1], kv[0]))[0]
         rows.append((type_name, _mb(amount), pct(amount, total), method or "-"))
-    blocks.append(Table(["Type", "MB", "Share", "Mostly allocated in"], rows[:top], len(rows)))
+        refs.append(row_refs(c0=Ref("type", type_name) if type_name else None, c3=method_ref(method)))
+    blocks.append(Table(["Type", "MB", "Share", "Mostly allocated in"], rows[:top], len(rows), refs=refs[:top]))
+    heaviest = (rows[0][0], sorted(by_type.items(), key=lambda kv: (-kv[1][0], kv[0]))[0][1][0] / seconds / 1e6) if rows else None
+    ordered = sorted(by_method.items(), key=lambda kv: (-kv[1], kv[0][0]))
     rows = [(method or "(no game or mod code on its stack)", owner.name if owner else "-", _mb(v), pct(v, total))
-            for (method, owner), v in sorted(by_method.items(), key=lambda kv: (-kv[1], kv[0][0]))]
+            for (method, owner), v in ordered]
     blocks.append(Table(["Allocated in (the first game, engine or mod method above it)", "Owner", "MB", "Share"],
-                        rows[:top], len(rows)))
+                        rows[:top], len(rows),
+                        refs=[row_refs(c0=method_ref(m, o), c1=mod_ref(o, packages)) for (m, o), _ in ordered[:top]]))
     report.section("Allocations, sampled", *blocks)
+    return heaviest
 
 
 PATCHED_NOTE = ("**Mods seen running inside it** are those whose code ran directly inside the rewritten method in this recording: "
@@ -747,17 +850,18 @@ def patch_lookup_for(args, environ, settings_file):
     return lookup
 
 
-def _patched_rows(rec, samples, whole, top, patch_lookup):
+def _patched_rows(rec, samples, whole, top, patch_lookup, packages=None):
     patched = rec.inclusive_methods(samples, lambda o, p: p)
     runners = rec.patch_runners(samples)
     ordered = sorted(patched.items(), key=lambda kv: (-kv[1].total, kv[0][0]))
-    rows = []
-    for (method, _, _), share in ordered[:top]:
+    rows, refs = [], []
+    for (method, owner, _), share in ordered[:top]:
         seen = sorted(runners.get(method, {}).items(), key=lambda kv: (-kv[1].total, kv[0].name))
         seen_text = ", ".join(o.name for o, _ in seen[:MODS_SHOWN]) + (f", {len(seen) - MODS_SHOWN} more" if len(seen) > MODS_SHOWN else "")
         rows.append((method + " (patched)", ms(share.total), pct(share.total, whole), seen_text or "-",
                      patch_lookup(method) if patch_lookup else "-"))
-    return rows, len(ordered)
+        refs.append(row_refs(c0=method_ref(method, owner), c3=mod_ref(seen[0][0], packages) if seen else None))
+    return rows, len(ordered), refs
 
 
 NO_GAME_COUNTERS = ("The game's own figures (ticks and frames a second) were not recorded: they need D'thorga Framework 0.380.0 or "
@@ -817,7 +921,67 @@ def game_section(rec, report, main, tick_ms):
                    Table(["Measure", "Average", "Worst or most"], rows))
 
 
-def summary_report(rec, folder, top, patch_lookup=None):
+FINDINGS_SHOWN = 5                  # findings at the top of a report, most important first
+FINDING_MOD_SHARE = 0.05            # a mod is a finding from 5 % of ticking
+FINDING_HOT_SPOT = 0.05             # a hot spot from 5 % of ticking; a risk from a quarter
+FINDING_HOT_SPOT_RISK = 0.25
+FINDING_WAIT_SHARE = 0.02           # lock waits from 2 % of the main thread; a risk from 10 %
+FINDING_WAIT_RISK = 0.10
+FINDING_STALL_MS = 100              # a stall from 100 ms (six frames at 60 a second); a risk from 250 ms
+FINDING_STALL_RISK_MS = 250
+STALL_POINTS_PER_MS = 0.1           # ranked as if each 10 ms of one stall were 1 % of the main thread
+FINDING_CORE_SHARE = 0.5            # another thread from half of one core, ranked at a quarter of its share: it slows the game
+THREAD_POINTS = 0.25                # only when cores run short, so the main thread's own findings come first
+FINDING_GC_PAUSE = 0.02             # garbage collection from 2 % of the time paused
+NOT_RUNNING_POINTS = 1000.0         # "the game hardly ran" outranks everything
+OWNERS_CHARTED = 8
+
+
+def _sentence(text):
+    """Text with its first letter made a capital, the rest left as it is."""
+    return text[:1].upper() + text[1:]
+
+
+def _finding_list(found):
+    """The FINDINGS_SHOWN most important of [(rank, Finding)]."""
+    return [f for _, f in sorted(found, key=lambda pair: -pair[0])[:FINDINGS_SHOWN]]
+
+
+def report_facts(rec, main, tick_ms):
+    """The strip above a report: the recording, and the game's own figures where its meter ran."""
+    meta = rec.meta
+    facts = [Fact("Recorded", str(meta.get("recorded_at", "?")))]
+    seconds = meta.get("seconds") or rec.duration_ms(main) / 1000
+    facts.append(Fact("Length", f"{float(seconds):.0f} s" if float(seconds) >= 10 else f"{float(seconds):.1f} s"))
+    if meta.get("label"):
+        facts.append(Fact("Label", meta["label"]))
+    ticks = rec.counter("rimworld.ticks")
+    if ticks:
+        facts.append(Fact("Ticks a second", f"{ticks[0]:,.0f}"))
+    frames = rec.counter("rimworld.frames")
+    if frames:
+        facts.append(Fact("Frames a second", f"{frames[0]:,.0f}"))
+    per_tick = ms_per_tick(rec, tick_ms, main)
+    if per_tick is not None:
+        facts.append(Fact("Ticking, a tick", f"{per_tick:,.2f} ms"))
+    worst = rec.counter("rimworld.frame.worst")
+    if worst:
+        facts.append(Fact("Longest frame", f"{worst[1]:,.0f} ms"))
+    speed = rec.counter("rimworld.speed")
+    if speed:
+        facts.append(Fact("Speed", perf.SPEEDS.get(round(speed[0]), f"{speed[0]:.1f}")))
+    for label, name in (("Pawns", "rimworld.pawns"), ("Maps", "rimworld.maps")):
+        found = rec.counter(name)
+        if found:
+            facts.append(Fact(label, f"{found[0]:,.0f}"))
+    for label, key in (("Save", "save"), ("RimWorld", "game_version"), ("Mods active", "mods_active")):
+        if meta.get(key):
+            facts.append(Fact(label, str(meta[key])))
+    return facts
+
+
+def summary_report(rec, folder, top, patch_lookup=None, keep_summary=None):
+    """The whole report of one recording. When `keep_summary` is a dict, it is filled with what the summary file keeps."""
     phases, ticking = perf.phases()
     main = rec.main_thread()
     samples = rec.thread_samples(main)
@@ -826,6 +990,8 @@ def summary_report(rec, folder, top, patch_lookup=None):
     report = Report(f"rimworld-perf: {folder.name}")
     label = f' ("{meta["label"]}")' if meta.get("label") else ""
     roles = perf.thread_roles()
+    packages = packages_of(rec)
+    found = []
     report.lines.append(f"Recorded {float(meta.get('seconds') or whole / 1000):.0f} s{label} at {meta.get('recorded_at', '?')}: "
                         f"{len(rec.threads)} threads; the main thread is {rec.thread_label(main)}"
                         f"{' (' + role + ')' if (role := rec.thread_role(main, roles)) else ''}, the busiest running managed code.")
@@ -838,15 +1004,32 @@ def summary_report(rec, folder, top, patch_lookup=None):
     if tick_share is None or tick_share.total < PAUSED_SHARE * whole:
         report.lines.append("**The simulation hardly ran in this recording: was the game paused, or on the main menu?** Record "
                             "again with the game running at the speed that feels slow.")
+        found.append((NOT_RUNNING_POINTS, Finding("The game hardly ticked while recording: it was paused or on the main menu, so "
+                                                  "nothing below says what slows play.", "risk")))
     for note in (meta.get("notes") or "").splitlines():
         report.lines.append(note)
     phase_rows = [(name or "other (outside the named parts)", ms(s.total), pct(s.total, whole), pct(s.cpu, s.total) if s.total else "-")
                   for name, s in sorted(by_phase.items(), key=lambda kv: (-kv[1].total, kv[0] or "~"))]
     report.section("The main thread, by part of the game loop", Table(["Part", "ms", "Share of the main thread", "Of it, running managed code"], phase_rows))
+    mod_shares = {}
     if tick_share and tick_share.total:
         tick_samples = rec.in_phase(samples, phases, ticking)
-        rows, total = _owner_rows(rec.by_owner(tick_samples), tick_share.total, top)
-        report.section("Ticking: who caused the time", ATTRIBUTION, Table(OWNER_HEADERS, rows, total))
+        by_owner = rec.by_owner(tick_samples)
+        mod_shares = {o.name: s.total / tick_share.total for o, s in by_owner.items() if o.kind == MOD and o != NO_MOD}
+        rows, total, refs = _owner_rows(by_owner, tick_share.total, top, packages)
+        charted = sorted(by_owner.items(), key=lambda kv: (-kv[1].total, kv[0].name))[:OWNERS_CHARTED]
+        report.section("Ticking: who caused the time", ATTRIBUTION,
+                       Chart("Who caused the ticking time", f"The {len(charted)} largest shares of ticking, by who caused it.",
+                             [o.name for o, _ in charted],
+                             [ChartSeries("Share of ticking", [round(100 * s.total / tick_share.total, 1) for _, s in charted])],
+                             unit="%", value_label="Share of ticking"),
+                       Table(OWNER_HEADERS, rows, total, refs=refs))
+        busiest = _top_mod(by_owner)
+        if busiest is not None and by_owner[busiest].total >= FINDING_MOD_SHARE * tick_share.total:
+            share = by_owner[busiest].total / tick_share.total
+            found.append((100 * share * tick_share.total / whole, Finding(
+                f"{busiest.name} caused {100 * share:.0f}% of ticking, the most of any mod.", "observed", round(100 * share, 1),
+                "%", [mod_ref(busiest, packages)])))
         calls = sorted(rec.mod_calls(tick_samples).items(), key=lambda kv: (-kv[1].total, kv[0][0].name, kv[0][1].name))
         if calls:
             report.section("Ticking: one mod's code running another's",
@@ -854,48 +1037,74 @@ def summary_report(rec, folder, top, patch_lookup=None):
                            "the second does the work. Look at both before blaming either.",
                            Table(["Called from", "Ran in", "ms", "Share of ticking"],
                                  [(o.name, i.name, ms(s.total), pct(s.total, tick_share.total)) for (o, i), s in calls[:top]], len(calls)))
-        rows, total = _method_rows(rec.inclusive_methods(tick_samples, lambda o, p: o.kind == MOD), tick_share.total, top)
-        report.section("Ticking: mods' busiest methods (including what they call)", Table(["Method", "Mod", "ms", "Share of ticking"], rows, total))
-        rows, total = _method_rows(rec.self_methods(tick_samples), tick_share.total, top)
-        report.section("Ticking: where the thread was when sampled", Table(["Method", "Owner", "ms", "Share of ticking"], rows, total))
-        rows, total = _hot_spot_rows(rec.hot_spots(tick_samples), tick_share.total, top)
+        rows, total, refs = _method_rows(rec.inclusive_methods(tick_samples, lambda o, p: o.kind == MOD), tick_share.total, top,
+                                         packages=packages)
+        report.section("Ticking: mods' busiest methods (including what they call)",
+                       Table(["Method", "Mod", "ms", "Share of ticking"], rows, total, refs=refs))
+        rows, total, refs = _method_rows(rec.self_methods(tick_samples), tick_share.total, top, packages=packages)
+        report.section("Ticking: where the thread was when sampled",
+                       Table(["Method", "Owner", "ms", "Share of ticking"], rows, total, refs=refs))
+        spots = rec.hot_spots(tick_samples)
+        rows, total, refs = _hot_spot_rows(spots, tick_share.total, top, packages)
         if rows:
             report.section("Ticking: hot spots in the game's and the engine's code, and the mods that lead to them", HOT_SPOT_NOTE,
                            Table(["Game or engine method", "Owner", "ms", "Share of ticking", "Mostly in", "Called from",
-                                  "Mods that lead to it"], rows, total))
-        rows, total = _patched_rows(rec, tick_samples, tick_share.total, top, patch_lookup)
+                                  "Mods that lead to it"], rows, total, refs=refs))
+            (method, owner), spot = _listed_hot_spots(spots, tick_share.total)[0]
+            share = spot.total.total / tick_share.total
+            if share >= FINDING_HOT_SPOT:
+                found.append((100 * share * tick_share.total / whole, Finding(
+                    f"{method} ({owner.name}) took {100 * share:.0f}% of ticking; the mods that lead to it: {_mods_text(spot.mods)}.",
+                    "risk" if share >= FINDING_HOT_SPOT_RISK else "observed", round(100 * share, 1), "%",
+                    [r for r in (method_ref(method, owner), mod_ref(_top_mod(spot.mods), packages)) if r is not None])))
+        rows, total, refs = _patched_rows(rec, tick_samples, tick_share.total, top, patch_lookup, packages)
         if rows:
             report.section("Ticking: game methods other mods have patched (including what they call)",
                            PATCHED_NOTE + ("" if patch_lookup else " " + NO_PATCH_LIST),
                            Table(["Method", "ms", "Share of ticking", "Mods seen running inside it",
-                                  "Transpilers (the patch list, as of today)"], rows, total))
-    rows, total = _owner_rows(rec.by_owner(samples), whole, top)
-    report.section("The whole main thread: who caused the time", Table(OWNER_HEADERS, rows, total))
+                                  "Transpilers (the patch list, as of today)"], rows, total, refs=refs))
+    rows, total, refs = _owner_rows(rec.by_owner(samples), whole, top, packages)
+    report.section("The whole main thread: who caused the time", Table(OWNER_HEADERS, rows, total, refs=refs))
     if rec.has_timeline:
-        timeline_sections(rec, report, main, top)
+        timeline_sections(rec, report, main, top, found, packages)
     else:
         report.lines.append(NO_TIMELINE.format(name=folder.name))
-    game_section(rec, report, main, tick_share.total if tick_share else 0.0)
-    wait_sections(rec, report, main, top, roles)
-    allocation_sections(rec, report, main, top)
+    tick_ms = tick_share.total if tick_share else 0.0
+    game_section(rec, report, main, tick_ms)
+    report.facts = report_facts(rec, main, tick_ms)
+    wait_sections(rec, report, main, top, roles, found, packages)
+    heaviest = allocation_sections(rec, report, main, top, packages)
+    pause = rec.counter("dotnet.gc.pause.time")
+    if pause and pause[0] >= FINDING_GC_PAUSE:
+        text = f"Garbage collection paused the game {100 * pause[0]:.1f}% of the time"
+        found.append((100 * pause[0], Finding(
+            text + (f"; the type allocated most was {heaviest[0]}, {heaviest[1]:,.0f} MB a second." if heaviest else
+                    ". `record --alloc` says who allocates."), "observed", round(100 * pause[0], 1), "%",
+            [Ref("type", heaviest[0])] if heaviest else [])))
     counters = _counter_rows(rec)
     report.section("Garbage collection and the runtime", Table(["Measure", "Average", "Worst"], counters) if counters
                    else "No counters were recorded.")
     others = sorted((t for t in rec.threads if t != main), key=lambda t: (-rec.threads[t][3], t))
-    rows = []
+    rows, refs = [], []
     for thread in others[:top]:
         cpu_ms = rec.threads[thread][3]
         if cpu_ms <= 0:
             continue
         shares = rec.by_owner(rec.thread_samples(thread))
-        busiest = max(shares.items(), key=lambda kv: (kv[1].cpu, kv[0].name))[0].name if shares else "-"
-        rows.append((rec.thread_label(thread), rec.thread_role(thread, roles) or "-", ms(cpu_ms),
-                     pct(cpu_ms, whole), busiest))
+        owner = max(shares.items(), key=lambda kv: (kv[1].cpu, kv[0].name))[0] if shares else None
+        role = rec.thread_role(thread, roles)
+        rows.append((rec.thread_label(thread), role or "-", ms(cpu_ms), pct(cpu_ms, whole), owner.name if owner else "-"))
+        refs.append(row_refs(c0=Ref("thread", rec.thread_label(thread)), c4=mod_ref(owner, packages)))
+        if whole and cpu_ms / whole >= FINDING_CORE_SHARE and len([f for f in found if f[1].refs and f[1].refs[0].kind == "thread"]) < 1:
+            found.append((100 * THREAD_POINTS * cpu_ms / whole, Finding(
+                f"{_sentence(role or rec.thread_label(thread))} kept {pct(cpu_ms, whole)} of one processor core busy, mostly "
+                f"{owner.name if owner else 'unknown code'}.", "observed", round(100 * cpu_ms / whole, 1), "%",
+                [r for r in (Ref("thread", rec.thread_label(thread)), mod_ref(owner, packages)) if r is not None])))
     if rows:
         report.section("Other threads running managed code",
                        "**Of one core** is the thread's time running managed code against the recording's length: near 100% keeps a "
                        "whole processor core busy. Names come from what a thread's stacks hold (perf-threads.json, then .NET's own).",
-                       Table(["Thread", "What it is", "Running managed code (ms)", "Of one core", "Mostly caused by"], rows))
+                       Table(["Thread", "What it is", "Running managed code (ms)", "Of one core", "Mostly caused by"], rows, refs=refs))
     outside = rec.in_phase(samples, phases, None)
     if outside:
         firsts = {}
@@ -910,7 +1119,68 @@ def summary_report(rec, folder, top, patch_lookup=None):
     if unknown:
         rows = [(name, ms(s.total)) for name, s in sorted(unknown.items(), key=lambda kv: (-kv[1].total, kv[0]))[:top]]
         report.section("Modules no mod or game file was matched to", Table(["Module", "ms, all threads"], rows, len(unknown)))
+    findings = _finding_list(found)
+    report.blocks.insert(0, Findings(findings) if findings else "Nothing stood out: no lock, stall, mod or thread passed the "
+                                                                "marks for the findings (docs/rimworld-perf.md).")
+    if keep_summary is not None:
+        keep_summary.update(summary_data(rec, folder, main, whole, tick_ms, mod_shares, packages, report.facts, findings))
     return report
+
+
+def summary_data(rec, folder, main, whole, tick_ms, mod_shares, packages, facts, findings):
+    """What the summary file keeps of one recording: enough for a list, a mod's cost and a home panel, without the index."""
+    def figure(name, at=0):
+        found = rec.counter(name)
+        return round(found[at], 3) if found else None
+    meta = rec.meta
+    return {"format": SUMMARY_FORMAT, "kit_version": __version__, "recording": folder.name, "label": meta.get("label", ""),
+            "recorded_at": meta.get("recorded_at", ""), "seconds": float(meta.get("seconds") or whole / 1000),
+            "context": {k: meta[k] for k in ("game_version", "save", "mods_loaded", "mods_active") if meta.get(k)},
+            "game": {"ticks_a_second": figure("rimworld.ticks"), "frames_a_second": figure("rimworld.frames"),
+                     "ms_a_tick": None if (v := ms_per_tick(rec, tick_ms, main)) is None else round(v, 4),
+                     "longest_frame_ms": figure("rimworld.frame.worst", 1), "speed": figure("rimworld.speed"),
+                     "pawns": figure("rimworld.pawns"), "maps": figure("rimworld.maps"),
+                     "gc_paused": figure("dotnet.gc.pause.time")},
+            "ticking_share": round(tick_ms / whole, 4) if whole else 0.0,
+            "mods": {name: round(share, 5) for name, share in sorted(mod_shares.items(), key=lambda kv: (-kv[1], kv[0]))},
+            "packages": {name: packages[name] for name in sorted(mod_shares) if name in packages},
+            "facts": [{"label": f.label, "value": f.value} for f in facts],
+            "findings": [finding_json(f) for f in findings], "timeline": rec.has_timeline,
+            "lock_events": meta.get("lock_events") == "yes", "allocation_events": meta.get("allocation_events") == "yes"}
+
+
+def write_summary(folder, summary):
+    """Writes the summary file beside the index, whole, stamped with the index it was made from."""
+    index = Path(folder) / INDEX_NAME
+    stamped = dict(summary, index_mtime=index.stat().st_mtime_ns if index.is_file() else 0)
+    fresh = Path(folder) / (SUMMARY_NAME + ".new")
+    fresh.write_text(json.dumps(stamped, indent=1, ensure_ascii=False), encoding="utf-8")
+    fresh.replace(Path(folder) / SUMMARY_NAME)
+    return stamped
+
+
+def read_summary(folder):
+    """The summary file when it is current (same format and index), else None."""
+    try:
+        found = json.loads((Path(folder) / SUMMARY_NAME).read_text(encoding="utf-8"))
+        index = Path(folder) / INDEX_NAME
+    except (OSError, ValueError):
+        return None
+    if not isinstance(found, dict) or found.get("format") != SUMMARY_FORMAT:
+        return None
+    if not index.is_file() or found.get("index_mtime") != index.stat().st_mtime_ns:
+        return None
+    return found
+
+
+def summary_of(folder, top=15, patch_lookup=None):
+    """A recording's summary, made and kept when it is missing or older than its index."""
+    found = read_summary(folder)
+    if found is not None:
+        return found
+    kept = {}
+    summary_report(Recording(Path(folder) / INDEX_NAME), Path(folder), top, patch_lookup, kept)
+    return write_summary(folder, kept)
 
 
 def mod_report(rec, folder, pattern, top):
@@ -929,10 +1199,13 @@ def mod_report(rec, folder, pattern, top):
         everywhere = sum(v for _, n, _, v in rec.samples if rec.label(n).kind == MOD and rec.label(n).name == name)
         section = report.section(name, f"Caused {ms(total)} ms on the main thread ({pct(total, whole)} of it), {ms(tick)} ms of it while "
                                         f"ticking; {ms(everywhere)} ms on all threads.")
-        rows, count = _method_rows(rec.inclusive_methods(samples, lambda o, p, n=name: o.kind == MOD and o.name == n), whole, top, show_owner=False)
-        section.blocks.append(Table(["Its methods (including what they call)", "ms", "Share of the main thread"], rows, count))
-        rows, count = _method_rows(rec.self_methods(mine), whole, top)
-        section.blocks.append(Table(["Where its time was spent", "Owner", "ms", "Share of the main thread"], rows, count))
+        rows, count, refs = _method_rows(rec.inclusive_methods(samples, lambda o, p, n=name: o.kind == MOD and o.name == n), whole,
+                                         top, show_owner=False)
+        section.blocks.append(Table(["Its methods (including what they call)", "ms", "Share of the main thread"], rows, count,
+                                    refs=refs))
+        rows, count, refs = _method_rows(rec.self_methods(mine), whole, top, packages=packages_of(rec))
+        section.blocks.append(Table(["Where its time was spent", "Owner", "ms", "Share of the main thread"], rows, count,
+                                    refs=refs))
     return report
 
 
@@ -980,6 +1253,7 @@ def compare_report(before, after, names, top):
     phases_before, owners_before, pause_before, tick_before = _shares(before)
     phases_after, owners_after, pause_after, tick_after = _shares(after)
     report = Report(f"rimworld-perf: {names[0]} against {names[1]}", [SHARE_NOTE, CAVEAT])
+    report.facts = [Fact("Before", names[0]), Fact("After", names[1])]
     rows, unlike = _context_rows(before, after)
     if unlike:
         report.lines.insert(0, "**Not like for like: " + "; ".join(unlike) + ".** Differences below may come from that, not from a "
@@ -991,9 +1265,11 @@ def compare_report(before, after, names, top):
          points(100 * (phases_after.get(k, 0) - phases_before.get(k, 0)))) for k in keys]))
     owners = set(owners_before) | set(owners_after)
     changes = sorted(owners, key=lambda o: (-abs(owners_after.get(o, 0) - owners_before.get(o, 0)), o.name))
+    packages = {**packages_of(before), **packages_of(after)}
     report.section("Who caused the ticking time, largest changes first", Table(["Caused by", "Kind", "Before", "After", "Change (points)"], [
         (o.name, o.kind, f"{100 * owners_before.get(o, 0):.1f}%", f"{100 * owners_after.get(o, 0):.1f}%",
-         points(100 * (owners_after.get(o, 0) - owners_before.get(o, 0)))) for o in changes[:top]], len(changes)))
+         points(100 * (owners_after.get(o, 0) - owners_before.get(o, 0)))) for o in changes[:top]], len(changes),
+        refs=[row_refs(c0=mod_ref(o, packages)) for o in changes[:top]]))
     if tick_before is not None and tick_after is not None:
         report.lines.append(f"**The main thread's ticking took {tick_before:,.2f} ms a tick, then {tick_after:,.2f} ms** "
                             f"({points(100 * (tick_after - tick_before) / tick_before) if tick_before else '?'}%), from the game's "
@@ -1041,7 +1317,7 @@ def trend_report(root, pattern, top):
         raise PerfError(f"No recordings in {root}. Make one with: rimworld-perf record")
     wanted = pattern.lower()
     phases, ticking = perf.phases()
-    rows, shares, per_mod, earlier_mod = [], [], {}, {}
+    rows, refs, shares, per_mod, earlier_mod, packages = [], [], [], {}, {}, {}
     for position, folder in enumerate(found):
         rec = Recording(folder / INDEX_NAME)
         main = rec.main_thread()
@@ -1053,8 +1329,11 @@ def trend_report(root, pattern, top):
         per_tick = ms_per_tick(rec, tick_total, main)
         ours_per_tick = f"{per_tick * share / 100:.3f}" if per_tick is not None else "-"
         busiest = max(mods.items(), key=lambda kv: (kv[1], kv[0]))[0] if mods else "-"
+        packages.update(packages_of(rec))
         rows.append((folder.name, rec.meta.get("label", ""), pct(tick_total, rec.duration_ms(main)), f"{share:.1f}%", ours_per_tick,
                      busiest, trend_note(share, shares)))
+        refs.append(row_refs(c0=Ref("recording", folder.name),
+                             c5=Ref("mod", busiest, package=packages.get(busiest, "")) if mods else None))
         shares.append(share)
         mod_shares = {name: 100 * value / tick_total for name, value in mods.items()} if tick_total else {}
         if position < len(found) - 1:
@@ -1066,8 +1345,12 @@ def trend_report(root, pattern, top):
         f"{len(found)} recordings, oldest first: the share of ticking the mods matching \"{pattern}\" caused (the innermost mod on "
         f"the stack), marked where it moved {TREND_POINTS:g} points or more from the earlier recordings' middle value. Recordings "
         "differ in what was on screen, the save and the speed: a mark is a place to look, not a verdict.", CAVEAT])
-    report.section("Recordings", Table(["Recording", "Label", "Ticking (of the main thread)", "Their share of ticking",
-                                        "Their ms a tick", "Busiest of them", "Note"], rows))
+    report.section("Recordings", Chart(f"The share of ticking {pattern} caused",
+                                       "Each recording kept, oldest first: the share of ticking the mods followed caused.",
+                                       [row[1] or row[0] for row in rows], [ChartSeries("Their share of ticking", shares)],
+                                       kind="line", unit="%", value_label="Share of ticking"),
+                   Table(["Recording", "Label", "Ticking (of the main thread)", "Their share of ticking",
+                          "Their ms a tick", "Busiest of them", "Note"], rows, refs=refs))
     if len(found) > 1:
         names = sorted(set(per_mod) | set(earlier_mod), key=lambda n: (-(per_mod.get(n, 0.0)), n))
         rows = []
@@ -1076,7 +1359,8 @@ def trend_report(root, pattern, top):
             middle = _median(earlier_mod.get(name, [])) or 0.0
             rows.append((name, f"{newest:.1f}%", f"{middle:.1f}%", points(newest - middle)))
         report.section("Each of them in the newest recording, against the earlier middle",
-                       Table(["Mod", "Newest", "Earlier middle", "Change (points)"], rows[:top], len(rows)))
+                       Table(["Mod", "Newest", "Earlier middle", "Change (points)"], rows[:top], len(rows),
+                             refs=[row_refs(c0=Ref("mod", row[0], package=packages.get(row[0], ""))) for row in rows[:top]]))
     return report
 
 
@@ -1145,16 +1429,28 @@ def unpack_report(args, environ, settings_file):
     return report, {"files": [str(p) for p in written]}
 
 
-def list_report(root):
+def list_report(root, patch_lookup=None):
+    """Every recording, newest first, with its summary (made and kept the first time it is listed). Returns (report, data)."""
     found = recordings(root)
     report = Report("rimworld-perf: recordings", [f"{len(found)} recordings in {root}."])
-    rows = []
+    rows, refs, summaries = [], [], []
     for folder in reversed(found):
-        meta = derived.read_meta(folder / INDEX_NAME)
-        rows.append((folder.name, meta.get("recorded_at", "?"), meta.get("seconds", "?"), meta.get("label", "")))
+        try:
+            summary = summary_of(folder, patch_lookup=patch_lookup)
+        except (SamplingError, sqlite3.Error, OSError, ValueError) as error:
+            meta = derived.read_meta(folder / INDEX_NAME)
+            summary = {"recording": folder.name, "label": meta.get("label", ""), "recorded_at": meta.get("recorded_at", ""),
+                       "seconds": meta.get("seconds", ""), "error": str(error), "findings": [], "game": {}}
+        summaries.append(summary)
+        ticks = (summary.get("game") or {}).get("ticks_a_second")
+        first = (summary.get("findings") or [{}])[0].get("text", "-")
+        rows.append((folder.name, summary.get("recorded_at", "?"), summary.get("seconds", "?"), summary.get("label", ""),
+                     f"{ticks:,.0f}" if ticks else "-", first))
+        refs.append(row_refs(c0=Ref("recording", folder.name)))
     if rows:
-        report.section("Newest first", Table(["Recording", "Recorded at", "Seconds", "Label"], rows))
-    return report
+        report.section("Newest first", Table(["Recording", "Recorded at", "Seconds", "Label", "Ticks a second", "What matters most"],
+                                             rows, refs=refs))
+    return report, {"recordings": summaries}
 
 
 # ---- Running ----
@@ -1469,7 +1765,7 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
             if data.get("ok") is False:
                 code = EXIT_FAILED
         elif args.report == "list":
-            report = list_report(root)
+            report, data = list_report(root, patch_lookup_for(args, environ, settings_file))
             snap.list_sections(report, *snap.roots(args.cache, environ, settings_file))
             watches = pw.summary_rows(pw.root(args.cache, environ, settings_file))
             if watches:
@@ -1527,7 +1823,10 @@ def main(argv=None, settings_file=None, environ=None, out=None, run=subprocess.r
                 folder, notes = _index(args, root, environ, settings_file, now or datetime.now())
             else:
                 folder = find(root, args.recording)
-            report = summary_report(Recording(folder / INDEX_NAME), folder, args.top, patch_lookup_for(args, environ, settings_file))
+            kept = {}
+            report = summary_report(Recording(folder / INDEX_NAME), folder, args.top, patch_lookup_for(args, environ, settings_file),
+                                    kept)
+            data = {"recording": folder.name, "summary": write_summary(folder, kept)}
             for note in notes:
                 if note not in report.lines:
                     report.lines.insert(1, note)
@@ -1554,8 +1853,8 @@ LOOK_NOTE = ("Takes a Windows snapshot of the running game (a pause of about hal
 # Only the reports that run another program attach to the game, and each says how in its own note; the rest read files (1.107.0).
 MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
             "reports": {
-    "report": {"question": "Where does my game spend its time, and which mods cause it?"},
-    "record": {"effect": RUNS, "question": "What is my running game doing right now?",
+    "report": {"question": "Where does my game spend its time, and which mods cause it?", "surface": PERFORMANCE_SURFACE},
+    "record": {"effect": RUNS, "question": "What is my running game doing right now?", "surface": PERFORMANCE_SURFACE,
                "note": "Attaches Microsoft's dotnet-trace and dotnet-counters to the running game; it changes nothing in it."},
     "index": {"question": "What does a trace I recorded by hand say?"},
     "pack": {"effect": WRITES, "note": "With --apply, packs each recording's trace and each heap's own files with zstd in the "
@@ -1563,12 +1862,15 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
                                        "only says."},
     "unpack": {"effect": WRITES, "note": "Writes one recording's trace or one heap's .gcdump out plain beside its packed copy, in "
                                          "the kit's cache; never writes over a file."},
-    "mod": {"question": "What does one mod cost while the game runs?"},
-    "callers": {"question": "Which code calls a slow method, and which mods lead to it?"},
-    "reindex": {"effect": RUNS, "note": "Runs Microsoft's dotnet-trace convert on a recording's kept trace (a file; no program is "
+    "mod": {"question": "What does one mod cost while the game runs?", "surface": PERFORMANCE_SURFACE},
+    "callers": {"question": "Which code calls a slow method, and which mods lead to it?", "surface": PERFORMANCE_SURFACE},
+    "list": {"question": "Which recordings and snapshots are kept?", "surface": PERFORMANCE_SURFACE,
+             "note": "Each recording with its summary file (its figures, findings and mods' shares), made in the kit's cache the "
+                     "first time a recording is listed after 1.152.0."},
+    "reindex": {"effect": RUNS, "surface": PERFORMANCE_SURFACE, "note": "Runs Microsoft's dotnet-trace convert on a recording's kept trace (a file; no program is "
                                         "attached) and writes a new index for it in the kit's cache; the trace is untouched."},
-    "compare": {"question": "Did a change make the game faster?"},
-    "trend": {"question": "Have our own mods grown costlier from one recording to the next?"},
+    "compare": {"question": "Did a change make the game faster?", "surface": PERFORMANCE_SURFACE},
+    "trend": {"question": "Have our own mods grown costlier from one recording to the next?", "surface": PERFORMANCE_SURFACE},
     "stack": {"effect": RUNS, "question": "My game froze: where is it stuck, and whose code is it?",
               "note": "Attaches Microsoft's dotnet-stack to the running game a few times; it changes nothing in it."},
     "stack-report": {"question": "What did the stack snapshots show?"},

@@ -57,7 +57,7 @@ reports and options ([command-docs](command-docs.md)); the gate fails until it i
 | `envelope` | The shape's version |
 | `tool` | The command that made it |
 | `kit_version` | The kit that made it |
-| `report` | The report: `format`, `title`, `facts` (1.48.0: short labelled values, each `label` and `value`, saying where it came from, such as the save it read; a program shows them as a strip, Markdown as one line), `lines`, `blocks` and `sections`. A block's `type` is `text`, `bullets`, `table` (with `values`, the number each cell sorts by), `code`, `chart` or `globe` |
+| `report` | The report: `format`, `title`, `facts` (1.48.0: short labelled values, each `label` and `value`, saying where it came from, such as the save it read; a program shows them as a strip, Markdown as one line), `lines`, `blocks` and `sections`. A block's `type` is `text`, `bullets`, `table` (with `values`, the number each cell sorts by, and from 1.152.0 `refs`), `code`, `chart`, `globe` or `findings` (1.152.0) |
 | `data` | Anything else the tool offers; empty when it has nothing. `rimworld-save` and `rimworld-defs` give `index` and `built` (`rimworld-save` also `elements`, how many of each kind the index holds when it was built just now), `rimworld-log` gives every signature |
 
 Redaction reaches every string in `report` and `data`.
@@ -76,6 +76,25 @@ reader without it loses nothing. Markdown shows it as text bars, or as a table w
 
 A `role` says what a series means, never its colour: `accent`, `observed`, `comparison`, `risk`, `success` or `neutral`.
 A program colours each role from its own theme.
+
+**Refs** (1.152.0) say what a table row or a finding is about, so a program can link it to its own pages without reading the
+words. A table's `refs` hold one list per row (present only when the tool gave any): each ref has `column` (which cell it is
+about), `kind`, `id`, and where known `of` and `of_kind` (who owns a method or a type: a mod's name and `mod`, or `game`,
+`engine`, `runtime`, `library`) and `package` (a mod's package ID). A program ignores a kind it has no page for.
+
+| `kind` | `id` is |
+| --- | --- |
+| `mod` | The mod's name as the tool knows it |
+| `method` | `Namespace.Type.Method` |
+| `type` | A type's full name |
+| `thread` | The thread's name in the report |
+| `recording` | A recording's ID |
+| `day` | `YYYY-MM-DD` |
+
+**A findings block** (1.152.0) holds the few things that matter most, most important first, for a program to show before
+anything else: `items`, each with `text` (one sentence), `role` (as for charts: `risk` for something to act on), `value` and
+`unit` (the figure it was ranked by, or null) and `refs`. Markdown shows them as bullets. Every finding is also stated in a table
+or a line of the report.
 
 **A globe block** (1.7.0) is a planet of tiles a program can draw and explore; Markdown says what it holds in one line, and
 the report's tables list what it shows. Arrays are objects of `dtype` (`u8`, `u16`, `i32`, `f32`), `count` and `data`
@@ -111,7 +130,7 @@ and `reports`. Each report has:
 | `when` | The flag that brings the effect on; null when it always applies |
 | `note` | Anything else a caller should know, or null |
 | `question` | The report as a person would ask for it, or null |
-| `surface` | What the report mostly is, when a program should give it a page of its own: `globe` (1.7.0), `textures` (1.21.0), `changes` (1.24.0), `timeline` and `settings` (1.30.0), `connections` (1.33.0), `log` (1.35.0), `patch-targets` (1.37.1), `memory-watch` (1.47.0), `other-code` and `updates` (1.49.0; rimworld-archive's `snapshot` joins `updates` in 1.51.0), `mod-list` (1.72.0), `repo-status` (1.89.0), `feeds` (1.90.0), `definitions` (1.140.0: rimworld-defs' `who`, `show` and `patched`, one definition looked up by name), or null |
+| `surface` | What the report mostly is, when a program should give it a page of its own: `globe` (1.7.0), `textures` (1.21.0), `changes` (1.24.0), `timeline` and `settings` (1.30.0), `connections` (1.33.0), `log` (1.35.0), `patch-targets` (1.37.1), `memory-watch` (1.47.0), `other-code` and `updates` (1.49.0; rimworld-archive's `snapshot` joins `updates` in 1.51.0), `mod-list` (1.72.0), `repo-status` (1.89.0), `feeds` (1.90.0), `definitions` (1.140.0: rimworld-defs' `who`, `show` and `patched`, one definition looked up by name), `performance` (1.152.0: rimworld-perf's `record`, `report`, `list`, `callers`, `mod`, `compare`, `trend` and `reindex`, for D'thorga Companion's Performance page), or null |
 | `waits` | The name, under the report's JSON `data`, of the count of what waits on the person, when the report has one: `waiting` on `rimworld-save checks` (1.129.0), so D'thorga Companion shows it beside its Reports page and on Home; else null |
 | `scope` | `machine` when the report reads this PC as a whole, not one repository, so a program may offer it beside any game's own reports with no repository named: `crash-dump`, `windows-dumps` and `zeroed` (1.139.0); else null |
 | `options` | `name`, `positional`, `kind` (`flag`, `integer`, `number` or `text`), `required`, `repeatable`, `choices`, `default`, `metavar` (1.106.0: the placeholder its usage shows, such as `KEY=VALUE`, or null) and `help`, read from the command's own parser |

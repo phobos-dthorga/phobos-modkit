@@ -14,6 +14,7 @@ import csv
 import io
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -174,13 +175,15 @@ HEAP_FRAGMENTATION = "dotnet.gc.last_collection.heap.fragmentation.size"  # free
 COUNTERS_SECONDS = 4                # a short reading: dotnet-counters' first report comes after its first interval
 
 
-def start_counters(pid, file, tool, seconds, interval, log, popen=subprocess.Popen):
+def start_counters(pid, file, tool, seconds, interval, log, popen=subprocess.Popen, counters=None):
     """Start dotnet-counters writing the runtime's counters to file every `interval` seconds for `seconds`; returns the process.
+    `counters` names the meters to read (System.Runtime alone when None); a meter the program does not publish is left empty.
 
     It stops by itself after `seconds`, when the program closes, or on Ctrl+C in the same console, and closes its file each way.
     """
     return popen([str(tool), "collect", "-p", str(pid), "--format", "json", "-o", str(file), "--refresh-interval", str(interval),
-                  "--duration", duration_text(seconds)], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+                  "--duration", duration_text(seconds), *(["--counters", ",".join(counters)] if counters else [])],
+                 stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
 
 
 def counters_once(pid, file, tool, run=subprocess.run, seconds=COUNTERS_SECONDS):
@@ -202,8 +205,19 @@ def _epoch(stamp):
     return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
 
 
+_RATE = re.compile(r"/ (\d+(?:\.\d+)?) sec\)$")
+
+
+def _per_second(name, value):
+    """A rate dotnet-counters wrote over its refresh interval ("{tick} / 5 sec") as a rate a second (1.152.0)."""
+    found = _RATE.search(name)
+    seconds = float(found.group(1)) if found else 1.0
+    return value / seconds if seconds and seconds != 1.0 else value
+
+
 def counter_events(path):
-    """[(seconds since 1970, name without its unit, tags, value)] from dotnet-counters' JSON file, in file order.
+    """[(seconds since 1970, name without its unit, tags, value)] from dotnet-counters' JSON file, in file order. A rate over
+    the refresh interval is given a second.
 
     The file is read even when it was cut off mid-write (the tool stopped hard or the program closed): every whole event before
     the cut counts. A missing or empty file gives [].
@@ -227,8 +241,9 @@ def counter_events(path):
         except ValueError:
             break
         try:
-            found.append((_epoch(event["timestamp"]), str(event["name"]).split(" (", 1)[0], event.get("tags") or "",
-                          float(event["value"])))
+            name = str(event["name"])
+            found.append((_epoch(event["timestamp"]), name.split(" (", 1)[0], event.get("tags") or "",
+                          _per_second(name, float(event["value"]))))
         except (KeyError, TypeError, ValueError):
             continue
     return found

@@ -3,7 +3,9 @@
 A report has a title, facts (short labelled values saying where it came from, such as the save it read), intro lines
 (one paragraph, one line each), further opening blocks, and sections. A block is a
 paragraph (a plain string), Bullets, a Table, Code, a Chart (text bars in Markdown, a spec a program can draw in
-JSON) or a Globe (a planet of tiles a program can draw; a line saying what it holds in Markdown). Redaction, such as hiding the home folder, applies to every
+JSON), a Globe (a planet of tiles a program can draw; a line saying what it holds in Markdown) or Findings (the few things
+that matter most, ranked; bullets in Markdown). A table's rows and a finding may carry Refs (1.152.0): what a cell or a
+finding is about, by kind and id, so a program can link it to its own pages without reading the words. Redaction, such as hiding the home folder, applies to every
 piece of text when the report is rendered, so no tool can forget a field.
 
     report = Report("Things")
@@ -32,6 +34,27 @@ NOTHING = "None."
 _NUMBER = re.compile(r"^([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s?(%|ms|s|KB|MB|GB)?$")
 
 
+# What a Ref may be about (1.152.0). A program links each kind to its own page, and ignores a kind it has no page for.
+REF_KINDS = ("mod", "method", "type", "thread", "recording", "day")
+
+
+@dataclass(frozen=True)
+class Ref:
+    """What a table cell or a finding is about: `kind` (REF_KINDS) and `id`, its full name as the tool knows it (a mod's name,
+    a method's Namespace.Type.Method, a type's full name, a recording's ID, a day as YYYY-MM-DD). `of` and `of_kind` say who
+    owns a method or a type (a mod's name and "mod", or "game", "engine", "runtime", "library"); `package` is a mod's package
+    ID where the tool knows it."""
+    kind: str
+    id: str
+    of: str = ""
+    of_kind: str = ""
+    package: str = ""
+
+    def __post_init__(self):
+        if self.kind not in REF_KINDS:
+            raise ValueError(f"a ref's kind must be one of {', '.join(REF_KINDS)}, not {self.kind!r}")
+
+
 @dataclass
 class Table:
     headers: list
@@ -39,6 +62,7 @@ class Table:
     total: int = None                             # rows in all, when more exist than are shown
     widths: dict = field(default_factory=dict)    # column position -> character limit for its cells
     more: str = "raise --top to see more"         # what to do when rows were cut
+    refs: list = None                             # per row, {column position: Ref} (1.152.0); None when no row has any
 
 
 @dataclass
@@ -50,6 +74,28 @@ class Bullets:
 class Code:
     lines: list
     language: str = "text"
+
+
+@dataclass
+class Finding:
+    """One thing that matters, in a sentence: `role` as for charts (risk, observed, success...), `value` and `unit` the
+    figure it was ranked by, where it has one, and `refs` what it is about."""
+    text: str
+    role: str = "observed"
+    value: float = None
+    unit: str = ""
+    refs: list = field(default_factory=list)
+
+    def __post_init__(self):
+        if self.role not in CHART_ROLES:
+            raise ValueError(f"a finding's role must be one of {', '.join(CHART_ROLES)}, not {self.role!r}")
+
+
+@dataclass
+class Findings:
+    """The few things that matter most, most important first (1.152.0): a program shows them first and links each by its
+    refs; Markdown shows bullets. Every finding should also be in a table or a line of the report."""
+    items: list
 
 
 # What a chart's series or line means, so a program can colour it from its own theme. Never a colour itself.
@@ -352,6 +398,8 @@ def _globe_lines(globe, redact):
 
 
 def _block_lines(block, redact):
+    if isinstance(block, Findings):
+        return [f"- {redact(str(item.text))}" for item in block.items] or [NOTHING]
     if isinstance(block, Chart):
         return _chart_lines(block, redact)
     if isinstance(block, Globe):
@@ -454,7 +502,27 @@ def _globe_json(globe, redact):
                        for label in globe.labels]}
 
 
+def _ref_json(ref, redact, column=None):
+    found = {"kind": ref.kind, "id": redact(ref.id)}
+    if column is not None:
+        found["column"] = column
+    for key in ("of", "of_kind", "package"):
+        if getattr(ref, key):
+            found[key] = redact(getattr(ref, key))
+    return found
+
+
+def finding_json(finding, redact=None):
+    """One Finding as the JSON a findings block holds, for a tool that keeps findings of its own (1.152.0)."""
+    redact = redact or keep
+    return {"text": redact(str(finding.text)), "role": finding.role,
+            "value": None if finding.value is None else float(finding.value), "unit": finding.unit,
+            "refs": [_ref_json(r, redact) for r in finding.refs]}
+
+
 def _block_json(block, redact):
+    if isinstance(block, Findings):
+        return {"type": "findings", "items": [finding_json(f, redact) for f in block.items]}
     if isinstance(block, Globe):
         return _globe_json(block, redact)
     if isinstance(block, str):
@@ -462,10 +530,16 @@ def _block_json(block, redact):
     if isinstance(block, Bullets):
         return {"type": "bullets", "items": [redact(str(i)) for i in block.items]}
     if isinstance(block, Table):
-        return {"type": "table", "headers": [redact(str(h)) for h in block.headers],
-                "rows": [[_scrub(v, redact) for v in row] for row in block.rows],
-                "values": _table_values(block),
-                "total": block.total if block.total is not None else len(block.rows)}
+        found = {"type": "table", "headers": [redact(str(h)) for h in block.headers],
+                 "rows": [[_scrub(v, redact) for v in row] for row in block.rows],
+                 "values": _table_values(block),
+                 "total": block.total if block.total is not None else len(block.rows)}
+        if block.refs is not None:
+            if len(block.refs) != len(block.rows):
+                raise ValueError(f"a table has {len(block.rows)} rows but refs for {len(block.refs)}")
+            found["refs"] = [[_ref_json(ref, redact, column) for column, ref in sorted((row or {}).items())]
+                             for row in block.refs]
+        return found
     if isinstance(block, Code):
         return {"type": "code", "language": block.language, "lines": [redact(str(l)) for l in block.lines]}
     if isinstance(block, Chart):
