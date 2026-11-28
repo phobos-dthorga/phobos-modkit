@@ -184,11 +184,20 @@ class Part:
 
 @dataclass(frozen=True)
 class OrderRule:
-    """A note that must come before another on the same thing: before each `then`, a `first` since the last `then`."""
+    """A note that must come before another on the same thing: before each `then`, a `first` since the last `then`. With `since`
+    (1.154.0), notes from older builds than that version are left out: a rule a fix made true from that build on."""
     name: str
     row: str
     first: Item
     then: Item
+    since: tuple = ()
+
+    def counts(self, note):
+        """Whether a note is from a build the rule holds for: any, without `since`; a note that names no version is kept."""
+        if not self.since:
+            return True
+        version = version_tuple(note.version) if note.version else None
+        return version is None or version >= self.since
 
 
 @dataclass
@@ -351,8 +360,13 @@ def parse_order(config):
         where = f" order rule {number + 1}"
         if not isinstance(rule, dict) or "first" not in rule or "then" not in rule:
             raise TestPassError(f"{CONFIG}{where}: an order rule names \"first\" and \"then\"")
+        since = ()
+        if rule.get("since") is not None:
+            since = version_tuple(rule["since"]) or ()
+            if not since:
+                raise TestPassError(f"{CONFIG}{where}: \"since\" is a version, such as \"0.197.0\"")
         rules.append(OrderRule(str(rule.get("name") or f"rule {number + 1}"), str(rule.get("row") or ""),
-                               parse_item(rule["first"], where), parse_item(rule["then"], where)))
+                               parse_item(rule["first"], where), parse_item(rule["then"], where), since))
     return rules
 
 
@@ -609,7 +623,7 @@ def check_order(rules, notes):
     for rule in rules:
         by_thing = {}
         for note in notes:
-            if rule.first.matches(note) or rule.then.matches(note):
+            if (rule.first.matches(note) or rule.then.matches(note)) and rule.counts(note):
                 if not note.on:
                     unchecked += 1
                     continue

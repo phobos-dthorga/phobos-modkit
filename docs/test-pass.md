@@ -63,7 +63,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `game` | Optional: the game adapter that knows where the mod writes its notes (`rimworld`) |
 | `rows` | Each row's id, and its evidence: a list (the whole row), or `{"parts": {"name": [...]}}` for a row in parts |
 | `prefixes` | Keys the mod builds at run time, by their start, with what follows |
-| `order` | Rules on the order of notes on one thing: `{"name", "row", "first": evidence, "then": evidence}` |
+| `order` | Rules on the order of notes on one thing: `{"name", "row", "first": evidence, "then": evidence}`, and since 1.154.0 an optional `"since": "0.197.0"`: notes from older builds of their mod are left out, for a rule a fix made true from that build on (a note that names no version is kept) |
 | `shared` | Keys with nothing narrowing them that stand for more than one row on purpose, with why |
 | `unrowed` | Keys that need no row, with why |
 | `versionNames` | How each mod is written in rows (`{"D'thorga Framework": "Framework"}`, or a list), for sightings older than the row |

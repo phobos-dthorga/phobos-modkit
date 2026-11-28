@@ -410,6 +410,18 @@ class Judging(unittest.TestCase):
                          [("Abrams1", "2026-11-19T12:00:00Z"), ("Hind1", "2026-11-19T09:30:00Z")])
         self.assertEqual(evidence.unchecked_order, 1)
 
+    def test_an_order_rule_since_a_version_leaves_older_builds_out(self):
+        # 1.154.0: the Abrams's refusal of 19 Nov 2026 was noted by a build before the fix (0.173.2) that notes the warning first after a load
+        # (0.197.0); the rule holds from that build on, and a later refusal with no warning is still found.
+        rule = {"name": "warn first", "row": "1", "since": "0.197.0", "first": {"key": "stage", "variant": "barely"},
+                "then": {"key": "stage", "variant": "too weak"}}
+        seen = [rich("stage", "2026-11-19T11:42:00Z", on="Abrams1", variant="too weak", version="0.173.2"),
+                rich("stage", "2026-11-21T10:00:00Z", on="Abrams1", variant="too weak", version="0.200.0")]
+        _, evidence = self.evidence({"1": ["stage"]}, seen, order=[rule])
+        self.assertEqual([(p.on, p.time) for p in evidence.order], [("Abrams1", "2026-11-21T10:00:00Z")])
+        with self.assertRaises(testpass.TestPassError):
+            testpass.parse_order(config({"1": ["stage"]}, order=[{**rule, "since": "soon"}]))
+
     def test_breadth_counts_kinds_or_the_detail_before_its_colon(self):
         _, evidence = self.evidence({"1": ["k"]}, [rich("k", "2026-11-19T10:00:00Z", kind="M1A2Abrams"),
                                                    rich("k", "2026-11-19T11:00:00Z", detail="L-ATV: wet"),

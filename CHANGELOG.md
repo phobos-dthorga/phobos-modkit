@@ -4,6 +4,15 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.154.0] - 2026-11-28
+
+### Added
+
+- **test-pass order rules can start from a version** (the owner's card of 28 Nov 2026, "Order rules start from a version"): an order
+  rule's `"since"` leaves out notes from older builds of their mod, so a false alarm a later fix ended (phobos-rimworld's row 69: a
+  refusal noted after a load, before the build that notes the warning standing before it) stops being reported, while a new one
+  still is. A note that names no version is kept. How: [test-pass](docs/test-pass.md).
+
 ## [1.153.0] - 2026-11-28
 
 ### Added
