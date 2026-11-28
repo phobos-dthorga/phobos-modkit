@@ -35,7 +35,9 @@ _NUMBER = re.compile(r"^([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s?(%|ms|s|KB
 
 
 # What a Ref may be about (1.152.0). A program links each kind to its own page, and ignores a kind it has no page for.
-REF_KINDS = ("mod", "method", "type", "thread", "recording", "day", "signature")   # signature: a log message's group (1.153.0)
+# signature: a log message's group (1.153.0); thing: a thing in a save, by its ID, and place: a part of a save, by its element
+# path (1.154.0)
+REF_KINDS = ("mod", "method", "type", "thread", "recording", "day", "signature", "thing", "place")
 
 
 @dataclass(frozen=True)

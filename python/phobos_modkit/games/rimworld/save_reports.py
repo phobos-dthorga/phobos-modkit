@@ -6,7 +6,7 @@ and say how many there were in all.
 from __future__ import annotations
 
 from ...query import Filters, count as _count, like, rows as _rows
-from ...report import Report, Section, Table
+from ...report import Ref, Report, Section, Table
 
 TICKS_PER_DAY = 60000          # RimWorld: one in-game day
 TICKS_PER_YEAR = 60 * TICKS_PER_DAY
@@ -62,8 +62,11 @@ def schema(conn, under="", depth=None, top=60):
     report = Report(f"Element paths{' under ' + under if under else ''}")
     report.lines.append(f"Paths up to {depth} levels {'below ' + under if under else 'from the root'}. "
                         f"Narrow with --under and --depth.")
-    report.sections.append(_section("Paths", ["Count", "Path"], _rows(conn, sql, f.params, top),
-                                   _count(conn, sql, f.params)))
+    rows = _rows(conn, sql, f.params, top)
+    # Each path is a place a program can open a level further (1.154.0), and the data gives them for a tree.
+    report.sections.append(Section("Paths", [Table(["Count", "Path"], rows, _count(conn, sql, f.params),
+                                                   refs=[{1: Ref("place", path)} for _, path in rows])]))
+    report.extra_data = {"under": under, "paths": [{"path": path, "count": count} for count, path in rows]}
     return report
 
 
@@ -145,6 +148,25 @@ def hediffs(conn, pawn=None, def_=None, top=50):
     return report
 
 
+MAX_CHAIN = 50                 # things holding things, at most, before a chain is cut
+
+
+def holder_chain(conn, row_id):
+    """A thing and every thing holding it, innermost first: rows of ID, def, class, stack, quality, hit points, faction, map,
+    x, z and its element path."""
+    chain, current = [], row_id
+    while current is not None and len(chain) < MAX_CHAIN:
+        row = conn.execute("""SELECT t.thing_id, t.def, t.class, t.stack, t.quality, t.hit_points, t.faction,
+                                     t.map, t.pos_x, t.pos_z, e.path, t.holder
+                              FROM thing t JOIN element_path e ON e.id = t.path_id WHERE t.id = ?""",
+                           (current,)).fetchone()
+        if row is None:
+            break
+        chain.append(row[:-1])
+        current = row[-1]
+    return chain
+
+
 def find(conn, thing_id, top=20):
     """Things by their ID (Steel12345, ChunkA8061017), each with the chain of things holding it."""
     f = Filters()
@@ -154,19 +176,77 @@ def find(conn, thing_id, top=20):
     if not found:
         report.lines.append("No thing has that ID. IDs join the def and a number, as in Steel12345.")
     for (row_id,) in found:
-        chain, current = [], row_id
-        while current is not None and len(chain) < 50:
-            row = conn.execute("""SELECT t.thing_id, t.def, t.class, t.stack, t.quality, t.hit_points, t.faction,
-                                         t.map, t.pos_x, t.pos_z, e.path, t.holder
-                                  FROM thing t JOIN element_path e ON e.id = t.path_id WHERE t.id = ?""",
-                               (current,)).fetchone()
-            if row is None:
-                break
-            chain.append(row[:-1])
-            current = row[-1]
-        report.sections.append(_section(f"{chain[0][0]} and what holds it",
-                                       ["ID", "Def", "Class", "Stack", "Quality", "Hit points", "Faction", "Map",
-                                        "x", "z", "Element path"], chain))
+        chain = holder_chain(conn, row_id)
+        report.sections.append(Section(f"{chain[0][0]} and what holds it", [Table(
+            ["ID", "Def", "Class", "Stack", "Quality", "Hit points", "Faction", "Map", "x", "z", "Element path"], chain,
+            refs=[{0: Ref("thing", row[0]), 10: Ref("place", row[10])} for row in chain])]))
+    return report
+
+
+SEARCH_TOP = 30                # rows of each kind a search lists
+
+
+def _pattern(text):
+    """A search's words as a pattern: as written when they hold a wildcard, else anywhere in the name."""
+    text = text.strip()
+    return text if any(c in text for c in "*?") else f"*{text}*"
+
+
+def _found(conn, sql, params, top):
+    """(rows up to top, how many in all) for one of a search's kinds."""
+    return _rows(conn, sql, params, top), _count(conn, sql, params)
+
+
+def search(conn, text, top=SEARCH_TOP):
+    """Anything in the save whose ID, kind or name matches (1.154.0): people and animals by name, things by ID, kinds of
+    thing with how many, places on the world map, and parts of the save by element path. Each row says what it is about, so a
+    program can open it."""
+    pattern = _pattern(text)
+    report = Report(f"In this save: {text}")
+    f = Filters()
+    f.text("name", pattern)
+    pawns, pawn_total = _found(conn, f"""SELECT name, thing_id, race, COALESCE(faction_name, ''), COALESCE(place, '')
+                                         FROM pawn_view{f.where} ORDER BY name""", f.params, top)
+    f = Filters()
+    f.text("t.thing_id", pattern)
+    things, thing_total = _found(conn, f"""SELECT t.thing_id, t.def, COALESCE(pl.place, ''), COALESCE(h.thing_id, '')
+                                           FROM thing t LEFT JOIN thing_place pl ON pl.id = t.id
+                                           LEFT JOIN thing h ON h.id = t.holder{f.where} ORDER BY t.thing_id""",
+                                 f.params, top)
+    f = Filters()
+    f.text("def", pattern)
+    kinds, kind_total = _found(conn, f"SELECT def, COUNT(*) FROM thing{f.where} GROUP BY def ORDER BY COUNT(*) DESC, def",
+                               f.params, top)
+    f = Filters()
+    f.text("w.name", pattern, "w.def")
+    places, place_total = _found(conn, f"""SELECT COALESCE(w.name, ''), w.def, w.object_id, w.tile FROM world_object w{f.where}
+                                           ORDER BY w.name, w.def""", f.params, top)
+    f = Filters()
+    f.text("path", pattern)
+    parts, part_total = _found(conn, f"SELECT path, count FROM element_path{f.where} ORDER BY depth, path", f.params, top)
+    found = pawn_total + thing_total + kind_total + place_total + part_total
+    if found:
+        report.lines.append(f"Searched names, IDs, kinds, places on the world map and the save's parts for \"{pattern}\" (* "
+                            "and ? are wildcards; without one, the words may be anywhere).")
+    else:
+        report.lines.append(f"Nothing in this save matches \"{pattern}\". IDs join the kind and a number, as in Steel12345.")
+    if pawns:
+        report.sections.append(Section("People and animals", [Table(
+            ["Name", "ID", "Race", "Faction", "Place"], pawns, pawn_total,
+            refs=[{0: Ref("thing", row[1]), 1: Ref("thing", row[1])} for row in pawns])]))
+    if things:
+        report.sections.append(Section("Things by ID", [Table(
+            ["ID", "Kind", "Place", "Held by"], things, thing_total,
+            refs=[{0: Ref("thing", row[0]), **({3: Ref("thing", row[3])} if row[3] else {})} for row in things])]))
+    if kinds:
+        report.sections.append(Section("Kinds of thing", [Table(["Kind", "Things"], kinds, kind_total)]))
+    if places:
+        report.sections.append(Section("Places on the world map", [Table(["Name", "Kind", "ID", "Tile"], places,
+                                                                          place_total)]))
+    if parts:
+        report.sections.append(Section("Parts of the save", [Table(
+            ["Element path", "Count"], parts, part_total, refs=[{0: Ref("place", row[0])} for row in parts])]))
+    report.extra_data = {"pattern": pattern, "found": found}
     return report
 
 

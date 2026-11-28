@@ -18,7 +18,7 @@ import sqlite3
 import xml.etree.ElementTree as ET
 
 from ... import cache as derived
-from ...report import Report, Section, Table
+from ...report import Fact, Ref, Report, Section, Table
 
 HELD = "phobos-held"  # an attribute no save writes: marks the stand-in for a held thing cut out before parsing
 
@@ -143,8 +143,20 @@ def values_of(conn, save, meta, row_id, start, end):
         raise ThingError(f"A thing's part of the save could not be read as XML ({problem}).") from None
 
 
-def thing(conn, save, meta, thing_id, path=None, value=None, include_held=False, top=50):
-    """The Report for one thing's saved data. save is the .rws file the index was built from; meta is the index's meta."""
+def kind_of(defs, def_name):
+    """(its label, the mod that defines it, that mod's package ID) for a ThingDef in the installed mods' Def index, or None
+    when no installed mod defines it (1.154.0)."""
+    if defs is None or not def_name:
+        return None
+    row = defs.execute("""SELECT d.label, m.name, m.package_id FROM def d JOIN mod m ON m.position = d.mod_position
+                          WHERE d.def_type = 'ThingDef' AND d.def_name = ? ORDER BY d.wins DESC, d.mod_position DESC
+                          LIMIT 1""", (def_name,)).fetchone()
+    return tuple(row) if row else None
+
+
+def thing(conn, save, meta, thing_id, path=None, value=None, include_held=False, top=50, defs=None):
+    """The Report for one thing's saved data. save is the .rws file the index was built from; meta is the index's meta; defs
+    the installed mods' Def index, read only, for its kind's label and mod (1.154.0), or None."""
     try:
         row = conn.execute("""SELECT t.id, t.thing_id, t.def, t.class, t.start, t."end", pl.place, t.map, t.pos_x,
                                      t.pos_z, h.thing_id
@@ -187,6 +199,18 @@ def thing(conn, save, meta, thing_id, path=None, value=None, include_held=False,
         where = f"a {place}" if place else "somewhere in the save"
     report.lines.append(f"{found_id}: {def_} ({cls or 'no class'}), {where}. Its part of the save is "
                         f"{(end - start) / 1024:,.1f} KB, holding {len(rows):,} values.")
+    kind = kind_of(defs, def_)
+    report.facts = [Fact("Kind", (kind[0] or def_) if kind else def_), Fact("Saved as", def_)]
+    if defs is not None:
+        report.facts.append(Fact("Defined by", kind[1] if kind else "not in your mods now"))
+    report.extra_data = {"thing": found_id, "def": def_, "label": kind[0] if kind else "", "mod": kind[1] if kind else "",
+                         "package": kind[2] if kind else "", "defined": bool(kind) if defs is not None else None}
+    if holder:
+        from .save_reports import holder_chain
+        chain = holder_chain(conn, row_id)[1:]
+        report.sections.append(Section("What holds it, out to the map or the world", [Table(
+            ["ID", "Kind", "Map", "x", "z"], [(c[0], c[1], c[7], c[8], c[9]) for c in chain],
+            refs=[{0: Ref("thing", c[0])} for c in chain])]))
     report.lines.append("Dictionaries show as name[key]; list items as li[0], li[1]; @Class is the type a value was "
                         "saved as. Narrow it with --path or --value (* and ? are wildcards; the whole path must match, "
                         "so write *charge*).")
@@ -198,7 +222,8 @@ def thing(conn, save, meta, thing_id, path=None, value=None, include_held=False,
     if held:
         report.sections.append(Section(
             "Things it holds" + (", included below" if include_held else ", left out (--held includes them)"),
-            [Table(["ID", "Def"], [(h[0], h[1]) for h in held[:top]], len(held))]))
+            [Table(["ID", "Def"], [(h[0], h[1]) for h in held[:top]], len(held),
+                   refs=[{0: Ref("thing", h[0])} for h in held[:top]])]))
     report.sections.append(Section("Values" if not (path or value) else "Values that match",
                                    [Table(["Path", "Value"], chosen[:top], len(chosen))]))
     return report

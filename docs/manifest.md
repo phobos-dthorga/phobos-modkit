@@ -90,6 +90,8 @@ about), `kind`, `id`, and where known `of` and `of_kind` (who owns a method or a
 | `thread` | The thread's name in the report |
 | `recording` | A recording's ID |
 | `signature` | A log message's group, as the log reader names it (1.153.0) |
+| `thing` | A thing in a save, by its ID, such as `Human200` (1.155.0) |
+| `place` | A part of a save, by its element path, such as `savegame/game/maps/li` (1.155.0) |
 | `day` | `YYYY-MM-DD` |
 
 **A findings block** (1.152.0) holds the few things that matter most, most important first, for a program to show before
@@ -131,7 +133,7 @@ and `reports`. Each report has:
 | `when` | The flag that brings the effect on; null when it always applies |
 | `note` | Anything else a caller should know, or null |
 | `question` | The report as a person would ask for it, or null |
-| `surface` | What the report mostly is, when a program should give it a page of its own: `globe` (1.7.0), `textures` (1.21.0), `changes` (1.24.0), `timeline` and `settings` (1.30.0), `connections` (1.33.0), `log` (1.35.0), `patch-targets` (1.37.1), `memory-watch` (1.47.0), `other-code` and `updates` (1.49.0; rimworld-archive's `snapshot` joins `updates` in 1.51.0), `mod-list` (1.72.0), `repo-status` (1.89.0), `feeds` (1.90.0), `definitions` (1.140.0: rimworld-defs' `who`, `show` and `patched`, one definition looked up by name), `performance` (1.152.0: rimworld-perf's `record`, `report`, `list`, `callers`, `mod`, `compare`, `trend` and `reindex`, for D'thorga Companion's Performance page), or null |
+| `surface` | What the report mostly is, when a program should give it a page of its own: `globe` (1.7.0), `textures` (1.21.0), `changes` (1.24.0), `timeline` and `settings` (1.30.0), `connections` (1.33.0), `log` (1.35.0), `patch-targets` (1.37.1), `memory-watch` (1.47.0), `other-code` and `updates` (1.49.0; rimworld-archive's `snapshot` joins `updates` in 1.51.0), `mod-list` (1.72.0), `repo-status` (1.89.0), `feeds` (1.90.0), `definitions` (1.140.0: rimworld-defs' `who`, `show` and `patched`, one definition looked up by name), `performance` (1.152.0: rimworld-perf's `record`, `report`, `list`, `callers`, `mod`, `compare`, `trend` and `reindex`, for D'thorga Companion's Performance page), `save` (1.155.0: rimworld-save's `schema`, `search`, `find` and `thing`, for its Save explorer), or null |
 | `waits` | The name, under the report's JSON `data`, of the count of what waits on the person, when the report has one: `waiting` on `rimworld-save checks` (1.129.0), so D'thorga Companion shows it beside its Reports page and on Home; else null |
 | `scope` | `machine` when the report reads this PC as a whole, not one repository, so a program may offer it beside any game's own reports with no repository named: `crash-dump`, `windows-dumps` and `zeroed` (1.139.0); else null |
 | `options` | `name`, `positional`, `kind` (`flag`, `integer`, `number` or `text`), `required`, `repeatable`, `choices`, `default`, `metavar` (1.106.0: the placeholder its usage shows, such as `KEY=VALUE`, or null) and `help`, read from the command's own parser |

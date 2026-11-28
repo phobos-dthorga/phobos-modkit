@@ -4,6 +4,18 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.155.0] - 2026-11-28
+
+### Added
+
+- **What a save explorer needs from rimworld-save** (the owner's card of 28 Nov 2026, "Save explorer, first slice", for D'thorga
+  Companion): `search TEXT` finds anything whose ID, kind or name matches (people and animals, things with what holds each,
+  kinds, places on the world map, parts of the save); `schema` gives its paths as data and as `place` refs, to open a save a
+  level at a time; `find` and `thing` link each thing (`thing` refs); and `thing` names its kind as the installed mods label it
+  and the mod that defines it, or "not in your mods now", with what holds it out to the map or the world. Their reports carry a
+  new `save` surface. A next game needs a reader for its saves that gives the same refs. How:
+  [rimworld-save](docs/rimworld-save.md).
+
 ## [1.154.0] - 2026-11-28
 
 ### Added

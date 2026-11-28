@@ -60,7 +60,7 @@ from ... import checks as check_engine
 from ...manifest import READS
 
 EXIT_OK, EXIT_FAILED, EXIT_USAGE = 0, 1, 2
-REPORTS = ("summary", "index", "schema", "things", "pawns", "hediffs", "find", "thing", "world", "components", "grid", "planet", "terrain",
+REPORTS = ("summary", "index", "schema", "things", "pawns", "hediffs", "find", "thing", "search", "world", "components", "grid", "planet", "terrain",
            "atlas", "mood", "diff", "checks", "sql")
 
 
@@ -105,6 +105,9 @@ def _parser():
     h = sub.add_parser("hediffs", parents=[common], help="hediffs by def, or one pawn's")
     h.add_argument("--pawn", help="a pawn's name or ID")
     h.add_argument("--def", dest="def_", help="hediff def; * and ? are wildcards")
+    se = sub.add_parser("search", parents=[common], help="anything whose ID, kind or name matches: things, people and "
+                                                        "animals, kinds, places on the world map, parts of the save")
+    se.add_argument("text", help="words or an ID, e.g. Steel or Sophie; * and ? are wildcards")
     f = sub.add_parser("find", parents=[common], help="a thing by its ID, with what holds it")
     f.add_argument("thing_id", help="e.g. ChunkA8061017; * and ? are wildcards")
     th = sub.add_parser("thing", parents=[common], help="one thing's saved data in full: every value its comps and mods "
@@ -113,6 +116,11 @@ def _parser():
     th.add_argument("--path", help="only values whose path matches, e.g. *Phobos* or *coolant*")
     th.add_argument("--value", help="only values that match, e.g. Faction_12")
     th.add_argument("--held", action="store_true", help="include the things it holds (crew, inventory, apparel)")
+    for option, text in (("--game", "the RimWorld folder, for its kind's name and mod"),
+                         ("--workshop", "the Workshop content folder, for its kind's name and mod"),
+                         ("--config", "the folder holding ModsConfig.xml, for its kind's name and mod")):
+        th.add_argument(option, help=text)
+    th.add_argument("--no-defs", action="store_true", help="read no Defs: its kind as saved, without its name or mod")
     o = sub.add_parser("world", parents=[common], help="world objects: settlements, sites, caravans, by faction")
     o.add_argument("--def", dest="def_", help="world object def or class, e.g. Settlement; * and ? are wildcards")
     o.add_argument("--faction", help="a faction's name or def")
@@ -331,10 +339,16 @@ def _checks(conn, args, save, meta, environ=None):
 def _report(conn, args, environ=None, settings_file=None, other=None, save=None, meta=None):
     top = args.top
     if args.report == "thing":
+        defs, _ = (None, []) if getattr(args, "no_defs", False) else _written_defs(args, environ, settings_file)
         try:
-            return save_thing.thing(conn, save, meta or {}, args.thing_id, args.path, args.value, args.held, top)
+            return save_thing.thing(conn, save, meta or {}, args.thing_id, args.path, args.value, args.held, top, defs)
         except save_thing.ThingError as problem:
             raise saves.SaveError(str(problem)) from None
+        finally:
+            if defs is not None:
+                defs.close()
+    if args.report == "search":
+        return reports.search(conn, args.text, top)
     if args.report == "grid":
         names, note = _names(args, environ, settings_file)
         try:
@@ -449,6 +463,7 @@ def main(argv=None, settings_file=None, environ=None, out=None):
     if args.json:
         extra = {"save": source, "index": str(index), "built": built is not None, "elements": counts}
         extra.update(getattr(report, "check_data", {}))     # the checks report's findings, for a program
+        extra.update(getattr(report, "extra_data", {}))     # a report's own data for a program (1.154.0)
         out.write(envelope_text("rimworld-save", report, redact, extra) + "\n")
     else:
         out.write(render_markdown(report, redact) + "\n")
@@ -461,9 +476,12 @@ MANIFEST = {"game": "rimworld", "parser": _parser, "effect": READS,
             "reports": {
     "summary": {"question": "What's in my newest save?"},
     "things": {"question": "What things are in my save?"},
+    "schema": {"question": "What parts does my save hold, and how many of each?", "surface": "save"},
+    "find": {"question": "Where is a thing in my save, and what holds it?", "surface": "save"},
     "pawns": {"question": "Who is on my maps?"},
     "hediffs": {"question": "What injuries and conditions does everyone have?"},
-    "thing": {"question": "What has one thing saved: its comps' and mods' values?"},
+    "thing": {"question": "What has one thing saved: its comps' and mods' values?", "surface": "save"},
+    "search": {"question": "Where is something in my save?", "surface": "save"},
     "world": {"question": "What is on the world map?"},
     "components": {"question": "What have mods stored in my save?"},
     "grid": {"question": "What map grids can I look at?"},

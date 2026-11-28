@@ -67,6 +67,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `things` | Things by def, or a list of them. | reads only |
 | `pawns` | Pawns with their faction, place and health. | reads only |
 | `hediffs` | Hediffs by def, or one pawn's. | reads only |
+| `search` | Anything whose ID, kind or name matches: things, people and animals, kinds, places on the world map, parts of the save. | reads only |
 | `find` | A thing by its ID, with what holds it. | reads only |
 | `thing` | One thing's saved data in full: every value its comps and mods wrote, read from the save. | reads only |
 | `world` | World objects: settlements, sites, caravans, by faction. | reads only |
@@ -106,11 +107,16 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `--place VALUE` | `pawns` | as for things |  |
 | `--pawn VALUE` | `hediffs` | a pawn's name or ID |  |
 | `--def VALUE` | `hediffs` | hediff def; \* and ? are wildcards |  |
+| `TEXT` | `search` | words or an ID, e.g. Steel or Sophie; \* and ? are wildcards |  |
 | `THING_ID` | `find` | e.g. ChunkA8061017; \* and ? are wildcards |  |
 | `THING_ID` | `thing` | its ID, e.g. VVE_Dirtbike30494987 (find gives IDs) |  |
 | `--path VALUE` | `thing` | only values whose path matches, e.g. \*Phobos\* or \*coolant\* |  |
 | `--value VALUE` | `thing` | only values that match, e.g. Faction_12 |  |
 | `--held` | `thing` | include the things it holds (crew, inventory, apparel) |  |
+| `--game VALUE` | `thing` | the RimWorld folder, for its kind's name and mod |  |
+| `--workshop VALUE` | `thing` | the Workshop content folder, for its kind's name and mod |  |
+| `--config VALUE` | `thing` | the folder holding ModsConfig.xml, for its kind's name and mod |  |
+| `--no-defs` | `thing` | read no Defs: its kind as saved, without its name or mod |  |
 | `--def VALUE` | `world` | world object def or class, e.g. Settlement; \* and ? are wildcards |  |
 | `--faction VALUE` | `world` | a faction's name or def |  |
 | `--name VALUE` | `world` | a world object's name |  |
@@ -191,12 +197,13 @@ one. That tie order is approximated, so names whose number moved are marked `(?)
 | --- | --- | --- |
 | `summary` (the default) | Version, scenario, days since the colony began, maps, where things are, the player's pawns by race, the commonest things | |
 | `index` | Indexes the save again now, then the summary | |
-| `schema` | Element paths in the save with how often each occurs, to find where something is saved | `--under PATH`, `--depth N` |
+| `schema` | Element paths in the save with how often each occurs, to find where something is saved. From 1.155.0 each row's path is a `place` ref and `data.paths` lists them, so a program can open the save a level at a time | `--under PATH`, `--depth N` |
+| `search TEXT` (1.155.0) | Anything whose ID, kind or name matches: people and animals by name, things by ID (with what holds each), kinds of thing with how many, places on the world map, and parts of the save by element path. Without a wildcard the words may be anywhere in a name. Each row's thing or part is a ref, for D'thorga Companion's Save explorer | |
 | `things` | Things counted by def, or listed one per row | `--def`, `--class`, `--map`, `--place`, `--held` or `--loose`, `--list` |
 | `pawns` | Name, ID, race, kind, faction, place, map and position, age, health state, how many hediffs | `--faction` (`player` or a name), `--name`, `--kind`, `--place` |
 | `hediffs` | Hediffs counted by def, or one pawn's in full with body part, severity, age and source | `--pawn`, `--def` |
-| `find ID` | A thing by its ID, with every thing holding it out to the map or world | |
-| `thing ID` | One thing's saved data in full, read from the save itself: every value its comps and mods wrote, with its path inside the thing. A dictionary shows as `name[key]`, list items as `li[0]`, `li[1]`, and `@Class` is the type a value was saved as. The things it holds (a vehicle's crew, a pawn's inventory and apparel) are listed and left out unless `--held`. Needs the save, so with `--index` name it with `--save` too | `--path`, `--value`, `--held` |
+| `find ID` | A thing by its ID, with every thing holding it out to the map or world; each a `thing` ref (1.155.0) | |
+| `thing ID` | One thing's saved data in full, read from the save itself: every value its comps and mods wrote, with its path inside the thing. A dictionary shows as `name[key]`, list items as `li[0]`, `li[1]`, and `@Class` is the type a value was saved as. The things it holds (a vehicle's crew, a pawn's inventory and apparel) are listed and left out unless `--held`. Needs the save, so with `--index` name it with `--save` too. From 1.155.0 it names its kind as the installed mods label it and the mod that defines it (or "not in your mods now": what a removed mod left behind), lists what holds it out to the map or the world, and links each thing it holds | `--path`, `--value`, `--held`, `--game`, `--workshop`, `--config`, `--no-defs` |
 | `world` | World objects counted by def and faction, listed with ID, name, faction and tile, or one object's values in full (an aircraft's flight path, a site's parts) | `--def`, `--faction`, `--name`, `--id` |
 | `planet` | Pollution on the world map from the save's planet layer: by band, patches of touching tiles with what stands on or nearest each, rings of tiles around a place, what changed against another save, every save of the world by in-game day. Tile positions come from a rebuilt model of the planet; a world with less than full coverage is reported as such and its tiles are not placed | `--near` (a name or tile number), `--hops`, `--compare SAVE`, `--history [PATTERN]` |
 | `terrain` | How high the land stands and how rough it is: land heights (tenths and median), hilliness by class with each class's median height, the player's places with their tile's height and hilliness, the height difference between neighbouring land tiles across the world (a step, not a slope: the tile's size is not in the save), and around a place its rings of tiles with their lowest, median and highest land and the steepest step within | `--near` (a name or tile number), `--hops` |

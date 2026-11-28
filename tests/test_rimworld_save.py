@@ -19,6 +19,7 @@ from types import SimpleNamespace
 from support import FIXTURES
 from phobos_modkit import native
 from phobos_modkit.games.rimworld import save as saves
+from phobos_modkit.games.rimworld import save_thing
 from phobos_modkit.games.rimworld import save_reports as reports
 from phobos_modkit.games.rimworld import save_thing
 from phobos_modkit.games.rimworld.save_cli import EXIT_OK, EXIT_USAGE, main
@@ -296,7 +297,8 @@ class Command(Folders):
     def test_each_report_runs(self):
         for args in (["schema"], ["things", "--list", "--held"], ["pawns", "--faction", "player"], ["world"],
                      ["world", "--name", "Raider*"], ["world", "--id", "3"], ["components"], ["components", "--class", "*Alarm"],
-                     ["hediffs", "--pawn", "Annie"], ["find", "ChunkA*"], ["thing", "Human200", "--path", "*Values*"],
+                     ["hediffs", "--pawn", "Annie"], ["find", "ChunkA*"], ["thing", "Human200", "--path", "*Values*", "--no-defs"],
+                     ["search", "Annie"],
                      ["sql", "SELECT 1"], ["index"]):
             code, text = self.run_main(*args)
             self.assertEqual(code, EXIT_OK, args)
@@ -316,11 +318,48 @@ class Command(Folders):
         self.run_main()
         index = self.cache / saves.CACHE_FOLDER / "Example.sqlite"
         out = io.StringIO()
-        self.assertEqual(main(["thing", "Human200", "--index", str(index)], environ={}, out=out), EXIT_USAGE)
+        self.assertEqual(main(["thing", "Human200", "--index", str(index), "--no-defs"], environ={}, out=out), EXIT_USAGE)
         out = io.StringIO()
         self.assertEqual(main(["thing", "Human200", "--path", "*Values*", "--index", str(index), "--save", "Example",
-                               "--saves", str(self.saves)], environ={}, out=out), EXIT_OK)
+                               "--saves", str(self.saves), "--no-defs"], environ={}, out=out), EXIT_OK)
         self.assertIn("ExampleSystems_Values[Electrical/charge] | 0.993", out.getvalue())
+
+    def test_the_save_explorer_finds_anything_and_links_each_row(self):
+        # Search (1.154.0): names, IDs, kinds and parts, each row saying what it is about.
+        code, text = self.run_main("search", "Annie", "--json")
+        self.assertEqual(code, EXIT_OK, text)
+        found = json.loads(text)
+        people = next(s for s in found["report"]["sections"] if s["heading"] == "People and animals")
+        table = people["blocks"][0]
+        self.assertIn("Annie", table["rows"][0][0])
+        self.assertEqual("thing", table["refs"][0][0]["kind"])
+        self.assertEqual(table["rows"][0][1], table["refs"][0][0]["id"])
+        self.assertEqual("*Annie*", found["data"]["pattern"])
+        code, text = self.run_main("search", "Nothing*Like*It", "--json")
+        self.assertIn("Nothing in this save matches", json.loads(text)["report"]["lines"][0])
+        # The tree: each path a place to open further, and the paths as data.
+        code, text = self.run_main("schema", "--under", "savegame/game", "--depth", "1", "--json")
+        found = json.loads(text)
+        paths = found["data"]["paths"]
+        self.assertTrue(paths)
+        self.assertTrue(all(p["path"].startswith("savegame/game") for p in paths))
+        table = found["report"]["sections"][0]["blocks"][0]
+        self.assertEqual({"kind": "place", "id": table["rows"][0][1], "column": 1}, table["refs"][0][0])
+        # Find links each thing in the chain.
+        code, text = self.run_main("find", "ChunkA*", "--json")
+        table = json.loads(text)["report"]["sections"][0]["blocks"][0]
+        self.assertEqual("thing", table["refs"][0][0]["kind"])
+
+    def test_one_things_kind_is_named_with_the_mod_that_defines_it(self):
+        defs = sqlite3.connect(":memory:")
+        defs.executescript("""CREATE TABLE mod (position INTEGER, name TEXT, package_id TEXT);
+                              CREATE TABLE def (mod_position INTEGER, def_type TEXT, def_name TEXT, label TEXT, wins INTEGER);
+                              INSERT INTO mod VALUES (0, 'Core', 'ludeon.rimworld'), (5, 'Sample Boats', 'sample.boats');
+                              INSERT INTO def VALUES (0, 'ThingDef', 'Steel', 'steel', 1),
+                                                     (5, 'ThingDef', 'Boat', 'boat', 1), (0, 'HediffDef', 'Boat', 'x', 1);""")
+        self.assertEqual(("boat", "Sample Boats", "sample.boats"), save_thing.kind_of(defs, "Boat"))
+        self.assertIsNone(save_thing.kind_of(defs, "Gone"))
+        self.assertIsNone(save_thing.kind_of(None, "Boat"))
 
     def test_options_before_the_report_name_mean_summary(self):
         code, text = self.run_main("--top", "3")
