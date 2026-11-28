@@ -415,7 +415,8 @@ class CommandTests(unittest.TestCase):
         tools = self.tmp / "tools"
         tools.mkdir()
         (tools / dd.native.program_name(dd.COUNTERS)).write_bytes(b"")
-        self.environ = {"PHOBOS_MODKIT_CACHE": str(self.tmp / "cache"), dd.TOOLS_ENV: str(tools)}
+        self.environ = {"PHOBOS_MODKIT_CACHE": str(self.tmp / "cache"), dd.TOOLS_ENV: str(tools),
+                        "PHOBOS_HISTORY": str(self.tmp / "history")}
         self.common = ["--game", str(self.tmp / "game"), "--config", str(self.tmp / "config")]
         owners = mock.patch.object(perf, "module_owners", side_effect=lambda names, *a, **k: ({}, []))
         owners.start()

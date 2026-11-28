@@ -84,6 +84,8 @@ Every fact has `kind`, `time` (UTC), `source` (`git` or `log`) and `product`; fa
 | `encoded` | log | Written by `rimworld-textures encode`; `ok`, `count`, `mods` |
 | `setting-added`, `setting-removed`, `setting-default` | git | From the repository's `settingsHistory` command (docs/installs.md), committed changes only; `mod`, `key`, `label`, `before`, `after`, on the mod's product lane |
 | `duplicates-removed` | log | Written by `installs dedupe`; `count`, `size`, `mods` |
+| `perf-recorded` | log | Written by `rimworld-perf record` (1.153.0); `recording`, `label`, `finding` (its first) |
+| `memory-watched` | log | Written by `rimworld-perf watch` when it ends (1.153.0); `watch`, `label` |
 
 An entry is matched across commits as `installs` matches one across copies: by version and its first words, so a rewording keeps
 its identity and a moved entry is neither gained nor lost.

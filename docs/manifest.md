@@ -89,6 +89,7 @@ about), `kind`, `id`, and where known `of` and `of_kind` (who owns a method or a
 | `type` | A type's full name |
 | `thread` | The thread's name in the report |
 | `recording` | A recording's ID |
+| `signature` | A log message's group, as the log reader names it (1.153.0) |
 | `day` | `YYYY-MM-DD` |
 
 **A findings block** (1.152.0) holds the few things that matter most, most important first, for a program to show before

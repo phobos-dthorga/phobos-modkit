@@ -120,6 +120,70 @@ def mod_packages(game=None, workshop=None, config=None, environ=None, settings_f
         return {}
 
 
+def mod_versions(pattern, game=None, workshop=None, config=None, environ=None, settings_file=None):
+    """{mod name: its About.xml's modVersion} for the active mods whose name matches pattern (1.153.0), so two recordings can say
+    which of our versions each ran; {} when the mod list cannot be read."""
+    try:
+        game_folder = paths.game_path(game, environ, settings_file)
+        mods_config = Path(paths.config_path(config, environ, settings_file)) / "ModsConfig.xml"
+        if not mods_config.is_file():
+            return {}
+        _, _, ids = loading.read_mods_config(mods_config)
+        index = ModIndex.scan(default_roots(game_folder, paths.workshop_path(game_folder, workshop, environ, settings_file)))
+        found = {}
+        for entry in loading.resolve_active(index.mods, ids):
+            mod = entry.mod
+            if mod is None or not fnmatch.fnmatchcase(mod.name.lower(), pattern.lower()):
+                continue
+            version = _about_version(Path(mod.folder) / "About" / "About.xml")
+            if version:
+                found[mod.name] = version
+        return found
+    except Exception:  # noqa: BLE001 - a recording without versions beats none
+        return {}
+
+
+def _about_version(about):
+    """modVersion from an About.xml, or ""."""
+    import xml.etree.ElementTree as ET
+    try:
+        root = ET.parse(about).getroot()
+    except (OSError, ET.ParseError):
+        return ""
+    found = next((c for c in root if isinstance(c.tag, str) and c.tag.lower() == "modversion"), None)
+    return (found.text or "").strip() if found is not None else ""
+
+
+def settings_prints(config):
+    """{a mod's settings file: a short print of its contents} from the game's Config folder (1.153.0): two recordings whose prints
+    differ were made with different mod settings. Best effort: {} when the folder cannot be read."""
+    import hashlib
+    try:
+        files = sorted(Path(config).glob("Mod_*.xml"))
+    except OSError:
+        return {}
+    found = {}
+    for path in files:
+        try:
+            found[path.stem] = hashlib.sha1(path.read_bytes()).hexdigest()[:12]
+        except OSError:
+            continue
+    return found
+
+
+def log_during(logs_file, start, end):
+    """The log's messages from start to end ("YYYY-MM-DD HH:MM:SS" texts), grouped as the log reader groups them: [{id, level,
+    signature, count}], most severe first (1.153.0). [] when the log cannot be read or has no times."""
+    try:
+        from ...logs.triage import group
+        from . import log as rimworld_log
+        parsed = rimworld_log.parse(Path(logs_file).read_text(encoding="utf-8", errors="replace"))
+    except (OSError, ValueError):
+        return []
+    entries = [e for e in parsed.entries if e.time and start <= e.time[:19] <= end]
+    return [{"id": g.id, "level": g.level, "signature": g.signature, "count": g.count} for g in group(entries)]
+
+
 def classify(modules, install, mod_owners):
     """{module: Owner} for every module in a trace."""
     result = {}

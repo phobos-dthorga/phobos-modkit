@@ -276,7 +276,8 @@ class CommandTests(unittest.TestCase):
         self.tools.mkdir()
         for name in (dd.TRACE, dd.COUNTERS):
             (self.tools / dd.native.program_name(name)).write_bytes(b"")
-        self.environ = {"PHOBOS_MODKIT_CACHE": str(self.tmp / "cache"), dd.TOOLS_ENV: str(self.tools)}
+        self.environ = {"PHOBOS_MODKIT_CACHE": str(self.tmp / "cache"), dd.TOOLS_ENV: str(self.tools),
+                        "PHOBOS_HISTORY": str(self.tmp / "history")}
         self.common = ["--game", str(self.tmp / "game"), "--config", str(self.tmp / "config")]
         self.mods = mock.patch.object(perf, "active_mod_assemblies", return_value=(MODS, set()))
         self.mods.start()
@@ -319,6 +320,10 @@ class CommandTests(unittest.TestCase):
         code, again = self.run_cli("report", "many wounded", *self.common)
         self.assertEqual(perf_cli.EXIT_OK, code, again)
         self.assertIn("| Example.Dosing.DoseService.MakeJob | Example Medical | 40 | 57.1% |", again)
+        # The Timeline hears of it (1.153.0).
+        facts = [json.loads(line) for line in (self.tmp / "history" / "rimworld.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([("perf-recorded", "20261117-180000-many-wounded", "many wounded")],
+                         [(f["kind"], f["recording"], f["label"]) for f in facts])
 
     def test_the_game_counts_itself(self):
         self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--counters", str(COUNTERS), "--label", "one", *self.common)[0])
@@ -416,6 +421,71 @@ class CommandTests(unittest.TestCase):
         self.assertIn("| 20261117-180000-one | 2026-11-17 18:00:00 | 0.11 | one | 570 | Example Medical caused 57% of ticking, "
                       "the most of any mod. |", text)
 
+    def test_costs_say_what_each_mod_costs_against_the_earlier_recordings(self):
+        for label, hour in (("before", 18), ("after", 19)):
+            self.run_cli("index", str(TRACE), "--counters", str(COUNTERS), "--label", label, *self.common,
+                         now=datetime(2026, 11, 17, hour, 0, 0))
+        code, text = self.run_cli("costs", "example*", "--json", *self.common)
+        self.assertEqual(perf_cli.EXIT_OK, code, text)
+        data = json.loads(text)["data"]
+        self.assertEqual(("20261117-190000-after", 2), (data["newest"], data["recordings"]))
+        medical = next(m for m in data["mods"] if m["name"] == "Example Medical")
+        self.assertEqual((57.14, 57.14, 0.0, True, False), (medical["share"], medical["earlier_middle"], medical["change"],
+                                                            medical["ours"], medical["flagged"]))
+        self.assertEqual({"pattern": "example*", "share": 57.14, "earlier_middle": 57.14, "note": ""}, data["own"])
+        self.assertIn("Example.Dosing.DoseService.MakeJob", [m["name"] for m in data["methods"]])
+        self.assertEqual("Example Medical caused 57% of ticking, the most of any mod.", data["first_finding"]["text"])
+        code, text = self.run_cli("costs", *self.common)
+        self.assertIn("| Example Medical | 57.1% | 57.1% | +0.0 |", text)
+
+    def test_what_the_game_logged_while_recording_is_kept_and_linked(self):
+        start, end = "2026-01-02 10:00:00", "2026-01-02 10:10:00"
+        found = perf.log_during(FIXTURES / "rimworld" / "player-1.7.log", start, end)
+        self.assertTrue(found)
+        self.assertEqual({"id", "level", "signature", "count"}, set(found[0]))
+        self.assertEqual([], perf.log_during(FIXTURES / "rimworld" / "player-1.7.log", "2030-01-01 00:00:00", "2030-01-01 00:01:00"))
+        self.assertEqual([], perf.log_during(self.tmp / "missing.log", start, end))
+        self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--label", "one", *self.common)[0])
+        folder = next((self.tmp / "cache" / perf_cli.CACHE_FOLDER).glob("*-one"))
+        storm = [{"id": "ab12cd34", "level": "ERROR", "signature": "Exception ticking Example.Thing", "count": 25},
+                 {"id": "ef56ab78", "level": "WARN", "signature": "A warning", "count": 2}]
+        with closing(sqlite3.connect(folder / perf_cli.INDEX_NAME)) as conn:
+            conn.executemany("INSERT INTO meta VALUES (?, ?)", [("log_during", json.dumps(storm)),
+                                                                ("settings_prints", json.dumps({"Mod_A": "1", "Mod_B": "2"}))])
+            conn.commit()
+        found = json.loads(self.run_cli("report", "--json", *self.common)[1])
+        section = next(s for s in found["report"]["sections"] if s["heading"] == "The log while recording")
+        table = next(b for b in section["blocks"] if b["type"] == "table")
+        self.assertEqual([{"kind": "signature", "id": "ab12cd34", "column": 1}], table["refs"][0])
+        texts = [f["text"] for f in found["report"]["blocks"][0]["items"]]
+        self.assertIn("The game logged 25 errors while recording, the most often: Exception ticking Example.Thing", texts)
+        self.assertEqual(25, found["data"]["summary"]["log_errors"])
+        # A second recording made with one mod's settings changed is not like for like.
+        self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--label", "two", *self.common,
+                                                         now=datetime(2026, 11, 17, 19, 0, 0))[0])
+        second = next((self.tmp / "cache" / perf_cli.CACHE_FOLDER).glob("*-two"))
+        with closing(sqlite3.connect(second / perf_cli.INDEX_NAME)) as conn:
+            conn.executemany("INSERT INTO meta VALUES (?, ?)", [("settings_prints", json.dumps({"Mod_A": "1", "Mod_B": "3"})),
+                                                                ("mod_versions", json.dumps({"D'thorga Medical": "0.36.0"}))])
+            conn.commit()
+        code, text = self.run_cli("compare", *self.common)
+        self.assertIn("**Not like for like: 1 mods' settings changed.**", text)
+        self.assertIn("| Mods' settings files changed | - | 1 (Mod_B) |", text)
+        self.assertIn("| D'thorga Medical | - | 0.36.0 |", text)
+
+    def test_settings_prints_and_versions_are_read_from_the_game_and_its_mods(self):
+        config = self.tmp / "prints"
+        config.mkdir()
+        (config / "Mod_Example_Settings.xml").write_text("<a/>", encoding="utf-8")
+        (config / "Prefs.xml").write_text("<b/>", encoding="utf-8")
+        prints = perf.settings_prints(config)
+        self.assertEqual(["Mod_Example_Settings"], list(prints))
+        self.assertEqual(12, len(prints["Mod_Example_Settings"]))
+        about = self.tmp / "About.xml"
+        about.write_text("<ModMetaData><name>X</name><modVersion> 0.36.0 </modVersion></ModMetaData>", encoding="utf-8")
+        self.assertEqual("0.36.0", perf._about_version(about))
+        self.assertEqual("", perf._about_version(self.tmp / "none.xml"))
+
     def test_a_listed_recording_without_a_summary_gets_one(self):
         self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--label", "one", *self.common)[0])
         folder = next((self.tmp / "cache" / perf_cli.CACHE_FOLDER).glob("*-one"))
@@ -427,7 +497,7 @@ class CommandTests(unittest.TestCase):
 
     def test_the_performance_page_finds_its_reports(self):
         surfaced = {name for name, report in perf_cli.MANIFEST["reports"].items() if report.get("surface") == perf_cli.PERFORMANCE_SURFACE}
-        self.assertEqual({"report", "record", "list", "callers", "mod", "compare", "trend", "reindex"}, surfaced)
+        self.assertEqual({"report", "record", "list", "callers", "mod", "compare", "trend", "costs", "reindex"}, surfaced)
 
     def test_record_without_the_game(self):
         with mock.patch.object(dd, "find_processes", return_value=[]):

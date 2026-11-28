@@ -32,7 +32,8 @@ KIND_WORDS = {
     "version-released": "version released", "product-renamed": "renamed", "product-ended": "ended",
     "installed": "installed", "went-back": "went back", "backed-up": "backed up", "built": "built", "encoded": "textures encoded",
     "setting-added": "setting added", "setting-removed": "setting removed", "setting-default": "setting's default changed",
-    "duplicates-removed": "repeated backups removed"}
+    "duplicates-removed": "repeated backups removed", "perf-recorded": "recorded the running game",
+    "memory-watched": "watched the game's memory"}
 
 
 def _parser():

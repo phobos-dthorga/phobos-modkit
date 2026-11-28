@@ -73,6 +73,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `callers` | How the stacks running one method reach it, and the mods above it. | reads only |
 | `compare` | Two recordings, as shares of the main thread and of ticking. | reads only |
 | `trend` | Some mods' share of ticking in every recording kept, and where it rose. | reads only |
+| `costs` | Each mod's share in the newest recording against the earlier ones. Reads the recordings' summaries (made in the kit's cache the first time); the newest ten. | reads only |
 | `list` | Every recording and snapshot kept. Each recording with its summary file (its figures, findings and mods' shares), made in the kit's cache the first time a recording is listed after 1.152.0. | reads only |
 | `pack` | Pack the large files of recordings and heaps kept plain (before 1.149.0). With `--apply`, packs each recording's trace and each heap's own files with zstd in the kit's cache, removing a plain file only once its packed one reads back the same; without, only says. | writes |
 | `unpack` | Write a recording's trace or a heap's .gcdump out plain, for PerfView. Writes one recording's trace or one heap's .gcdump out plain beside its packed copy, in the kit's cache; never writes over a file. | writes |
@@ -118,6 +119,7 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 | `FIRST` | `compare` | (optional) the earlier recording; the second newest when both are left out |  |
 | `SECOND` | `compare` | (optional) the later recording; the newest when both are left out |  |
 | `NAME` | `trend` | (optional) the mods to follow, by name; \* and ? are wildcards (default "D'thorga\*": our own) | `D'thorga*` |
+| `NAME` | `costs` | (optional) the mods counted as ours, by name; \* and ? are wildcards (default "D'thorga\*") | `D'thorga*` |
 | `--apply` | `pack` | pack them; without this, only say which and how large |  |
 | `NAME` | `unpack` | a recording's or a heap's ID (its start is enough) or label |  |
 | `--times N` | `stack` | how many snapshots (default 3) | `3` |
@@ -184,6 +186,15 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
   recordings of 17 and 18 November 2026 they put first a stall of 2,445 ms in Smart Medicine's `FindBestMedicine.Find` (the many
   wounded), a stall of 363 ms in `JobGiver_Work.TryIssueJobPackage` caused 80% by DMS Legion, and the vanilla lock in
   `GenTypes.IsSealedWithCache` at 45% and 49% of ticking.
+- **The log while recording** (1.153.0): `record` keeps what the game logged from its start to a moment after it ends, grouped
+  as the log reader groups it, and the report lists it, most severe first, each message linked to the Logs page; ten errors or
+  more are a finding (ranked a point for each ten, to 30). An error storm costs time too.
+- **`costs`** (1.153.0) says what each mod cost in the newest recording against the middle of the earlier ones (the newest ten),
+  from the recordings' summaries alone, with our own mods' share (`D'thorga*` unless named) and the busiest methods: for a
+  program's tags on its mod lists and badges on its code. A change is a place to look, not a verdict.
+- **Fair comparisons** (1.153.0): `record` keeps a short print of each mod's settings file in the game's Config folder and our own
+  mods' versions (their About.xml's `modVersion`); `compare` says how many mods' settings changed, counts it as not like for
+  like, and lists each of our mods whose version differs.
 - **For programs, every row says what it is about** (1.152.0): with `--json`, a table's `refs` give each row's mods, methods,
   types, threads or recordings by column, and each finding its own (`docs/manifest.md`), so a page links them without reading the
   words. A mod carries its package ID where the recording knew it (recordings from 1.152.0).
@@ -405,9 +416,12 @@ at most, and is always let go; see [the heap reader](heap-reader.md#read-this-fi
 The converted trace is indexed into SQLite (`index.sqlite`) with the owners of every module worked out against the mod list as
 it is then, and the counters' averages and worst seconds. The raw `trace.nettrace` stays beside it for PerfView or Visual Studio, packed as `trace.nettrace.zst` (`unpack` gives it back);
 the speedscope file is deleted unless `--keep-speedscope` is given, because it is large. Beside the index, `summary.json` (1.152.0) keeps what a list or another page needs without opening
-it: the figures, the findings, each mod's share of ticking and its package ID. It is written whenever the report is made, and
+it: the figures, the findings, each mod's share of ticking and its package ID, and from 1.153.0 (its format 2, so older
+summaries are made again) the busiest 100 methods with their shares, our mods' versions, the settings prints and the errors
+logged. It is written whenever the report is made, and
 `list` makes it for any recording that has none or whose index is newer; `list --json` gives every recording's summary under
-`data.recordings`. Recordings live in the kit's cache
+`data.recordings`. Each recording, and each watch when it ends, is a fact on the
+game's timeline (`perf-recorded`, `memory-watched`; [history](history.md)). Recordings live in the kit's cache
 (`rimworld-perf/<date>-<time>-<label>/`), outside every repository; `cleanup` lists them once they are a fortnight old, saying they
 cannot be made again.
 

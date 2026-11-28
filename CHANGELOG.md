@@ -4,6 +4,22 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.153.0] - 2026-11-28
+
+### Added
+
+- **rimworld-perf costs: what each mod costs, by the newest recording** (the owner's go for slice two of D'thorga Companion's
+  Performance page, 28 Nov 2026): each mod's share of ticking in the newest recording against the middle of the earlier ones,
+  our own mods' share, and the busiest methods, from the recordings' summaries alone, for a program's tags and badges. Summaries
+  keep the busiest 100 methods, our mods' versions, the mods' settings prints and the errors logged (summary format 2). How:
+  [rimworld-perf](docs/rimworld-perf.md).
+- **rimworld-perf keeps what the game logged while recording**, grouped as the log reader groups it, each message linked to the
+  Logs page by a new `signature` ref, ten errors or more a finding. How: [rimworld-perf](docs/rimworld-perf.md).
+- **rimworld-perf compare says when mods' settings or our versions changed**: each recording keeps a print of every mod's settings
+  file and our mods' versions; changed settings make two recordings not like for like. How: [rimworld-perf](docs/rimworld-perf.md).
+- **Recordings and memory watches are facts on the timeline** (`perf-recorded`, `memory-watched`), and a lock wait's holder links
+  to the method it was running. How: [history](docs/history.md).
+
 ## [1.152.0] - 2026-11-28
 
 ### Added
