@@ -4,6 +4,20 @@ Maintained from 7 November 2026. Versions are tags of this repository; consumers
 
 ## [Unreleased]
 
+## [1.156.0] - 2026-11-28
+
+### Fixed
+
+- **rimworld-perf no longer says "no thread waited on a lock" when the waits could not be read** (a review of 1.151.0 to 1.153.0
+  the owner asked for, 28 Nov 2026): the index stops claiming the events were recorded, so the failure's note stands alone. The
+  log kept with a recording now starts when the tools attach, not before a first install; a hand-recorded counters file at more
+  than a second is read a second, as recordings are; and a recording whose context cannot be read is kept, not lost.
+- **trend and costs leave out a recording in which the game hardly ran**, and count a mod with no time in an earlier recording
+  as 0 there in both, so they agree; costs says when the newest recording cannot be read instead of calling an older one the
+  newest; a summary made by another kit is made again; reindex keeps a speedscope file `--keep-speedscope` kept and never leaves
+  a recording without its index; the lock-wait finding names the holding thread whole. How:
+  [rimworld-perf](docs/rimworld-perf.md).
+
 ## [1.155.0] - 2026-11-28
 
 ### Added

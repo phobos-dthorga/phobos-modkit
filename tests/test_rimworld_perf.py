@@ -486,6 +486,55 @@ class CommandTests(unittest.TestCase):
         self.assertEqual("0.36.0", perf._about_version(about))
         self.assertEqual("", perf._about_version(self.tmp / "none.xml"))
 
+    def test_what_the_review_of_1_153_0_found_stays_fixed(self):
+        # A hand-recorded counters file at 5 s is read a second, as a recording's are.
+        counters = self.tmp / "slow.json"
+        counters.write_text(json.dumps({"Events": [
+            {"timestamp": "2026-11-18T08:00:00.0000000", "name": "rimworld.ticks ({tick} / 5 sec)", "tags": "", "value": 3000},
+            {"timestamp": "2026-11-18T08:00:01.0000000", "name": "dotnet.gc.collections ({collection} / 1 sec)", "tags": "",
+             "value": 4}]}), encoding="utf-8")
+        found = sampling.read_counters(counters)
+        self.assertEqual([600.0], found[("rimworld.ticks ({tick} / 5 sec)", "")])
+        self.assertEqual([4.0], found[("dotnet.gc.collections ({collection} / 1 sec)", "")])
+        # Events that cannot be read: the index no longer says they were recorded, so no table says "no waits".
+        self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--label", "one", *self.common)[0])
+        folder = next((self.tmp / "cache" / perf_cli.CACHE_FOLDER).glob("*-one"))
+        index = folder / perf_cli.INDEX_NAME
+        with closing(sqlite3.connect(index)) as conn:
+            conn.execute("INSERT OR REPLACE INTO meta VALUES ('lock_events', 'yes')")
+            conn.commit()
+        broken = self.tmp / "broken.nettrace"
+        broken.write_bytes(b"not a trace")
+        notes = perf_cli.add_events(index, broken)
+        self.assertIn("could not be read", notes[0])
+        self.assertEqual("", sampling.Recording(index).meta.get("lock_events"))
+        # A summary another kit made is made again.
+        summary = perf_cli.summary_of(folder)
+        self.assertEqual(summary, perf_cli.read_summary(folder))
+        (folder / perf_cli.SUMMARY_NAME).write_text(json.dumps(dict(summary, kit_version="0.0.1")), encoding="utf-8")
+        self.assertIsNone(perf_cli.read_summary(folder))
+
+    def test_costs_and_trend_leave_out_a_recording_in_which_the_game_hardly_ran(self):
+        for label, hour in (("paused", 17), ("before", 18), ("after", 19)):
+            self.run_cli("index", str(TRACE), "--counters", str(COUNTERS), "--label", label, *self.common,
+                         now=datetime(2026, 11, 17, hour, 0, 0))
+        paused = next((self.tmp / "cache" / perf_cli.CACHE_FOLDER).glob("*-paused"))
+        summary = perf_cli.summary_of(paused)
+        (paused / perf_cli.SUMMARY_NAME).unlink()
+        perf_cli.write_summary(paused, dict(summary, ticking_share=0.0, mods={"Example Medical": 0.0}))
+        data = json.loads(self.run_cli("costs", "example*", "--json", *self.common)[1])["data"]
+        medical = next(m for m in data["mods"] if m["name"] == "Example Medical")
+        self.assertEqual(57.14, medical["earlier_middle"])               # the paused one's 0% is left out
+        # costs names the newest it could not read, rather than an older one.
+        newest = next((self.tmp / "cache" / perf_cli.CACHE_FOLDER).glob("*-after"))
+        (newest / perf_cli.SUMMARY_NAME).unlink()
+        with closing(sqlite3.connect(newest / perf_cli.INDEX_NAME)) as conn:
+            conn.execute("DROP TABLE sample")
+            conn.commit()
+        code, text = self.run_cli("costs", *self.common)
+        self.assertEqual(perf_cli.EXIT_FAILED, code)
+        self.assertIn("The newest recording, 20261117-190000-after, could not be read", text)
+
     def test_a_listed_recording_without_a_summary_gets_one(self):
         self.assertEqual(perf_cli.EXIT_OK, self.run_cli("index", str(TRACE), "--label", "one", *self.common)[0])
         folder = next((self.tmp / "cache" / perf_cli.CACHE_FOLDER).glob("*-one"))

@@ -29,6 +29,7 @@ import re
 import sqlite3
 
 from . import cache as derived
+from .dotnet_diagnostics import per_second
 
 INDEX_FORMAT = "2"                 # 2 (1.151.0) keeps each thread's timeline; 1 is still read, without one
 READABLE_FORMATS = ("1", "2")
@@ -296,7 +297,9 @@ def read_counters(path):
     values = defaultdict(list)
     for event in data.get("Events", []):
         try:
-            values[(event["name"], event.get("tags") or "")].append(float(event["value"]))
+            # A rate over a refresh interval longer than a second ("{tick} / 5 sec", a file recorded by hand) is given a
+            # second, as the memory watch's are (1.156.0).
+            values[(event["name"], event.get("tags") or "")].append(per_second(str(event["name"]), float(event["value"])))
         except (KeyError, TypeError, ValueError):
             continue
     return dict(values)

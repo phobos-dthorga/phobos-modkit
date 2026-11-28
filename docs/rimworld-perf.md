@@ -192,6 +192,8 @@ Generated from the command's own parser by `python -m phobos_modkit command-docs
 - **`costs`** (1.153.0) says what each mod cost in the newest recording against the middle of the earlier ones (the newest ten),
   from the recordings' summaries alone, with our own mods' share (`D'thorga*` unless named) and the busiest methods: for a
   program's tags on its mod lists and badges on its code. A change is a place to look, not a verdict.
+  A recording in which the game hardly ran is left out of the earlier middle, in `costs` and `trend` alike (1.156.0), and a
+  mod with no time in an earlier recording counts as 0 there.
 - **Fair comparisons** (1.153.0): `record` keeps a short print of each mod's settings file in the game's Config folder and our own
   mods' versions (their About.xml's `modVersion`); `compare` says how many mods' settings changed, counts it as not like for
   like, and lists each of our mods whose version differs.
@@ -419,7 +421,7 @@ the speedscope file is deleted unless `--keep-speedscope` is given, because it i
 it: the figures, the findings, each mod's share of ticking and its package ID, and from 1.153.0 (its format 2, so older
 summaries are made again) the busiest 100 methods with their shares, our mods' versions, the settings prints and the errors
 logged. It is written whenever the report is made, and
-`list` makes it for any recording that has none or whose index is newer; `list --json` gives every recording's summary under
+`list` makes it for any recording that has none, whose index is newer, or that another kit made (1.156.0); `list --json` gives every recording's summary under
 `data.recordings`. Each recording, and each watch when it ends, is a fact on the
 game's timeline (`perf-recorded`, `memory-watched`; [history](history.md)). Recordings live in the kit's cache
 (`rimworld-perf/<date>-<time>-<label>/`), outside every repository; `cleanup` lists them once they are a fortnight old, saying they

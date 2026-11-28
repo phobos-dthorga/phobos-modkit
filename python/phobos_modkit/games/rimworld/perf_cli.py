@@ -51,6 +51,7 @@ from pathlib import Path
 import re
 import shutil
 import sqlite3
+import struct
 import subprocess
 import sys
 import time
@@ -297,12 +298,16 @@ def _owners(names, args, environ, settings_file):
 
 
 def add_events(index, trace_file):
-    """The runtime's lock waits and allocations from a recording's .nettrace into its index; a note when they cannot be read."""
+    """The runtime's lock waits and allocations from a recording's .nettrace into its index; a note when they cannot be read.
+    Then the index's meta no longer says they were recorded (1.156.0), so its report never reads an empty table as "no waits"."""
     if trace_file is None or not Path(trace_file).is_file():
         return []
     try:
         index_events(trace_file, index)
-    except (NettraceError, OSError, ValueError) as error:
+    except (NettraceError, OSError, ValueError, struct.error) as error:
+        with closing(sqlite3.connect(index)) as conn:
+            derived.write_meta(conn, {"lock_events": "", "allocation_events": ""})
+            conn.commit()
         return [f"The runtime's own events (lock waits, allocations) could not be read from the trace: {error}"]
     return []
 
@@ -534,6 +539,7 @@ def reindex_one(folder, tool, run):
         unpacked = True
     fresh = index.with_name("index.new.sqlite")
     speedscope = None
+    kept = (Path(folder) / ("trace" + dd.SPEEDSCOPE_SUFFIX)).is_file()   # record --keep-speedscope's own copy (1.156.0)
     try:
         speedscope = dd.convert(plain, tool, run)
         meta = {k: v for k, v in derived.read_meta(index).items() if k != "index_format"}
@@ -547,11 +553,10 @@ def reindex_one(folder, tool, run):
             conn.commit()
             conn.execute("DETACH DATABASE old")
         add_events(fresh, plain)
-        derived.remove(index)
-        fresh.replace(index)
+        fresh.replace(index)           # one step: a failure leaves the old index, never none (1.156.0)
     finally:
         derived.remove(fresh)
-        if speedscope is not None:
+        if speedscope is not None and not kept:
             derived.remove(speedscope)
         if unpacked:
             derived.remove(plain)
@@ -764,7 +769,7 @@ def wait_sections(rec, report, main, top, roles, found=None, packages=None):
             first = rows[0]
             found.append((100 * share, Finding(
                 f"The main thread spent {pct(main_ms, rec.duration_ms(main))} of its time waiting on locks, most in {first[0]} "
-                f"(held mostly by {first[5].split(' (')[0]}).",
+                f"(held mostly by {first[5].rsplit(' (', 1)[0]}).",
                 "risk" if share >= FINDING_WAIT_RISK else "observed", round(100 * share, 1), "%",
                 [r for r in (refs[0].get(0), refs[0].get(6)) if r is not None])))
     others = defaultdict(lambda: [0, 0.0])
@@ -1229,8 +1234,8 @@ def read_summary(folder):
         index = Path(folder) / INDEX_NAME
     except (OSError, ValueError):
         return None
-    if not isinstance(found, dict) or found.get("format") != SUMMARY_FORMAT:
-        return None
+    if not isinstance(found, dict) or found.get("format") != SUMMARY_FORMAT or found.get("kit_version") != __version__:
+        return None                    # another kit may rank, word or attribute differently (1.156.0)
     if not index.is_file() or found.get("index_mtime") != index.stat().st_mtime_ns:
         return None
     return found
@@ -1285,7 +1290,7 @@ def _shares(rec):
     return by_phase, owners, pause[0] if pause else None, ms_per_tick(rec, tick_total, main)
 
 
-LIKE_FOR_LIKE = 0.2                 # pawns or ticks a second differing by more than a fifth make two recordings unlike
+LIKE_FOR_LIKE = 0.2                 # pawns differing by more than a fifth make two recordings unlike
 
 
 def _context_rows(before, after):
@@ -1362,6 +1367,7 @@ def compare_report(before, after, names, top):
 
 
 TREND_POINTS = 2.0                  # a share this many points from the earlier recordings' middle value is marked
+TREND_PAUSED = "the game hardly ran: left out of the middle"
 
 
 def _median(values):
@@ -1392,7 +1398,7 @@ def trend_report(root, pattern, top):
         raise PerfError(f"No recordings in {root}. Make one with: rimworld-perf record")
     wanted = pattern.lower()
     phases, ticking = perf.phases()
-    rows, refs, shares, per_mod, earlier_mod, packages = [], [], [], {}, {}, {}
+    rows, refs, shares, charted, per_mod, earlier_shares, packages = [], [], [], [], {}, [], {}
     for position, folder in enumerate(found):
         rec = Recording(folder / INDEX_NAME)
         main = rec.main_thread()
@@ -1405,27 +1411,30 @@ def trend_report(root, pattern, top):
         ours_per_tick = f"{per_tick * share / 100:.3f}" if per_tick is not None else "-"
         busiest = max(mods.items(), key=lambda kv: (kv[1], kv[0]))[0] if mods else "-"
         packages.update(packages_of(rec))
+        paused = tick_total < PAUSED_SHARE * rec.duration_ms(main)
+        charted.append(share)
         rows.append((folder.name, rec.meta.get("label", ""), pct(tick_total, rec.duration_ms(main)), f"{share:.1f}%", ours_per_tick,
-                     busiest, trend_note(share, shares)))
+                     busiest, TREND_PAUSED if paused else trend_note(share, shares)))
         refs.append(row_refs(c0=Ref("recording", folder.name),
                              c5=Ref("mod", busiest, package=packages.get(busiest, "")) if mods else None))
-        shares.append(share)
         mod_shares = {name: 100 * value / tick_total for name, value in mods.items()} if tick_total else {}
-        if position < len(found) - 1:
-            for name, value in mod_shares.items():
-                earlier_mod.setdefault(name, []).append(value)
-        else:
+        if position == len(found) - 1:
             per_mod = mod_shares
+        elif not paused:
+            shares.append(share)
+            earlier_shares.append(mod_shares)
     report = Report(f"rimworld-perf: trend of {pattern}", [
         f"{len(found)} recordings, oldest first: the share of ticking the mods matching \"{pattern}\" caused (the innermost mod on "
         f"the stack), marked where it moved {TREND_POINTS:g} points or more from the earlier recordings' middle value. Recordings "
         "differ in what was on screen, the save and the speed: a mark is a place to look, not a verdict.", CAVEAT])
     report.section("Recordings", Chart(f"The share of ticking {pattern} caused",
                                        "Each recording kept, oldest first: the share of ticking the mods followed caused.",
-                                       [row[1] or row[0] for row in rows], [ChartSeries("Their share of ticking", shares)],
+                                       [row[1] or row[0] for row in rows], [ChartSeries("Their share of ticking", charted)],
                                        kind="line", unit="%", value_label="Share of ticking"),
                    Table(["Recording", "Label", "Ticking (of the main thread)", "Their share of ticking",
                           "Their ms a tick", "Busiest of them", "Note"], rows, refs=refs))
+    # A mod with no time in an earlier recording cost 0 there, as costs counts it (1.156.0).
+    earlier_mod = {name: [s.get(name, 0.0) for s in earlier_shares] for s in earlier_shares for name in s}
     if len(found) > 1:
         names = sorted(set(per_mod) | set(earlier_mod), key=lambda n: (-(per_mod.get(n, 0.0)), n))
         rows = []
@@ -1449,14 +1458,16 @@ def costs_report(root, pattern, top, patch_lookup=None):
     if not found:
         raise PerfError(f"No recordings in {root}. Make one with: rimworld-perf record")
     summaries = []
-    for folder in found:
+    for position, folder in enumerate(found):
         try:
             summaries.append(summary_of(folder, patch_lookup=patch_lookup))
-        except (SamplingError, sqlite3.Error, OSError, ValueError):
+        except (SamplingError, sqlite3.Error, OSError, ValueError) as error:
+            if position == 0:
+                raise PerfError(f"The newest recording, {folder.name}, could not be read ({error}).") from None
             continue
-    if not summaries:
-        raise PerfError("No recording could be read.")
-    newest, earlier = summaries[0], summaries[1:]
+    newest = summaries[0]
+    # 4. A recording in which the game hardly ran says nothing of what a mod costs in play, so it is left out of the middle.
+    earlier = [s for s in summaries[1:] if (s.get("ticking_share") or 0) >= PAUSED_SHARE]
     names = sorted(set(newest.get("mods", {})) | {n for s in earlier for n in s.get("mods", {})})
     packages = {}
     for summary in reversed(summaries):
@@ -1607,7 +1618,9 @@ def _record(args, root, environ, settings_file, run, popen, now):
     if not MIN_SECONDS <= args.seconds <= MAX_SECONDS:
         raise PerfError(f"--seconds must be between {MIN_SECONDS} and {MAX_SECONDS}.")
     pid = _pid(args, run, "RimWorld is not running. Start it, load the save, unpause at the speed that feels slow, then record.")
+    entered = time.monotonic()
     trace_tool, counters_tool, installed = dd.ensure_tools(environ, run)
+    begun = now + timedelta(seconds=time.monotonic() - entered)   # after any install: when the tools attach (1.156.0)
     folder = new_folder(root, args.label, now)
     speedscope, counters_file, notes = dd.record(pid, args.seconds, folder, trace_tool, counters_tool, popen,
                                                  providers=dotnet_events.runtime_provider(args.alloc), counters=perf.COUNTER_SETS)
@@ -1615,7 +1628,7 @@ def _record(args, root, environ, settings_file, run, popen, now):
             "label": args.label or "", "pid": pid, "game_name": perf.GAME_NAME, "tools_version": dd.TOOLS_VERSION,
             "lock_events": "yes", "allocation_events": "yes" if args.alloc else "",
             **_context(args, environ, settings_file, now)}
-    meta.update(_extras(args, environ, settings_file, now, args.seconds))
+    meta.update(_extras(args, environ, settings_file, begun, args.seconds))
     notes = notes + build_index(folder, speedscope, counters_file, meta, args, environ, settings_file, folder / dd.TRACE_FILE)
     if not args.keep_speedscope:
         derived.remove(speedscope)
@@ -1662,7 +1675,10 @@ def _context(args, environ, settings_file, now):
         config = Path(paths.config_path(args.config, environ, settings_file)) / "ModsConfig.xml"
     except Exception:  # noqa: BLE001
         config = None
-    return perf.context(logs, config, now.strftime("%Y-%m-%d %H:%M:%S")) if logs or config else {}
+    try:
+        return perf.context(logs, config, now.strftime("%Y-%m-%d %H:%M:%S")) if logs or config else {}
+    except Exception:  # noqa: BLE001 - a recording without its context beats a recording lost (1.156.0)
+        return {}
 
 
 def _index(args, root, environ, settings_file, now):

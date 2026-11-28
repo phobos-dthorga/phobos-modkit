@@ -208,7 +208,7 @@ def _epoch(stamp):
 _RATE = re.compile(r"/ (\d+(?:\.\d+)?) sec\)$")
 
 
-def _per_second(name, value):
+def per_second(name, value):
     """A rate dotnet-counters wrote over its refresh interval ("{tick} / 5 sec") as a rate a second (1.152.0)."""
     found = _RATE.search(name)
     seconds = float(found.group(1)) if found else 1.0
@@ -243,7 +243,7 @@ def counter_events(path):
         try:
             name = str(event["name"])
             found.append((_epoch(event["timestamp"]), name.split(" (", 1)[0], event.get("tags") or "",
-                          _per_second(name, float(event["value"]))))
+                          per_second(name, float(event["value"]))))
         except (KeyError, TypeError, ValueError):
             continue
     return found
